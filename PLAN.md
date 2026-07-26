@@ -108,11 +108,21 @@ Two known gaps carried into phase 5: there is still no visible Dismiss control f
 
 ### Phase 5 — Land, gated
 
-- [ ] `review-approve` — Approve/reject per comment, where approved means ready to land and nothing has landed; bulk approve/reject/dismiss by tier or state that only ever moves runs to approved, never lands
-- [ ] `sandbox-integration` — Build src/main/landing.ts to assemble the integration result in a sandbox worktree off the target branch, squash-merging each approved comment branch, so conflicts surface without touching the real repo
-- [ ] `conflict-rerun` — On squash-merge conflict, recreate worktree from updated integration state and re-run that comment's agent
-- [ ] `landing-gate` — LandingPreview showing commits, combined diff, target remote/branch, threads to resolve by URL, and reply text; nothing executes without confirmation
-- [ ] `audit-log` — Build src/main/audit.ts append-only log of every out-of-sandbox action plus guardrail acknowledgements and landing undos, surfaced in AuditLog.tsx
+- [x] `review-approve` — Approve/reject per comment, where approved means ready to land and nothing has landed; bulk approve/reject/dismiss by tier or state that only ever moves runs to approved, never lands
+- [x] `sandbox-integration` — Build src/main/landing.ts to assemble the integration result in a sandbox worktree off the target branch, squash-merging each approved comment branch, so conflicts surface without touching the real repo
+- [x] `conflict-rerun` — On squash-merge conflict, recreate worktree from updated integration state and re-run that comment's agent
+- [x] `landing-gate` — LandingPreview showing commits, combined diff, target remote/branch, threads to resolve by URL, and reply text; nothing executes without confirmation
+- [x] `audit-log` — Build src/main/audit.ts append-only log of every out-of-sandbox action plus guardrail acknowledgements and landing undos, surfaced in AuditLog.tsx
+
+#### As built: five notes
+
+- **`rejected` is a real run state.** The approval model talks about rejection but `RUN_STATE` had no such member. It is terminal, keeps the record and the worktree until the run is dismissed, and is reversible back to `ready` — turning a resolution down is a judgement, not a destructive act. Every exhaustive switch failed to compile until it accounted for it, which is what they are for.
+- **`approved` gained an edge back to `running`.** Without it a conflict re-run could not start at all. Re-entering work is what revokes the approval: what was approved no longer applies to the branch it must land on.
+- **The audit log is JSON Lines in its own file**, not an array in the state store. The store replaces its whole file per write, which risks at most the newest write for state that can be recomputed — the wrong trade for a record where earlier history must survive a later crash, and where a torn or older-version line should stay isolated rather than failing the whole read.
+- **The confirm control is rendered, gated and inert.** Executing is phase 6 and there is no execute channel, so the button carries no `onClick` at all and says so in one line. A dead button that looked live, or a faked success, would be worse than an honest absence. Conflicts remove it entirely rather than disabling it.
+- **The audit log got its own screen**, a third alongside Workspace and Settings. It is a record rather than a preference, and it is the surface someone opens to answer what the tool has actually done to their repository.
+
+Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` and mints a landing id so the publish, push, thread-resolve and reply entries share one; `github.ts`'s mutations are still deliberately absent; and there is still no visible Dismiss control for the `d` shortcut.
 
 ### Phase 6 — Close the loop
 
