@@ -19,7 +19,7 @@ import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useRe
 import { prRefKey } from '@shared/discovery';
 import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
-import { RUN_PANE_PLACEMENT } from '@shared/settings';
+import { RUN_PANE_PLACEMENT, type PaneVisibility } from '@shared/settings';
 
 /**
  * Only reached before the PR's own base branch is known — not every repository
@@ -27,6 +27,30 @@ import { RUN_PANE_PLACEMENT } from '@shared/settings';
  * and its status arriving, never a claim about where the landing should go.
  */
 const FALLBACK_TARGET_BRANCH = 'main';
+
+export type PaneKey = keyof PaneVisibility;
+
+export interface PaneToggleItem {
+  key: PaneKey;
+  label: string;
+  isVisible: boolean;
+  isDisabled: boolean;
+  onToggle: () => void;
+}
+
+/** Declared once so the toggles, the count and the layout agree on the order. */
+const PANE_KEYS: readonly PaneKey[] = ['commentList', 'commentDetail', 'runPane'];
+
+const PANE_LABEL: Record<PaneKey, string> = {
+  commentList: 'Comments',
+  commentDetail: 'Detail',
+  runPane: 'Run',
+};
+
+const LAST_VISIBLE_PANE_COUNT = 1;
+
+/** A stable identity, so a filling pane does not restyle its element every render. */
+const EMPTY_STYLE: CSSProperties = {};
 
 /** Says where the pane would go, not where it is — it is an action, not a status. */
 const MOVE_TO_BOTTOM_LABEL = 'Run pane to bottom';
@@ -61,6 +85,16 @@ interface UseWorkspaceResult {
   isRunPaneOnBottom: boolean;
   runPanePlacementLabel: string;
   onToggleRunPanePlacement: () => void;
+  paneToggleItems: PaneToggleItem[];
+  isCommentListVisible: boolean;
+  isCommentDetailVisible: boolean;
+  isRunPaneVisible: boolean;
+  /**
+   * True while a pane has nothing beside it to take the leftover space, which is when
+   * a persisted pixel size would leave the rest of the window blank.
+   */
+  isCommentListFilling: boolean;
+  isRunPaneFilling: boolean;
   targetBranch: string;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
@@ -93,6 +127,8 @@ export function useWorkspace(): UseWorkspaceResult {
   const setPaneSizes = useSessionStore((state) => state.setPaneSizes);
   const runPanePlacement = useSessionStore((state) => state.runPanePlacement);
   const setRunPanePlacement = useSessionStore((state) => state.setRunPanePlacement);
+  const paneVisibility = useSessionStore((state) => state.paneVisibility);
+  const setPaneVisibility = useSessionStore((state) => state.setPaneVisibility);
 
   const {
     prComments,
@@ -136,11 +172,31 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const isRunPaneOnBottom = runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM;
 
-  const leftPaneStyle = useMemo(() => ({ width: paneSizes.left }), [paneSizes.left]);
-  const runPaneStyle = useMemo(
-    () => (isRunPaneOnBottom ? { height: paneSizes.bottom } : { width: paneSizes.right }),
-    [isRunPaneOnBottom, paneSizes.bottom, paneSizes.right],
+  // The detail pane is the one that flexes, so the others only carry a fixed size while
+  // something beside them can absorb what is left over.
+  const isCommentListFilling = !paneVisibility.commentDetail && !paneVisibility.runPane;
+  const isRunPaneFilling = !paneVisibility.commentList && !paneVisibility.commentDetail;
+
+  const visiblePaneCount = PANE_KEYS.filter((key) => paneVisibility[key]).length;
+  const isLastVisiblePane = visiblePaneCount === LAST_VISIBLE_PANE_COUNT;
+
+  const paneToggleItems: PaneToggleItem[] = PANE_KEYS.map((key) => ({
+    key,
+    label: PANE_LABEL[key],
+    isVisible: paneVisibility[key],
+    // An empty workspace is not a focus mode, so the last one on cannot be turned off.
+    isDisabled: paneVisibility[key] && isLastVisiblePane,
+    onToggle: () => setPaneVisibility({ [key]: !paneVisibility[key] }),
+  }));
+
+  const leftPaneStyle = useMemo(
+    () => (isCommentListFilling ? EMPTY_STYLE : { width: paneSizes.left }),
+    [isCommentListFilling, paneSizes.left],
   );
+  const runPaneStyle = useMemo(() => {
+    if (isRunPaneFilling) return EMPTY_STYLE;
+    return isRunPaneOnBottom ? { height: paneSizes.bottom } : { width: paneSizes.right };
+  }, [isRunPaneFilling, isRunPaneOnBottom, paneSizes.bottom, paneSizes.right]);
 
   const onLeftPaneWidthChange = useCallback(
     (left: number) => setPaneSizes({ left }),
@@ -215,6 +271,12 @@ export function useWorkspace(): UseWorkspaceResult {
     isRunPaneOnBottom,
     runPanePlacementLabel: isRunPaneOnBottom ? MOVE_TO_SIDE_LABEL : MOVE_TO_BOTTOM_LABEL,
     onToggleRunPanePlacement,
+    paneToggleItems,
+    isCommentListVisible: paneVisibility.commentList,
+    isCommentDetailVisible: paneVisibility.commentDetail,
+    isRunPaneVisible: paneVisibility.runPane,
+    isCommentListFilling,
+    isRunPaneFilling,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,

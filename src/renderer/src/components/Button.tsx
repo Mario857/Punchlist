@@ -43,6 +43,8 @@ export interface ButtonProps {
   icon?: ReactNode;
   /** Set only on a disclosure, where the button owns the region it opens. */
   isExpanded?: boolean;
+  /** Set only on a toggle, where the button is on or off rather than merely pressable. */
+  isPressed?: boolean;
   title?: string;
   onClick?: () => void;
   className?: string;
@@ -82,6 +84,7 @@ export function Button({
   isLoading = false,
   icon,
   isExpanded,
+  isPressed,
   title,
   onClick,
   className,
@@ -98,6 +101,7 @@ export function Button({
       disabled={isInteractionBlocked}
       aria-busy={isLoading}
       aria-expanded={isExpanded}
+      aria-pressed={isPressed}
       onClick={onClick}
       className={mergeClassNames(
         'inline-flex shrink-0 items-center justify-center rounded-md',

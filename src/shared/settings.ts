@@ -84,6 +84,19 @@ const paneSizesSchema = z.object({
 export type PaneSizes = z.infer<typeof paneSizesSchema>;
 
 /**
+ * Which of the three panes are on screen. Hiding one is how you get a single thing to
+ * look at — the comment tree while triaging, or the patch alone while reading it. The
+ * last visible pane cannot be hidden, since an empty workspace is not a focus mode.
+ */
+const paneVisibilitySchema = z.object({
+  commentList: z.boolean().default(true),
+  commentDetail: z.boolean().default(true),
+  runPane: z.boolean().default(true),
+});
+
+export type PaneVisibility = z.infer<typeof paneVisibilitySchema>;
+
+/**
  * Reopening the app restores the last PR, the selection, and the tree's expansion
  * state, so a restart is not a reset.
  */
@@ -103,6 +116,7 @@ export const sessionStateSchema = z.object({
   targetBranchByPr: z.record(z.string(), z.string()).default({}),
   paneSizes: paneSizesSchema.default(() => paneSizesSchema.parse({})),
   runPanePlacement: z.enum(RUN_PANE_PLACEMENT).catch(RUN_PANE_PLACEMENT.RIGHT),
+  paneVisibility: paneVisibilitySchema.default(() => paneVisibilitySchema.parse({})),
   /**
    * Closed by default. The batch actions and the sandbox summary are accelerators for
    * work the panes already do one run at a time, and leaving them open costs a third

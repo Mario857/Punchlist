@@ -4,6 +4,8 @@ import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
 import { RefreshIcon } from '@renderer/components/icons/RefreshIcon';
 import { DISABLED_STATE, FOCUS_RING } from '@renderer/components/interactiveClassNames';
 import { joinClassNames } from '@renderer/lib/classNames';
+import { PaneToggles } from '@renderer/screens/Workspace/components/PaneToggles';
+import type { PaneToggleItem } from '@renderer/screens/Workspace/useWorkspace';
 
 interface Props {
   selectedPr: PrRef | null;
@@ -16,6 +18,7 @@ interface Props {
   /** Names the placement the button would move to, so it reads as an action. */
   runPanePlacementLabel: string;
   onToggleRunPanePlacement: () => void;
+  paneToggleItems: PaneToggleItem[];
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
   onToggleLanding: () => void;
@@ -47,6 +50,7 @@ export function WorkspaceTopBar({
   targetBranch,
   runPanePlacementLabel,
   onToggleRunPanePlacement,
+  paneToggleItems,
   isLandingOpen,
   onTargetBranchChange,
   onToggleLanding,
@@ -66,6 +70,8 @@ export function WorkspaceTopBar({
   // Nothing to rearrange until there are panes to rearrange.
   const isLayoutToggleDisabled = selectedPr === null;
   const landingLabel = isLandingOpen ? CLOSE_LANDING_LABEL : OPEN_LANDING_LABEL;
+  // Nothing to hide or show while the picker owns the whole area.
+  const paneToggles = isLayoutToggleDisabled ? null : <PaneToggles items={paneToggleItems} />;
 
   return (
     <header
@@ -105,6 +111,7 @@ export function WorkspaceTopBar({
           isDisabled={isRefreshDisabled}
           onClick={onRefreshComments}
         />
+        {paneToggles}
         <Button
           variant={BUTTON_VARIANT.GHOST}
           size={BUTTON_SIZE.SM}

@@ -20,6 +20,9 @@ const COLUMNS_CLASS = 'flex min-h-0 min-w-0 flex-1';
 const LEFT_PANE_CLASS = 'flex shrink-0 flex-col overflow-hidden';
 const CENTER_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
 const RUN_PANE_CLASS = 'shrink-0 overflow-y-auto';
+/** A pane with nothing beside it takes the space instead of its persisted size. */
+const FILLING_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
+const FILLING_LIST_CLASS = 'flex min-w-0 flex-1 flex-col overflow-hidden';
 const LEFT_DIVIDER_LABEL = 'Resize the comment list';
 const RIGHT_DIVIDER_LABEL = 'Resize the run pane';
 const BOTTOM_DIVIDER_LABEL = 'Resize the run pane';
@@ -51,6 +54,12 @@ export function Workspace() {
     isRunPaneOnBottom,
     runPanePlacementLabel,
     onToggleRunPanePlacement,
+    paneToggleItems,
+    isCommentListVisible,
+    isCommentDetailVisible,
+    isRunPaneVisible,
+    isCommentListFilling,
+    isRunPaneFilling,
     targetBranch,
     isLandingOpen,
     onTargetBranchChange,
@@ -124,11 +133,11 @@ export function Workspace() {
       );
     }
     // Extracted so both placements render the same pane rather than two that can drift.
-    const runPane = (
+    const runPane = !isRunPaneVisible ? null : (
       /* tabIndex makes the pane a focus target for the `e` shortcut, without making it
          a tab stop in the normal order. */
       <div
-        className={RUN_PANE_CLASS}
+        className={isRunPaneFilling ? FILLING_PANE_CLASS : RUN_PANE_CLASS}
         style={runPaneStyle}
         ref={diffPaneRef}
         tabIndex={PANE_FOCUS_TAB_INDEX}
@@ -137,11 +146,18 @@ export function Workspace() {
       </div>
     );
 
-    const commentColumns = (
-      <div className={COLUMNS_CLASS}>
-        <div className={LEFT_PANE_CLASS} style={leftPaneStyle}>
-          {leftPane}
-        </div>
+    const commentList = !isCommentListVisible ? null : (
+      <div
+        className={isCommentListFilling ? FILLING_LIST_CLASS : LEFT_PANE_CLASS}
+        style={leftPaneStyle}
+      >
+        {leftPane}
+      </div>
+    );
+
+    // A divider only exists between two panes, so hiding either takes it with them.
+    const listDivider =
+      isCommentListVisible && isCommentDetailVisible ? (
         <PaneDivider
           label={LEFT_DIVIDER_LABEL}
           axis={PANE_AXIS.HORIZONTAL}
@@ -151,44 +167,66 @@ export function Workspace() {
           maxSize={LEFT_PANE_WIDTH.MAX}
           onSizeChange={onLeftPaneWidthChange}
         />
-        <div className={CENTER_PANE_CLASS}>
-          <CommentDetail comment={selectedComment} />
-        </div>
+      ) : null;
+
+    const commentDetail = !isCommentDetailVisible ? null : (
+      <div className={CENTER_PANE_CLASS}>
+        <CommentDetail comment={selectedComment} />
       </div>
     );
+
+    const hasCommentColumns = isCommentListVisible || isCommentDetailVisible;
+    const commentColumns = !hasCommentColumns ? null : (
+      <div className={COLUMNS_CLASS}>
+        {commentList}
+        {listDivider}
+        {commentDetail}
+      </div>
+    );
+
+    // The run divider needs a pane on each side of it too.
+    const hasRunDivider = hasCommentColumns && isRunPaneVisible;
 
     // Along the bottom the run pane spans the full window, which is the shape a patch
     // actually wants: a diff is wide before it is tall.
     if (isRunPaneOnBottom) {
+      const bottomDivider = !hasRunDivider ? null : (
+        <PaneDivider
+          label={BOTTOM_DIVIDER_LABEL}
+          axis={PANE_AXIS.VERTICAL}
+          edge={PANE_EDGE.TRAILING}
+          size={bottomPaneHeight}
+          minSize={BOTTOM_PANE_HEIGHT.MIN}
+          maxSize={BOTTOM_PANE_HEIGHT.MAX}
+          onSizeChange={onBottomPaneHeightChange}
+        />
+      );
+
       return (
         <div className="flex min-h-0 flex-1 flex-col">
           {commentColumns}
-          <PaneDivider
-            label={BOTTOM_DIVIDER_LABEL}
-            axis={PANE_AXIS.VERTICAL}
-            edge={PANE_EDGE.TRAILING}
-            size={bottomPaneHeight}
-            minSize={BOTTOM_PANE_HEIGHT.MIN}
-            maxSize={BOTTOM_PANE_HEIGHT.MAX}
-            onSizeChange={onBottomPaneHeightChange}
-          />
+          {bottomDivider}
           {runPane}
         </div>
       );
     }
 
+    const rightDivider = !hasRunDivider ? null : (
+      <PaneDivider
+        label={RIGHT_DIVIDER_LABEL}
+        axis={PANE_AXIS.HORIZONTAL}
+        edge={PANE_EDGE.TRAILING}
+        size={rightPaneWidth}
+        minSize={RIGHT_PANE_WIDTH.MIN}
+        maxSize={RIGHT_PANE_WIDTH.MAX}
+        onSizeChange={onRightPaneWidthChange}
+      />
+    );
+
     return (
       <div className={COLUMNS_CLASS}>
         {commentColumns}
-        <PaneDivider
-          label={RIGHT_DIVIDER_LABEL}
-          axis={PANE_AXIS.HORIZONTAL}
-          edge={PANE_EDGE.TRAILING}
-          size={rightPaneWidth}
-          minSize={RIGHT_PANE_WIDTH.MIN}
-          maxSize={RIGHT_PANE_WIDTH.MAX}
-          onSizeChange={onRightPaneWidthChange}
-        />
+        {rightDivider}
         {runPane}
       </div>
     );
@@ -206,6 +244,7 @@ export function Workspace() {
         targetBranch={targetBranch}
         runPanePlacementLabel={runPanePlacementLabel}
         onToggleRunPanePlacement={onToggleRunPanePlacement}
+        paneToggleItems={paneToggleItems}
         isLandingOpen={isLandingOpen}
         onTargetBranchChange={onTargetBranchChange}
         onToggleLanding={onToggleLanding}

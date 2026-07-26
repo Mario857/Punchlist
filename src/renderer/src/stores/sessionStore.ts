@@ -7,6 +7,7 @@ import type { ModelTier } from '@shared/runState';
 import {
   DEFAULT_SESSION_STATE,
   type PaneSizes,
+  type PaneVisibility,
   type RunPanePlacement,
   type SessionState,
 } from '@shared/settings';
@@ -42,6 +43,8 @@ interface SessionStore extends SessionState {
   setPaneSizes: (patch: Partial<PaneSizes>) => void;
   setIsRunControlsExpanded: (isExpanded: boolean) => void;
   setRunPanePlacement: (placement: RunPanePlacement) => void;
+  /** Partial because a toggle moves one pane and the others keep what they had. */
+  setPaneVisibility: (patch: Partial<PaneVisibility>) => void;
   setIsRunPaneVerbose: (isVerbose: boolean) => void;
   setSectionOpen: (sectionId: string, isOpen: boolean) => void;
   setTierOverride: (commentId: string, tier: ModelTier) => void;
@@ -92,6 +95,9 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setIsRunControlsExpanded: (isRunControlsExpanded) => set({ isRunControlsExpanded }),
 
   setRunPanePlacement: (runPanePlacement) => set({ runPanePlacement }),
+
+  setPaneVisibility: (patch) =>
+    set((state) => ({ paneVisibility: { ...state.paneVisibility, ...patch } })),
 
   setIsRunPaneVerbose: (isRunPaneVerbose) => set({ isRunPaneVerbose }),
 
@@ -152,6 +158,7 @@ export function selectPersistableSession(state: SessionStore): SessionState {
     targetBranchByPr: state.targetBranchByPr,
     paneSizes: state.paneSizes,
     runPanePlacement: state.runPanePlacement,
+    paneVisibility: state.paneVisibility,
     isRunPaneVerbose: state.isRunPaneVerbose,
     sectionOpenById: state.sectionOpenById,
     isRunControlsExpanded: state.isRunControlsExpanded,
