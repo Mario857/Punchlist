@@ -7,7 +7,14 @@ import {
   type PrComment,
 } from '@shared/comments';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
-import { SELECTION_SIDE, type SelectionSide, type TargetedEditSelection } from '@shared/runs';
+import { OPINION_VERDICT, type OpinionVerdict } from '@shared/opinion';
+import {
+  SELECTION_SIDE,
+  type CandidatePatch,
+  type CandidatePatchFile,
+  type SelectionSide,
+  type TargetedEditSelection,
+} from '@shared/runs';
 
 /**
  * The agent's scratch directory, excluded once via the repo's .git/info/exclude so it
@@ -17,6 +24,8 @@ import { SELECTION_SIDE, type SelectionSide, type TargetedEditSelection } from '
 export const AIRLOCK_SCRATCH_DIR = '.airlock';
 export const DECISION_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/decision.json`;
 export const SUMMARY_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/summary.json`;
+/** The reviewing agent's verdict. run.ts reads it back from the same one path. */
+export const OPINION_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/opinion.json`;
 
 /** git's own convention: a longer subject wraps badly in `git log --oneline`. */
 export const COMMIT_SUBJECT_MAX_LENGTH = 72;
@@ -251,6 +260,128 @@ export function buildResolutionPrompt(comment: PrComment): string {
     formatCommentBody(comment),
     formatReplies(comment.replies),
     ...COMMON_PROTOCOL_SECTIONS,
+  ];
+
+  return sections.filter((section) => section.length > 0).join(PROMPT_SECTION_SEPARATOR);
+}
+
+/**
+ * The reviewer is handed the comment and the patch and **nothing else**. The first agent's
+ * transcript, its summary and its reasoning are withheld deliberately, and that omission is
+ * the entire value of the exercise: reading someone's justification before judging their
+ * work produces agreement rather than review — the same failure that makes escalation start
+ * a fresh agent instead of continuing the conversation. Do not "improve" this by passing
+ * that context along.
+ */
+const REVIEWER_ROLE_SECTION = `You are giving a second opinion on work someone else did.
+
+A reviewer left a comment on a GitHub pull request, and an agent produced a patch meant to resolve it. You are being shown that comment and that patch. You did not write the patch, and you are not being asked to improve it.
+
+Your job is one judgement: does this patch do what the comment asked?
+
+You are in the git worktree the patch was made in, so the changes below are already applied to the files on disk. Read as much of the surrounding code as you need to answer properly — the patch alone rarely says whether it is right.`;
+
+const REVIEWER_INDEPENDENCE_SECTION = `You have not been given the other agent's transcript, its summary, or its reasoning, and that is on purpose. Form your own view from the comment and the code, the way a human reviewer opening the diff cold would have to.`;
+
+const CANDIDATE_PATCH_SECTION = `The candidate patch, as every file it touches before and after the change. An empty "before" means the file was added; an empty "after" means it was deleted. Any file not listed here was left untouched.`;
+
+const PATCH_BEFORE_LABEL = 'Before:';
+const PATCH_AFTER_LABEL = 'After:';
+
+/**
+ * A `Record` keyed by the union, for the same reason `COMMENT_KIND_LABEL` is one: adding a
+ * verdict to `OPINION_VERDICT` fails to compile until the prompt explains it.
+ */
+const OPINION_VERDICT_LABEL: Record<OpinionVerdict, string> = {
+  [OPINION_VERDICT.ADDRESSES]: 'the patch does what the comment asked.',
+  [OPINION_VERDICT.PARTIAL]:
+    'it does part of it, or does it in a way that leaves something undone.',
+  [OPINION_VERDICT.MISSES]: 'it does not do what was asked, whatever else it does.',
+  [OPINION_VERDICT.HARMFUL]:
+    'it does something actively wrong — a regression, a broken contract, a leak.',
+};
+
+const VERDICT_CHOICE_LINES = Object.entries(OPINION_VERDICT_LABEL)
+  .map(([verdict, label]) => `${REPLY_BULLET}\`${verdict}\` — ${label}`)
+  .join(REPLY_SEPARATOR);
+
+const REVIEWER_VERDICT_SECTION = `When you have finished reading, write \`${OPINION_FILE_PATH}\` (create the \`${AIRLOCK_SCRATCH_DIR}\` directory if it does not exist):
+
+${JSON_FENCE_OPEN}
+{
+  "verdict": "${OPINION_VERDICT.ADDRESSES}",
+  "concerns": ["one concern per entry"]
+}
+${FENCE_CLOSE}
+
+\`verdict\` is exactly one of these four, and nothing else:
+
+${VERDICT_CHOICE_LINES}
+
+Write the file. A verdict stated only in your final message is the same as no verdict at all.`;
+
+const REVIEWER_CONCERNS_SECTION = `\`concerns\` is what a person about to read this diff would want to know before they start.
+
+Every entry must be specific and checkable: name the file, the symbol, or the input that makes it true, and say what actually goes wrong.
+
+- Useful: "the early return added in \`parseHeader\` fires before the retry the comment asked about, so the timeout is unchanged for an empty body".
+- Noise: "consider adding tests", "this could be more robust", "make sure this is covered".
+
+Generic caution applies to every patch ever written, so it tells the reader nothing and costs them attention they need for the diff. If you have no specific concern, return an empty list — an empty list next to \`${OPINION_VERDICT.ADDRESSES}\` is a complete and useful answer.
+
+Do not raise style preferences the comment did not ask about, and do not object to the patch being narrow: it was told to change only what the comment required, so a small diff is the instruction being followed rather than a shortcut.`;
+
+/**
+ * Same defense-in-depth reasoning as the resolution prompt's forbidden-commands section: a
+ * prompt is a request, so the patch is re-read and compared after the reviewer finishes.
+ */
+const REVIEWER_READ_ONLY_SECTION = `Change nothing.
+
+- No edits to any file in the repository. The one file you write is \`${OPINION_FILE_PATH}\`.
+- No command that modifies the tree: no \`commit\`, \`add\`, \`checkout\`, \`switch\`, \`branch\`, \`merge\`, \`rebase\`, \`reset\`, \`stash\`, \`push\`. Read-only git is exactly the tool you want here: \`git log\`, \`git show\`, \`git diff\`, \`git blame\`.
+- No network access: no \`gh\`, \`curl\`, \`wget\`, no package installs. This repository, the comment and the patch are all the context there is.
+
+You are reading, not fixing. If the patch is wrong, say what is wrong with it and stop there. The patch is compared against what you were shown once you finish, so an edit made here is recorded as a finding about you rather than as a contribution.`;
+
+function formatCandidatePatchFile(file: CandidatePatchFile): string {
+  return `File: ${file.path}
+
+${PATCH_BEFORE_LABEL}
+${BODY_FENCE}
+${file.originalContent}
+${BODY_FENCE}
+
+${PATCH_AFTER_LABEL}
+${BODY_FENCE}
+${file.modifiedContent}
+${BODY_FENCE}`;
+}
+
+function formatCandidatePatch(patch: CandidatePatch): string {
+  const files = patch.files.map(formatCandidatePatchFile);
+  return [CANDIDATE_PATCH_SECTION, ...files].join(PROMPT_SECTION_SEPARATOR);
+}
+
+/**
+ * The second-opinion prompt: the comment, the patch, and no trace of how the patch was
+ * arrived at. See `REVIEWER_ROLE_SECTION` for why that omission is load-bearing.
+ */
+export function buildSecondOpinionPrompt(comment: PrComment, patch: CandidatePatch): string {
+  // The anchor belongs to the comment, not to the first agent's reasoning, so the reviewer
+  // gets it for the same reason the resolving agent did: without it an inline comment is
+  // prose about code nobody named, and the reviewer would be judging a target it guessed at.
+  const anchorSections = isInlineThread(comment) ? [formatAnchoredContext(comment)] : [];
+
+  const sections = [
+    REVIEWER_ROLE_SECTION,
+    REVIEWER_INDEPENDENCE_SECTION,
+    formatCommentBody(comment),
+    ...anchorSections,
+    formatReplies(comment.replies),
+    formatCandidatePatch(patch),
+    REVIEWER_VERDICT_SECTION,
+    REVIEWER_CONCERNS_SECTION,
+    REVIEWER_READ_ONLY_SECTION,
   ];
 
   return sections.filter((section) => section.length > 0).join(PROMPT_SECTION_SEPARATOR);

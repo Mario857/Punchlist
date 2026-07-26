@@ -30,6 +30,7 @@ import {
   listRunRevisionTrail,
   listRunsForPr,
   rejectRuns,
+  requestSecondOpinion,
   revertRun,
   writeRunFile,
   setRunEventListener,
@@ -237,6 +238,9 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_STOP_ALL, noPayloadSchema, () => stopAllRuns());
   registerHandler(IPC_CHANNEL.RUNS_APPROVE, runIdsPayloadSchema, (runIds) => approveRuns(runIds));
   registerHandler(IPC_CHANNEL.RUNS_REJECT, runIdsPayloadSchema, (runIds) => rejectRuns(runIds));
+  registerHandler(IPC_CHANNEL.RUNS_SECOND_OPINION, runIdsPayloadSchema, (runIds) =>
+    requestSecondOpinion(runIds),
+  );
   registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, (request) =>
     continueRun(request),
   );

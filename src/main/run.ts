@@ -1,3 +1,5 @@
+import { readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
 import { appendAuditEntry } from '@main/audit';
 import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
@@ -8,7 +10,12 @@ import {
   watchForDecision,
   type DecisionWatch,
 } from '@main/decision';
-import { buildResolutionPrompt, buildTargetedEditPrompt } from '@main/prompt';
+import {
+  OPINION_FILE_PATH,
+  buildResolutionPrompt,
+  buildSecondOpinionPrompt,
+  buildTargetedEditPrompt,
+} from '@main/prompt';
 import {
   canTransitionRunState,
   createRunRecord,
@@ -40,6 +47,7 @@ import { AUDIT_ACTION } from '@shared/audit';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { hasUnacknowledgedFlags, selectUnacknowledgedFlags } from '@shared/guardrails';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
+import { opinionFileSchema, type OpinionFile } from '@shared/opinion';
 import {
   FAILURE_REASON,
   MODEL_TIER,
@@ -86,6 +94,14 @@ const NOT_HAND_EDITABLE_MESSAGE =
 const GUARDRAIL_KIND_SEPARATOR = ', ';
 const UNACKNOWLEDGED_GUARDRAIL_REMEDIATION =
   'Acknowledge every outstanding flag on those runs, then approve again.';
+const SECOND_OPINION_REMEDIATION =
+  'Ask for a second opinion once every selected run has a patch to review.';
+const NO_PATCH_TO_REVIEW_MESSAGE =
+  'This run produced no changes, so there is no patch for a second opinion to read.';
+const NO_VERDICT_LOG_MESSAGE = 'the second opinion produced no verdict';
+const MALFORMED_OPINION_LOG_MESSAGE = 'the second opinion file had an unexpected shape';
+
+const FILE_ENCODING = 'utf8';
 
 /** needsDecision is waiting on a person; ready and approved accept a follow-up. */
 const CONTINUABLE_RUN_STATES: readonly RunState[] = [
@@ -93,8 +109,12 @@ const CONTINUABLE_RUN_STATES: readonly RunState[] = [
   RUN_STATE.READY,
   RUN_STATE.APPROVED,
 ];
-/** The modified side is editable exactly where there is a patch to edit. */
-const HAND_EDITABLE_RUN_STATES: readonly RunState[] = [RUN_STATE.READY, RUN_STATE.APPROVED];
+/**
+ * Where a settled candidate patch exists — which is the same question a hand-edit asks
+ * ("is there a patch to edit?") and a second opinion asks ("is there a patch to read?"),
+ * so one list answers both rather than two drifting copies of it.
+ */
+const PATCHED_RUN_STATES: readonly RunState[] = [RUN_STATE.READY, RUN_STATE.APPROVED];
 const RESTART_NOT_RETRYABLE_MESSAGE =
   'Only a finished run can be retried, because a restart discards the work in progress.';
 const MALFORMED_DECISION_MESSAGE =
@@ -487,7 +507,7 @@ export async function continueRun(request: ContinueRunRequest): Promise<RunRecor
       // Fetched only once a revision actually produced changes: the checks need the
       // comment's anchor and tier, and an empty patch has nothing to inspect.
       const checked = patch.isEmpty
-        ? revised
+        ? withoutPatchFindings(revised)
         : withGuardrailFlags(revised, patch, await findRunComment(revised));
       // A fresh halt wins over the settled outcome: the run is waiting on a person
       // again, not finished, exactly as on the first turn.
@@ -533,12 +553,31 @@ async function findRunComment(run: RunRecord): Promise<PrComment> {
  * revision cannot outrun its own checks. Acknowledgements are carried across by id,
  * which is why a flag's id is derived from what it is about: a finding that survives
  * a revision unchanged stays acknowledged, and a genuinely new one does not.
+ *
+ * Any stored second opinion is dropped here for the same reason the flags are recomputed:
+ * a verdict is about the patch the reviewing agent actually read, so a revision or a
+ * hand-edit makes it a statement about a diff that no longer exists. It is not carried
+ * across the way acknowledgements are — an acknowledgement is the user's own decision,
+ * while an opinion can only be re-earned by asking for another one.
  */
+/**
+ * An emptied patch has nothing to inspect, so its findings are dropped rather than
+ * left behind: flags and a verdict that describe a patch which no longer exists are
+ * worse than none, because they read as current.
+ */
+function withoutPatchFindings(run: RunRecord): RunRecord {
+  return patchRun(run, {
+    guardrailFlags: [],
+    acknowledgedGuardrailIds: [],
+    secondOpinion: null,
+  });
+}
+
 function withGuardrailFlags(run: RunRecord, patch: CandidatePatch, comment: PrComment): RunRecord {
   const guardrailFlags = inspectCandidatePatch({ patch, comment, tier: run.tier });
   const flagIds = new Set(guardrailFlags.map((flag) => flag.id));
   const acknowledgedGuardrailIds = run.acknowledgedGuardrailIds.filter((id) => flagIds.has(id));
-  return patchRun(run, { guardrailFlags, acknowledgedGuardrailIds });
+  return patchRun(run, { guardrailFlags, acknowledgedGuardrailIds, secondOpinion: null });
 }
 
 /**
@@ -550,7 +589,7 @@ function withGuardrailFlags(run: RunRecord, patch: CandidatePatch, comment: PrCo
  */
 export async function writeRunFile(request: WriteRunFileRequest): Promise<RunRecord> {
   const run = requireRun(request.runId);
-  if (!HAND_EDITABLE_RUN_STATES.includes(run.state)) {
+  if (!PATCHED_RUN_STATES.includes(run.state)) {
     throw new AppError(APP_ERROR_KIND.NOT_FOUND, NOT_HAND_EDITABLE_MESSAGE, null);
   }
 
@@ -569,7 +608,7 @@ export async function writeRunFile(request: WriteRunFileRequest): Promise<RunRec
   // them — a revision must not outrun them.
   const patch = await readCandidatePatch(edited);
   const checked = patch.isEmpty
-    ? edited
+    ? withoutPatchFindings(edited)
     : withGuardrailFlags(edited, patch, await findRunComment(edited));
   // An edit that empties the patch stays `ready` rather than becoming `noActionNeeded`:
   // that state is terminal and would reclaim the worktree still being edited in. Coming
@@ -600,7 +639,9 @@ export async function revertRun(request: RevertRunRequest): Promise<RunRecord> {
   });
 
   const patch = await readCandidatePatch(run);
-  const checked = patch.isEmpty ? run : withGuardrailFlags(run, patch, await findRunComment(run));
+  const checked = patch.isEmpty
+    ? withoutPatchFindings(run)
+    : withGuardrailFlags(run, patch, await findRunComment(run));
   const nextState = patch.isEmpty ? RUN_STATE.NO_ACTION_NEEDED : RUN_STATE.READY;
   const reverted = checked.state === nextState ? checked : transitionRun(checked, nextState);
   emitStateChanged(reverted);
@@ -637,6 +678,182 @@ export async function acknowledgeGuardrail(runId: string, flagId: string): Promi
 
   emitStateChanged(acknowledged);
   return acknowledged;
+}
+
+/**
+ * A verdict file left behind by an earlier review would otherwise be read as this one's
+ * answer, which is the one failure worse than having no opinion: a fabricated one.
+ */
+async function clearAgentOpinion(worktreePath: string): Promise<void> {
+  await rm(join(worktreePath, OPINION_FILE_PATH), { force: true });
+}
+
+/**
+ * An agent-written file, so the least trustworthy input in the system. Missing, unreadable,
+ * not JSON and not matching the schema all degrade to the same thing — no opinion — and
+ * none of them throws. The contents are never logged: a concern can quote repository code.
+ */
+async function readAgentOpinion(worktreePath: string): Promise<OpinionFile | null> {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(await readFile(join(worktreePath, OPINION_FILE_PATH), FILE_ENCODING));
+  } catch {
+    return null;
+  }
+
+  const parsed = opinionFileSchema.safeParse(decoded);
+  if (!parsed.success) {
+    console.warn(`${RUN_LOG_SCOPE} ${MALFORMED_OPINION_LOG_MESSAGE}`);
+    return null;
+  }
+  return parsed.data;
+}
+
+/**
+ * Field by field rather than a hash, and by index rather than by lookup: both reads run
+ * against the same base revision and git lists changed paths in a stable order, so any
+ * difference here is a real edit rather than reordering.
+ */
+function isSameCandidatePatch(before: CandidatePatch, after: CandidatePatch): boolean {
+  if (before.files.length !== after.files.length) return false;
+  return before.files.every((file, index) => {
+    const other = after.files[index];
+    return (
+      file.path === other.path &&
+      file.originalContent === other.originalContent &&
+      file.modifiedContent === other.modifiedContent
+    );
+  });
+}
+
+/**
+ * One review, in the run's own worktree because the reviewer has to see the code the patch
+ * sits in. Serialized with every other agent turn on this run, so a second opinion and a
+ * revision can never work the same tree at once.
+ *
+ * A *fresh* `Agent.create` through `executeAgentRun`, never `agent.send` on the run's
+ * existing agent: continuing that conversation would hand the reviewer the reasoning it is
+ * supposed to be independent of, and would produce agreement rather than review. Going
+ * through `executeAgentRun` rather than the SDK directly keeps disposal, the run timeout,
+ * cancellation and failure classification identical to a resolution.
+ *
+ * The tier is the run's own. A review is judgement work — deciding whether a diff answers a
+ * comment means re-deriving what the comment asked for, which is at least the work the
+ * resolution was, so the mechanical tier a targeted edit uses would be the wrong economy
+ * here: a cheap reviewer that misses the point costs more attention than it saves.
+ */
+async function reviewRunPatch(runId: string): Promise<RunRecord> {
+  return serializePerRun(runId, async () => {
+    const run = requireRun(runId);
+    const before = await readCandidatePatch(run);
+    if (before.isEmpty) {
+      throw new AppError(APP_ERROR_KIND.NOT_FOUND, NO_PATCH_TO_REVIEW_MESSAGE, null);
+    }
+
+    const comment = await findRunComment(run);
+    const model = await resolveTierModel(run.tier);
+    await clearAgentOpinion(run.worktreePath);
+
+    const controller = new AbortController();
+    activeRunControllers.set(runId, controller);
+
+    try {
+      const outcome = await executeAgentRun({
+        runId,
+        worktreePath: run.worktreePath,
+        message: buildSecondOpinionPrompt(comment, before),
+        model,
+        // Dropped rather than streamed. The run's transcript is the record of the agent
+        // that wrote the patch, and appending a different agent's words to it would make
+        // that one appear to have said things it never said. The verdict is the artefact.
+        onTranscriptChunk: () => {},
+        signal: controller.signal,
+      });
+
+      // executeAgentRun records the new agent's id and model on the run, which is right for
+      // a resolution and wrong here: a revision resumes `agentId`, so it has to keep
+      // pointing at the agent that produced the patch. The reviewer's own model goes on the
+      // opinion instead, where a disagreement can be weighed against its source.
+      const identityPatch: RunTransitionPatch = {
+        agentId: run.agentId,
+        model: run.model,
+        isPoolSpending: run.isPoolSpending,
+      };
+
+      // Re-read and compared rather than taken on trust: the reviewer was told to change
+      // nothing, and a prompt is a request. A reviewer that edited anything is itself a
+      // finding, so it is recorded and surfaced rather than reverted — undoing it quietly
+      // would hide that an explicit instruction was ignored, which is worth knowing about
+      // regardless of what the verdict says. `.airlock/` is excluded from the diff, so
+      // writing the verdict file never counts as a modification.
+      const after = await readCandidatePatch(requireRun(runId));
+      const didModifyPatch = !isSameCandidatePatch(before, after);
+
+      const opinion = await readAgentOpinion(run.worktreePath);
+      if (outcome.kind === AGENT_OUTCOME_KIND.FAILED || opinion === null) {
+        // Advisory to the end: a review that failed or wrote nothing readable leaves the
+        // run exactly as it was. No fabricated verdict, no failure reason on a run that
+        // succeeded, and nothing blocked. The reason is a `FailureReason` label, which
+        // carries no repository content; the error message is not logged.
+        const reason = outcome.kind === AGENT_OUTCOME_KIND.FAILED ? outcome.reason : null;
+        console.warn(`${RUN_LOG_SCOPE} ${NO_VERDICT_LOG_MESSAGE}`, reason);
+        return patchRun(requireRun(runId), identityPatch);
+      }
+
+      const reviewed = patchRun(requireRun(runId), {
+        ...identityPatch,
+        secondOpinion: {
+          verdict: opinion.verdict,
+          concerns: opinion.concerns,
+          reviewedAt: new Date().toISOString(),
+          model: outcome.model,
+          isPoolSpending: outcome.isPoolSpending,
+          didModifyPatch,
+        },
+      });
+      // The run's state deliberately did not move — a second opinion is not a transition —
+      // but the record changed, and the verdict renders beside the diff.
+      emitStateChanged(reviewed);
+      return reviewed;
+    } finally {
+      activeRunControllers.delete(runId);
+    }
+  });
+}
+
+function toUnreviewableMessage(unreviewable: readonly RunRecord[], total: number): string {
+  return `A second opinion reads a candidate patch, and ${unreviewable.length} of ${total} selected runs have none yet.`;
+}
+
+/**
+ * Advisory, and never a gate. This cannot change a run's state, cannot raise a guardrail
+ * flag and cannot stop an approval: the verdict is a language model's judgement and will
+ * sometimes be confidently wrong, so giving it veto power over the user's own reading of
+ * the diff would be worse than not having it at all.
+ *
+ * Every id is resolved and checked before the first review starts, the same as bulk
+ * approval: reviewing nine of twelve and staying quiet about the other three is the one
+ * outcome a reviewer cannot read off the tree.
+ *
+ * Sequential on purpose. queue.ts owns the concurrency cap and this path does not go
+ * through it, so a parallel batch would spend as many agent slots as the batch is long.
+ */
+export async function requestSecondOpinion(runIds: readonly string[]): Promise<RunRecord[]> {
+  const runs = runIds.map(requireRun);
+  const unreviewable = runs.filter((run) => !PATCHED_RUN_STATES.includes(run.state));
+  if (unreviewable.length > 0) {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      toUnreviewableMessage(unreviewable, runs.length),
+      SECOND_OPINION_REMEDIATION,
+    );
+  }
+
+  const reviewed: RunRecord[] = [];
+  for (const run of runs) {
+    reviewed.push(await reviewRunPatch(run.id));
+  }
+  return reviewed;
 }
 
 /**
