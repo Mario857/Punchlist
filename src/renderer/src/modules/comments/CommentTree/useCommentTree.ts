@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, type Ref } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import type { RunState } from '@shared/runState';
@@ -12,6 +12,10 @@ import {
   selectionTargetsOf,
   type CommentTreeRow,
 } from './commentTreeModel';
+import {
+  useCommentTreeNavigation,
+  type CommentTreeNavigationHandle,
+} from './useCommentTreeNavigation';
 import { useTreeExpansion } from './useTreeExpansion';
 
 export interface UseCommentTreeOptions {
@@ -20,12 +24,15 @@ export interface UseCommentTreeOptions {
   selectedCommentId: string | null;
   onSelectComment: (commentId: string) => void;
   runStateByCommentId?: Readonly<Record<string, RunState>>;
+  navigationRef: Ref<CommentTreeNavigationHandle> | undefined;
 }
 
 interface UseCommentTreeResult {
   rows: CommentTreeRow[];
   isEmpty: boolean;
   emptyStateLabel: string;
+  /** The keyboard cursor, distinct from the selection that drives the detail pane. */
+  focusedNodeId: string | null;
   onToggleExpanded: (nodeId: string) => void;
   onCheckedChange: (nodeId: string, isChecked: boolean) => void;
   onSelectRow: (nodeId: string) => void;
@@ -45,6 +52,7 @@ export function useCommentTree({
   selectedCommentId,
   onSelectComment,
   runStateByCommentId = EMPTY_RUN_STATE_BY_COMMENT_ID,
+  navigationRef,
 }: UseCommentTreeOptions): UseCommentTreeResult {
   const filters = useSessionStore((state) => state.filters);
   const persistedSelectedCommentIds = useSessionStore((state) => state.selectedCommentIds);
@@ -82,6 +90,13 @@ export function useCommentTree({
   // Only a visible row can be clicked, so the visible rows are the whole lookup.
   const nodesById = useMemo(() => keyBy(rows, (row) => row.node.id), [rows]);
 
+  const { focusedNodeId, onFocusRow } = useCommentTreeNavigation({
+    rows,
+    ref: navigationRef,
+    onSelectComment,
+    onToggleExpanded,
+  });
+
   const onCheckedChange = useCallback(
     (nodeId: string, isChecked: boolean) => {
       const row = nodesById.get(nodeId);
@@ -107,6 +122,10 @@ export function useCommentTree({
       const row = nodesById.get(nodeId);
       if (!isDefined(row)) return;
 
+      // Clicking moves the keyboard cursor too, so j after a click continues from
+      // where the pointer left off rather than from an invisible earlier position.
+      onFocusRow(nodeId);
+
       if (row.node.kind === COMMENT_TREE_NODE_KIND.COMMENT) {
         onSelectComment(row.node.comment.id);
         return;
@@ -114,11 +133,19 @@ export function useCommentTree({
       // A directory has nothing to show in the detail pane, so its label opens it.
       onToggleExpanded(row.node.id);
     },
-    [nodesById, onSelectComment, onToggleExpanded],
+    [nodesById, onFocusRow, onSelectComment, onToggleExpanded],
   );
 
   const isEmpty = rows.length === EMPTY_LENGTH;
   const emptyStateLabel = comments.length === EMPTY_LENGTH ? NO_COMMENTS_LABEL : NO_MATCHES_LABEL;
 
-  return { rows, isEmpty, emptyStateLabel, onToggleExpanded, onCheckedChange, onSelectRow };
+  return {
+    rows,
+    isEmpty,
+    emptyStateLabel,
+    focusedNodeId,
+    onToggleExpanded,
+    onCheckedChange,
+    onSelectRow,
+  };
 }

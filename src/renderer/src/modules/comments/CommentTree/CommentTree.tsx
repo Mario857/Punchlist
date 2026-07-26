@@ -1,8 +1,10 @@
+import type { Ref } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import type { RunState } from '@shared/runState';
 import { CommentTreeRowItem } from './components/CommentTreeRowItem/CommentTreeRowItem';
 import { useCommentTree } from './useCommentTree';
+import type { CommentTreeNavigationHandle } from './useCommentTreeNavigation';
 
 export interface CommentTreeProps {
   prRef: PrRef;
@@ -12,6 +14,8 @@ export interface CommentTreeProps {
   onSelectComment: (commentId: string) => void;
   /** Empty until phase 2 introduces runs. Drives the attention-budget behaviour. */
   runStateByCommentId?: Readonly<Record<string, RunState>>;
+  /** How the Workspace hands j/k and left/right to the tree via useReviewShortcuts. */
+  ref?: Ref<CommentTreeNavigationHandle>;
 }
 
 const TREE_ARIA_LABEL = 'Pull request comments';
@@ -25,14 +29,30 @@ export function CommentTree({
   selectedCommentId,
   onSelectComment,
   runStateByCommentId,
+  ref,
 }: CommentTreeProps) {
-  const { rows, isEmpty, emptyStateLabel, onToggleExpanded, onCheckedChange, onSelectRow } =
-    useCommentTree({ prRef, comments, selectedCommentId, onSelectComment, runStateByCommentId });
+  const {
+    rows,
+    isEmpty,
+    emptyStateLabel,
+    focusedNodeId,
+    onToggleExpanded,
+    onCheckedChange,
+    onSelectRow,
+  } = useCommentTree({
+    prRef,
+    comments,
+    selectedCommentId,
+    onSelectComment,
+    runStateByCommentId,
+    navigationRef: ref,
+  });
 
   const rowItems = rows.map((row) => (
     <CommentTreeRowItem
       key={row.node.id}
       row={row}
+      focusedNodeId={focusedNodeId}
       onToggleExpanded={onToggleExpanded}
       onCheckedChange={onCheckedChange}
       onSelect={onSelectRow}

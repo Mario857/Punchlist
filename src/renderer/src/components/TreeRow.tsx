@@ -33,6 +33,11 @@ export interface TreeRowProps {
   checkedState?: TreeRowCheckedState;
   onCheckedChange?: (isChecked: boolean) => void;
   isSelected?: boolean;
+  /**
+   * The keyboard cursor. Omit entirely in a tree with no keyboard navigation: that
+   * leaves the row out of the roving tabindex instead of making it a dead tab stop.
+   */
+  isFocused?: boolean;
   isDisabled?: boolean;
   onSelect?: () => void;
   /** Folder/file glyph for the diff tree, comment-kind glyph for the comment tree. */
@@ -58,6 +63,17 @@ const CHECKBOX_ARIA_CHECKED_MIXED = 'mixed' as const;
 
 const DISCLOSURE_SPACER_CLASS = 'size-5 shrink-0';
 
+/**
+ * The cursor is moved programmatically, so the ring is drawn from state rather than
+ * left to `:focus-visible` — which no longer applies once focus arrives from a key
+ * handler rather than from Tab. Inset so it never overlaps the neighbouring row.
+ */
+const TREE_ROW_FOCUSED_CLASS = 'outline-focus outline-2 -outline-offset-2';
+
+/** Roving tabindex: exactly one row is a tab stop and the rest are reachable by j/k. */
+const ROVING_TAB_INDEX_FOCUSED = 0;
+const ROVING_TAB_INDEX_UNFOCUSED = -1;
+
 /** Both glyphs sit inside small hit targets, so they draw below the 16px icon default. */
 const TREE_ROW_DISCLOSURE_ICON_SIZE = 12;
 const TREE_ROW_CHECKBOX_ICON_SIZE = 11;
@@ -71,6 +87,7 @@ export function TreeRow({
   checkedState,
   onCheckedChange,
   isSelected = false,
+  isFocused,
   isDisabled = false,
   onSelect,
   icon,
@@ -184,10 +201,16 @@ export function TreeRow({
 
   const ariaExpanded = hasChildren ? isExpanded : undefined;
 
+  const tabIndex = (() => {
+    if (isFocused === undefined) return undefined;
+    return isFocused ? ROVING_TAB_INDEX_FOCUSED : ROVING_TAB_INDEX_UNFOCUSED;
+  })();
+
   return (
     <div
       ref={ref}
       role="treeitem"
+      tabIndex={tabIndex}
       aria-level={depth + TREE_ROW_ARIA_LEVEL_OFFSET}
       aria-selected={isSelected}
       aria-expanded={ariaExpanded}
@@ -195,6 +218,7 @@ export function TreeRow({
       className={joinClassNames(
         'flex w-full items-center gap-1.5 rounded-md py-1 pr-2',
         isSelected ? 'bg-surface-hover' : 'hover:bg-surface-raised',
+        isFocused === true && TREE_ROW_FOCUSED_CLASS,
         INTERACTIVE_TRANSITION,
       )}
     >

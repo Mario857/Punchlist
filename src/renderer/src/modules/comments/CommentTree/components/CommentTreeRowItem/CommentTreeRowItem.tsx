@@ -6,6 +6,8 @@ import { useCommentTreeRowItem } from './useCommentTreeRowItem';
 
 export interface CommentTreeRowItemProps {
   row: CommentTreeRow;
+  /** The keyboard cursor's row; compared here so the tree stays free of row lookups. */
+  focusedNodeId: string | null;
   onToggleExpanded: (nodeId: string) => void;
   onCheckedChange: (nodeId: string, isChecked: boolean) => void;
   onSelect: (nodeId: string) => void;
@@ -13,6 +15,7 @@ export interface CommentTreeRowItemProps {
 
 export function CommentTreeRowItem({
   row,
+  focusedNodeId,
   onToggleExpanded,
   onCheckedChange,
   onSelect,
@@ -23,15 +26,18 @@ export function CommentTreeRowItem({
     hasChildren,
     isExpanded,
     isSelected,
+    isFocused,
     checkedState,
     nodeKind,
+    rowRef,
     onToggleRowExpanded,
     onRowCheckedChange,
     onSelectRow,
-  } = useCommentTreeRowItem({ row, onToggleExpanded, onCheckedChange, onSelect });
+  } = useCommentTreeRowItem({ row, focusedNodeId, onToggleExpanded, onCheckedChange, onSelect });
 
   return (
     <TreeRow
+      ref={rowRef}
       label={label}
       depth={depth}
       hasChildren={hasChildren}
@@ -40,6 +46,7 @@ export function CommentTreeRowItem({
       checkedState={checkedState}
       onCheckedChange={onRowCheckedChange}
       isSelected={isSelected}
+      isFocused={isFocused}
       onSelect={onSelectRow}
       icon={<CommentRowIcon kind={nodeKind} />}
       badges={<CommentRowBadges row={row} />}
