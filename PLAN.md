@@ -138,20 +138,26 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 
 ### Phase 7 — Optional automation
 
-- [ ] `watcher` — Build src/main/watcher.ts polling loop with an updatedAt short-circuit before the comment queries, persisted last-seen comment IDs per PR, and head-SHA change detection that marks existing runs stale
-- [ ] `automation-rules` — Build src/main/automation.ts author-allowlist trigger rules, off by default, free lane only, deduped by comment ID, capped per hour, paused during a landing; tag runs with trigger manual or auto
-- [ ] `automation-ui` — AutomationSettings.tsx for the enable toggle and author allowlist; native notification when auto-runs finish; queue distinguishes auto from manual runs
-- [ ] `no-action-state` — Add noActionNeeded run state so an auto-triggered run producing an empty diff resolves cleanly instead of auto-escalating forever
+- [x] `watcher` — Build src/main/watcher.ts polling loop with an updatedAt short-circuit before the comment queries, persisted last-seen comment IDs per PR, and head-SHA change detection that marks existing runs stale
+- [x] `automation-rules` — Build src/main/automation.ts author-allowlist trigger rules, off by default, free lane only, deduped by comment ID, capped per hour, paused during a landing; tag runs with trigger manual or auto
+- [x] `automation-ui` — AutomationSettings.tsx for the enable toggle and author allowlist; native notification when auto-runs finish; queue distinguishes auto from manual runs
+- [x] `no-action-state` — Add noActionNeeded run state so an auto-triggered run producing an empty diff resolves cleanly instead of auto-escalating forever
 
 ### Phase 10 — Ship it
 
-- [ ] `single-instance` — Take the single-instance lock and focus the existing window instead of starting a second process; two instances would share one JSON store and one set of worktrees and corrupt both
-- [ ] `app-menu` — Build a real application menu. On macOS an Electron app with no Edit menu has no working Cmd+C/V/X/A anywhere, including every text field this app has, so this is a correctness fix rather than chrome
-- [ ] `app-identity` — App icon, product name, description, bundle id, category and author metadata; the About panel and the dock/taskbar entry
-- [ ] `error-boundary` — A renderer error boundary so an uncaught render error shows something recoverable instead of a white window, and a main-process handler for unhandled rejections that does not take the app down silently
-- [ ] `window-state` — Remember window size and position across restarts, clamped back onto a currently-connected display
-- [ ] `packaging` — electron-builder config producing a macOS build, with the icon, the metadata and the entitlements wired; note plainly that it is unsigned and what that means for the person opening it
-- [ ] `readme` — A README written for someone deciding whether to run this, not for someone who already knows the architecture
+- [x] `single-instance` — Take the single-instance lock and focus the existing window instead of starting a second process; two instances would share one JSON store and one set of worktrees and corrupt both
+- [x] `app-menu` — Build a real application menu. On macOS an Electron app with no Edit menu has no working Cmd+C/V/X/A anywhere, including every text field this app has, so this is a correctness fix rather than chrome
+- [x] `app-identity` — App icon, product name, description, bundle id, category and author metadata; the About panel and the dock/taskbar entry
+- [x] `error-boundary` — A renderer error boundary so an uncaught render error shows something recoverable instead of a white window, and a main-process handler for unhandled rejections that does not take the app down silently
+- [x] `window-state` — Remember window size and position across restarts, clamped back onto a currently-connected display
+- [x] `packaging` — electron-builder config producing a macOS build, with the icon, the metadata and the entitlements wired; note plainly that it is unsigned and what that means for the person opening it
+- [x] `readme` — A README written for someone deciding whether to run this, not for someone who already knows the architecture
+
+#### As built: three notes
+
+- **`no-action-state` was already written but unreachable.** `shouldAutoEscalate` has always refused to escalate an auto-triggered empty diff, but every run was created with `trigger: manual`, so that branch was dead code. Threading the trigger through the queue is what made the rule true; an auto-triggered "LGTM, thanks" would otherwise have escalated at rising effort forever.
+- **Staleness gets a strong badge, auto-trigger does not.** The badge budget forbids a second always-visible strong badge, but a stale run is a trap rather than an attribute: `StateBadge` reads "Ready" while the patch is against a head that has moved, so muting it would hide the only thing wrong with a row that looks landable. It disappears on terminal states, where a landed or rejected run is history.
+- **Window bounds live in their own file**, not in the state store. They are rewritten on every drag, and sharing `airlock-state.json` would re-serialise every run record and transcript per frame.
 
 ### Phase 9 — Second opinion
 
