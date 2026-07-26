@@ -168,12 +168,12 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 
 ### Phase 8 — Learn from the comments
 
-- [ ] `convention-model` — Define the rule model in src/shared/conventions.ts: Zod-backed, with scope (repo/global), category, imperative rule text, rationale, evidence refs, and state (candidate/confirmed/rejected/exported)
-- [ ] `convention-capture` — Record every ingested comment as evidence in the store keyed by repo and comment id, with the resolving diff and run outcome attached once one exists; dedupe on comment id so re-fetching a PR never inflates evidence
-- [ ] `convention-distill` — Build src/main/conventions.ts: batch distillation running one free-lane agent over unprocessed evidence to propose candidate rules, merging into existing rules by bumping evidence instead of duplicating, and never re-proposing a rejected rule
-- [ ] `convention-promotion` — Recurrence threshold before a candidate is surfaced as confirmable, and promotion of a repo rule to global on its second repo, mirroring the renderer's promote-on-second-consumer rule
-- [ ] `convention-review-ui` — modules/conventions: rules grouped by category with evidence links back to the source comments, confirm/reject/edit per rule, and a preview of exactly what export would write
-- [ ] `convention-export` — Gated, audited write of confirmed rules to the target repo's .cursor/rules/learned-conventions.mdc and of global rules to a standalone user-level file; takes a confirmation argument at the type level, previews as a file diff, and is recorded as a deliberate protected-path exception
+- [x] `convention-model` — Define the rule model in src/shared/conventions.ts: Zod-backed, with scope (repo/global), category, imperative rule text, rationale, evidence refs, and state (candidate/confirmed/rejected/exported)
+- [x] `convention-capture` — Record every ingested comment as evidence in the store keyed by repo and comment id, with the resolving diff and run outcome attached once one exists; dedupe on comment id so re-fetching a PR never inflates evidence
+- [x] `convention-distill` — Build src/main/conventions.ts: batch distillation running one free-lane agent over unprocessed evidence to propose candidate rules, merging into existing rules by bumping evidence instead of duplicating, and never re-proposing a rejected rule
+- [x] `convention-promotion` — Recurrence threshold before a candidate is surfaced as confirmable, and promotion of a repo rule to global on its second repo, mirroring the renderer's promote-on-second-consumer rule
+- [x] `convention-review-ui` — modules/conventions: rules grouped by category with evidence links back to the source comments, confirm/reject/edit per rule, and a preview of exactly what export would write
+- [x] `convention-export` — Gated, audited write of confirmed rules to the target repo's .cursor/rules/learned-conventions.mdc and of global rules to a standalone user-level file; takes a confirmation argument at the type level, previews as a file diff, and is recorded as a deliberate protected-path exception
 
 ---
 
@@ -964,6 +964,11 @@ So it is offered per run and per batch, in the same place approval is. The natur
 ### What it is not
 
 It is not a gate, not a second approval, and not a way to review less. Every diff still needs the user's eyes — that is the review gate, and nothing here erodes it. A second opinion is a way to make the reading better informed, in the same spirit as flagging a suspicious diff before you open it.
+
+#### As built: two limitations
+
+- **Evidence links to repositories, not individual comments.** `conventions.list()` returns rules, and a rule carries comment ids and repo keys but not the comment URLs — those live on the evidence records, which no channel exposes. The UI links each evidence repository and shows the ids verbatim, and says so. True per-comment links need either evidence URLs on the rule or an evidence-listing channel.
+- **"Edit" is a state edit, not a text edit.** `setState` is the only rule mutation in the contract, so editing means returning a decided rule to `candidate`. Changing a rule's wording or category would need its own channel — worth adding if the distilled phrasing turns out to need routine correction.
 
 ## Convention memory (phase 8)
 
