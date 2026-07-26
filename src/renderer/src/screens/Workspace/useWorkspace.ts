@@ -7,8 +7,15 @@ import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComment
 import type { CommentTreeNavigationHandle } from '@renderer/modules/comments/CommentTree/useCommentTreeNavigation';
 import { useExecuteDismissRun, useQueryRuns } from '@renderer/modules/runs/useQueryRuns';
 import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
+import { prRefKey } from '@shared/discovery';
 import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
+
+/**
+ * Where a landing goes when the PR has not been given one yet. A guess, but the
+ * common one, and the field is right there in the top bar to correct.
+ */
+const DEFAULT_TARGET_BRANCH = 'main';
 
 /** A stable identity, so an absent result does not remount the tree every render. */
 const EMPTY_COMMENTS: PrComment[] = [];
@@ -26,6 +33,10 @@ interface UseWorkspaceResult {
   runStateByCommentId: Readonly<Record<string, RunState>>;
   commentTreeRef: Ref<CommentTreeNavigationHandle>;
   diffPaneRef: Ref<HTMLDivElement>;
+  targetBranch: string;
+  isLandingOpen: boolean;
+  onTargetBranchChange: (targetBranch: string) => void;
+  onToggleLanding: () => void;
   isShortcutHelpOpen: boolean;
   onShowShortcutHelp: () => void;
   onCloseShortcutHelp: () => void;
@@ -47,6 +58,9 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const [selectedCommentId, setSelectedCommentId] = useState<string | null>(null);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isLandingOpen, setIsLandingOpen] = useState(false);
+  const targetBranchByPr = useSessionStore((state) => state.targetBranchByPr);
+  const setTargetBranch = useSessionStore((state) => state.setTargetBranch);
 
   const {
     prComments,
@@ -60,6 +74,11 @@ export function useWorkspace(): UseWorkspaceResult {
   // empty queue for runs that are still alive in main.
   useQueryRuns(selectedPr);
   const runStateByCommentId = useRunStateByCommentId();
+
+  const targetBranch =
+    selectedPr === null
+      ? DEFAULT_TARGET_BRANCH
+      : (targetBranchByPr[prRefKey(selectedPr)] ?? DEFAULT_TARGET_BRANCH);
 
   const commentTreeRef = useRef<CommentTreeNavigationHandle>(null);
   const diffPaneRef = useRef<HTMLDivElement>(null);
@@ -128,8 +147,18 @@ export function useWorkspace(): UseWorkspaceResult {
       setLastPr(ref);
       setSelectedCommentId(null);
       setIsPickerOpen(false);
+      setIsLandingOpen(false);
     },
     onSelectComment: setSelectedCommentId,
+    targetBranch,
+    isLandingOpen,
+    onTargetBranchChange: (nextTargetBranch: string) => {
+      if (selectedPr === null) return;
+      setTargetBranch(selectedPr, nextTargetBranch);
+    },
+    // Opening the gate is a view change, not an action: the preview assembles in the
+    // sandbox and nothing it shows has happened yet.
+    onToggleLanding: () => setIsLandingOpen((isOpen) => !isOpen),
     onTogglePicker: () => setIsPickerOpen((isOpen) => !isOpen),
     onRefreshComments: refetchPrComments,
   };

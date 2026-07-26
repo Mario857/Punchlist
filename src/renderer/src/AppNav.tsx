@@ -6,13 +6,13 @@ import { SCREEN, type Screen } from './useApp';
 interface Props {
   screen: Screen;
   onOpenWorkspace: () => void;
+  onOpenAudit: () => void;
   onOpenSettings: () => void;
 }
 
-export function AppNav({ screen, onOpenWorkspace, onOpenSettings }: Props) {
-  const isWorkspaceActive = screen === SCREEN.WORKSPACE;
-  const workspaceVariant = isWorkspaceActive ? BUTTON_VARIANT.SECONDARY : BUTTON_VARIANT.GHOST;
-  const settingsVariant = isWorkspaceActive ? BUTTON_VARIANT.GHOST : BUTTON_VARIANT.SECONDARY;
+export function AppNav({ screen, onOpenWorkspace, onOpenAudit, onOpenSettings }: Props) {
+  const toVariant = (target: Screen) =>
+    screen === target ? BUTTON_VARIANT.SECONDARY : BUTTON_VARIANT.GHOST;
 
   return (
     <nav
@@ -24,11 +24,14 @@ export function AppNav({ screen, onOpenWorkspace, onOpenSettings }: Props) {
       )}
     >
       <span className="font-display text-ink mr-2 text-base tracking-tight">Airlock</span>
-      <Button variant={workspaceVariant} size={BUTTON_SIZE.SM} onClick={onOpenWorkspace}>
+      <Button variant={toVariant(SCREEN.WORKSPACE)} size={BUTTON_SIZE.SM} onClick={onOpenWorkspace}>
         Workspace
       </Button>
+      <Button variant={toVariant(SCREEN.AUDIT)} size={BUTTON_SIZE.SM} onClick={onOpenAudit}>
+        Audit
+      </Button>
       <Button
-        variant={settingsVariant}
+        variant={toVariant(SCREEN.SETTINGS)}
         size={BUTTON_SIZE.SM}
         icon={<SettingsIcon />}
         onClick={onOpenSettings}

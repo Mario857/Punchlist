@@ -4,6 +4,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { CommentTree } from '@renderer/modules/comments/CommentTree/CommentTree';
 import { FilterBar } from '@renderer/modules/comments/FilterBar/FilterBar';
+import { LandingPreview } from '@renderer/modules/landing/LandingPreview/LandingPreview';
 import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
 import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
@@ -31,6 +32,10 @@ export function Workspace() {
     runStateByCommentId,
     commentTreeRef,
     diffPaneRef,
+    targetBranch,
+    isLandingOpen,
+    onTargetBranchChange,
+    onToggleLanding,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,
@@ -80,6 +85,16 @@ export function Workspace() {
   })();
 
   const body = (() => {
+    // The gate takes the whole area: deciding to land is not something to do out of
+    // the corner of an eye while the tree is still competing for attention.
+    if (selectedPr !== null && isLandingOpen) {
+      return (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <LandingPreview prRef={selectedPr} targetBranch={targetBranch} />
+        </div>
+      );
+    }
+
     // The picker takes the whole area when no PR is chosen: there is nothing to lay
     // three panes out around yet.
     if (selectedPr === null || isPickerOpen) {
@@ -113,6 +128,10 @@ export function Workspace() {
         onTogglePicker={onTogglePicker}
         onRefreshComments={onRefreshComments}
         onShowShortcutHelp={onShowShortcutHelp}
+        targetBranch={targetBranch}
+        isLandingOpen={isLandingOpen}
+        onTargetBranchChange={onTargetBranchChange}
+        onToggleLanding={onToggleLanding}
       />
       <RunControls prRef={selectedPr} />
       {body}

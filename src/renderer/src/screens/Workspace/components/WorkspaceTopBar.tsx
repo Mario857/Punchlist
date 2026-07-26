@@ -2,6 +2,7 @@ import type { PrRef } from '@shared/discovery';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
 import { RefreshIcon } from '@renderer/components/icons/RefreshIcon';
+import { DISABLED_STATE, FOCUS_RING } from '@renderer/components/interactiveClassNames';
 import { joinClassNames } from '@renderer/lib/classNames';
 
 interface Props {
@@ -11,12 +12,25 @@ interface Props {
   onTogglePicker: () => void;
   onRefreshComments: () => void;
   onShowShortcutHelp: () => void;
+  targetBranch: string;
+  isLandingOpen: boolean;
+  onTargetBranchChange: (targetBranch: string) => void;
+  onToggleLanding: () => void;
 }
 
 const NO_PR_LABEL = 'No pull request selected';
 /** The visible equivalent of `?`, so the keyboard map is discoverable by mouse. */
 const SHORTCUT_HELP_LABEL = '?';
 const SHORTCUT_HELP_TITLE = 'Keyboard shortcuts';
+const TARGET_BRANCH_INPUT_ID = 'workspace-target-branch';
+const TARGET_BRANCH_LABEL = 'Target branch';
+/** Says where a landing would go, not that anything has gone there. */
+const TARGET_BRANCH_TITLE =
+  'Where an approved batch would land. The integration branch is pushed as its own branch; this one is never pushed to directly.';
+const OPEN_LANDING_LABEL = 'Review landing';
+const CLOSE_LANDING_LABEL = 'Back to comments';
+const TARGET_BRANCH_INPUT_CLASS =
+  'border-border bg-surface-raised text-ink w-40 rounded border px-2 py-1 text-sm';
 
 export function WorkspaceTopBar({
   selectedPr,
@@ -25,6 +39,10 @@ export function WorkspaceTopBar({
   onTogglePicker,
   onRefreshComments,
   onShowShortcutHelp,
+  targetBranch,
+  isLandingOpen,
+  onTargetBranchChange,
+  onToggleLanding,
 }: Props) {
   const prLabel = selectedPr === null ? NO_PR_LABEL : `${selectedPr.repoKey} #${selectedPr.number}`;
 
@@ -37,6 +55,8 @@ export function WorkspaceTopBar({
   // Nothing to toggle back to before a PR is chosen, and nothing to refresh either.
   const isPickerToggleDisabled = selectedPr === null && isPickerOpen;
   const isRefreshDisabled = selectedPr === null;
+  const isTargetBranchDisabled = selectedPr === null;
+  const landingLabel = isLandingOpen ? CLOSE_LANDING_LABEL : OPEN_LANDING_LABEL;
 
   return (
     <header
@@ -47,6 +67,26 @@ export function WorkspaceTopBar({
     >
       <p className="text-ink truncate text-sm font-medium tabular-nums">{prLabel}</p>
       <div className="flex shrink-0 items-center gap-2">
+        <label className="text-muted text-xs" htmlFor={TARGET_BRANCH_INPUT_ID}>
+          {TARGET_BRANCH_LABEL}
+        </label>
+        <input
+          id={TARGET_BRANCH_INPUT_ID}
+          type="text"
+          value={targetBranch}
+          title={TARGET_BRANCH_TITLE}
+          disabled={isTargetBranchDisabled}
+          onChange={(event) => onTargetBranchChange(event.target.value)}
+          className={joinClassNames(TARGET_BRANCH_INPUT_CLASS, FOCUS_RING, DISABLED_STATE)}
+        />
+        <Button
+          variant={BUTTON_VARIANT.PRIMARY}
+          size={BUTTON_SIZE.SM}
+          isDisabled={isTargetBranchDisabled}
+          onClick={onToggleLanding}
+        >
+          {landingLabel}
+        </Button>
         <IconButton
           label="Refresh comments"
           icon={<RefreshIcon />}

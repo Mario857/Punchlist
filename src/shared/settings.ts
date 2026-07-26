@@ -47,6 +47,12 @@ export const sessionStateSchema = z.object({
   filters: commentFiltersSchema.default(() => commentFiltersSchema.parse({})),
   /** Backs the new-since-last-viewed marker. Keyed by prRefKey. */
   lastViewedAtByPr: z.record(z.string(), z.string()).default({}),
+  /**
+   * Where a landing would go, per PR. Persisted because it is a decision about a
+   * specific PR rather than a global preference, and re-typing it after every restart
+   * would invite typing it wrong.
+   */
+  targetBranchByPr: z.record(z.string(), z.string()).default({}),
 });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;

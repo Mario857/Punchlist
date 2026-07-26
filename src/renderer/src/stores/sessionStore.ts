@@ -32,6 +32,7 @@ interface SessionStore extends SessionState {
   setExpandedNodeIds: (ref: PrRef, nodeIds: readonly string[]) => void;
   setFilters: (filters: CommentFilters) => void;
   markPrViewed: (ref: PrRef) => void;
+  setTargetBranch: (ref: PrRef, targetBranch: string) => void;
   setTierOverride: (commentId: string, tier: ModelTier) => void;
   /** Drops the override so the comment falls back to the heuristic's answer. */
   clearTierOverride: (commentId: string) => void;
@@ -69,6 +70,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
 
   setFilters: (filters) => set({ filters }),
+
+  setTargetBranch: (ref, targetBranch) =>
+    set((state) => ({
+      targetBranchByPr: { ...state.targetBranchByPr, [prRefKey(ref)]: targetBranch },
+    })),
 
   markPrViewed: (ref) =>
     set((state) => ({
@@ -121,5 +127,6 @@ export function selectPersistableSession(state: SessionStore): SessionState {
     expandedNodeIdsByPr: state.expandedNodeIdsByPr,
     filters: state.filters,
     lastViewedAtByPr: state.lastViewedAtByPr,
+    targetBranchByPr: state.targetBranchByPr,
   };
 }

@@ -4,6 +4,7 @@ import { useSessionRestore } from '@renderer/hooks/useSessionRestore';
 
 export const SCREEN = {
   WORKSPACE: 'workspace',
+  AUDIT: 'audit',
   SETTINGS: 'settings',
 } as const;
 
@@ -13,11 +14,12 @@ interface UseAppResult {
   screen: Screen;
   isSessionHydrated: boolean;
   onOpenWorkspace: () => void;
+  onOpenAudit: () => void;
   onOpenSettings: () => void;
 }
 
 /**
- * The app has two screens and no URL, so a state value beats pulling in a router.
+ * The app has three screens and no URL, so a state value beats pulling in a router.
  * Nothing else needs to read it, which is why it stays local rather than becoming
  * another global store.
  */
@@ -32,6 +34,7 @@ export function useApp(): UseAppResult {
     screen,
     isSessionHydrated,
     onOpenWorkspace: () => setScreen(SCREEN.WORKSPACE),
+    onOpenAudit: () => setScreen(SCREEN.AUDIT),
     onOpenSettings: () => setScreen(SCREEN.SETTINGS),
   };
 }

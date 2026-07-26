@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Spinner, SPINNER_SIZE } from '@renderer/components/Spinner';
 import { assertNever } from '@renderer/lib/assertNever';
+import { Audit } from '@renderer/screens/Audit/Audit';
 import { Settings } from '@renderer/screens/Settings/Settings';
 import { Workspace } from '@renderer/screens/Workspace/Workspace';
 import { AppNav } from './AppNav';
@@ -18,7 +19,7 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  const { screen, isSessionHydrated, onOpenWorkspace, onOpenSettings } = useApp();
+  const { screen, isSessionHydrated, onOpenWorkspace, onOpenAudit, onOpenSettings } = useApp();
 
   const content = (() => {
     // Rendering before hydration would flash an empty workspace and then jump to
@@ -33,6 +34,8 @@ export default function App() {
     switch (screen) {
       case SCREEN.WORKSPACE:
         return <Workspace />;
+      case SCREEN.AUDIT:
+        return <Audit />;
       case SCREEN.SETTINGS:
         return <Settings />;
       default:
@@ -43,7 +46,12 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <div className="font-body text-ink flex h-full min-h-0 flex-col">
-        <AppNav screen={screen} onOpenWorkspace={onOpenWorkspace} onOpenSettings={onOpenSettings} />
+        <AppNav
+          screen={screen}
+          onOpenWorkspace={onOpenWorkspace}
+          onOpenAudit={onOpenAudit}
+          onOpenSettings={onOpenSettings}
+        />
         {content}
       </div>
     </QueryClientProvider>
