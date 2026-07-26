@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
+import type { RunState } from '@shared/runState';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
+import { useQueryRuns } from '@renderer/modules/runs/useQueryRuns';
+import { useRunStateByCommentId } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
 
 /** A stable identity, so an absent result does not remount the tree every render. */
@@ -16,6 +19,8 @@ interface UseWorkspaceResult {
   isPrCommentsLoading: boolean;
   isPrCommentsFetching: boolean;
   prCommentsError: unknown;
+  /** Drives the tree's run-state badges and its attention-budget expansion. */
+  runStateByCommentId: Readonly<Record<string, RunState>>;
   onSelectPr: (ref: PrRef) => void;
   onSelectComment: (commentId: string) => void;
   onTogglePicker: () => void;
@@ -43,6 +48,11 @@ export function useWorkspace(): UseWorkspaceResult {
     refetchPrComments,
   } = useQueryPrComments(selectedPr);
 
+  // Hydrates the run store from persisted state, so a restart does not show an
+  // empty queue for runs that are still alive in main.
+  useQueryRuns(selectedPr);
+  const runStateByCommentId = useRunStateByCommentId();
+
   const comments = prComments ?? EMPTY_COMMENTS;
   const selectedComment = comments.find((comment) => comment.id === selectedCommentId) ?? null;
 
@@ -62,6 +72,7 @@ export function useWorkspace(): UseWorkspaceResult {
     isPrCommentsLoading,
     isPrCommentsFetching,
     prCommentsError,
+    runStateByCommentId,
     onSelectPr: (ref) => {
       setLastPr(ref);
       setSelectedCommentId(null);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRunEventStream } from '@renderer/hooks/useRunEventStream';
 import { useSessionRestore } from '@renderer/hooks/useSessionRestore';
 
 export const SCREEN = {
@@ -23,6 +24,9 @@ interface UseAppResult {
 export function useApp(): UseAppResult {
   const [screen, setScreen] = useState<Screen>(SCREEN.WORKSPACE);
   const { isSessionHydrated } = useSessionRestore();
+  // Subscribed once here rather than per pane: the bridge returns an unsubscribe
+  // function, so a second mount would double every streamed event.
+  useRunEventStream();
 
   return {
     screen,

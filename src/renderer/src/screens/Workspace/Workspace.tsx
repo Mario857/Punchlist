@@ -5,7 +5,8 @@ import { CommentTree } from '@renderer/modules/comments/CommentTree/CommentTree'
 import { FilterBar } from '@renderer/modules/comments/FilterBar/FilterBar';
 import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
-import { ResolutionPane } from './components/ResolutionPane';
+import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
+import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
@@ -24,6 +25,7 @@ export function Workspace() {
     isPrCommentsLoading,
     isPrCommentsFetching,
     prCommentsError,
+    runStateByCommentId,
     onSelectPr,
     onSelectComment,
     onTogglePicker,
@@ -61,6 +63,7 @@ export function Workspace() {
             comments={comments}
             selectedCommentId={selectedCommentId}
             onSelectComment={onSelectComment}
+            runStateByCommentId={runStateByCommentId}
           />
         </div>
       </>
@@ -84,7 +87,7 @@ export function Workspace() {
           <CommentDetail comment={selectedComment} />
         </div>
         <div className={RIGHT_PANE_CLASS}>
-          <ResolutionPane />
+          <RunPane commentId={selectedCommentId} />
         </div>
       </div>
     );
@@ -99,6 +102,7 @@ export function Workspace() {
         onTogglePicker={onTogglePicker}
         onRefreshComments={onRefreshComments}
       />
+      <RunControls prRef={selectedPr} />
       {body}
     </main>
   );
