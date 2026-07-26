@@ -6,6 +6,7 @@ import { SELECTION_SIDE } from '@shared/runs';
 import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
+import { listAuditEntries } from './audit';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
@@ -206,6 +207,8 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.MODELS_LIST, noPayloadSchema, () =>
     listModelCatalog({ shouldRefresh: true }),
   );
+
+  registerHandler(IPC_CHANNEL.AUDIT_LIST, noPayloadSchema, () => listAuditEntries());
 
   registerHandler(IPC_CHANNEL.SANDBOX_USAGE, noPayloadSchema, () => readSandboxUsage());
   registerHandler(IPC_CHANNEL.SANDBOX_CLEANUP, noPayloadSchema, () => cleanupTerminalRuns());
