@@ -41,13 +41,22 @@ const ALLOWED_TRANSITIONS: Record<RunState, readonly RunState[]> = {
     RUN_STATE.FAILED,
   ],
   [RUN_STATE.NEEDS_DECISION]: [RUN_STATE.RUNNING, RUN_STATE.FAILED],
-  [RUN_STATE.READY]: [RUN_STATE.REVISING, RUN_STATE.APPROVED, RUN_STATE.FAILED],
+  [RUN_STATE.READY]: [RUN_STATE.REVISING, RUN_STATE.APPROVED, RUN_STATE.REJECTED, RUN_STATE.FAILED],
   [RUN_STATE.REVISING]: [RUN_STATE.READY, RUN_STATE.NEEDS_DECISION, RUN_STATE.FAILED],
   [RUN_STATE.NO_ACTION_NEEDED]: [RUN_STATE.RUNNING],
   [RUN_STATE.FAILED]: [RUN_STATE.RUNNING],
   // Approval is revocable up to the landing gate: a hand-edit or a late guardrail flag
   // drops an approved run back into review rather than landing something unreviewed.
-  [RUN_STATE.APPROVED]: [RUN_STATE.APPLIED, RUN_STATE.READY, RUN_STATE.REVISING, RUN_STATE.FAILED],
+  [RUN_STATE.APPROVED]: [
+    RUN_STATE.APPLIED,
+    RUN_STATE.READY,
+    RUN_STATE.REVISING,
+    RUN_STATE.REJECTED,
+    RUN_STATE.FAILED,
+  ],
+  // Reversible on purpose: turning a resolution down is a review decision, not a
+  // destructive one, and the worktree survives until the run is dismissed.
+  [RUN_STATE.REJECTED]: [RUN_STATE.READY],
   [RUN_STATE.APPLIED]: [],
 };
 
@@ -167,6 +176,7 @@ function resolveTimestamps(run: RunRecord, nextState: RunState, now: string): Ru
     case RUN_STATE.NO_ACTION_NEEDED:
     case RUN_STATE.FAILED:
     case RUN_STATE.APPROVED:
+    case RUN_STATE.REJECTED:
     case RUN_STATE.APPLIED:
       return endWork(run, now);
     default: {

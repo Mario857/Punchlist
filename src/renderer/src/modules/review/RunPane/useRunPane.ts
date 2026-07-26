@@ -241,6 +241,9 @@ function toView(run: RunRecord): RunPaneView {
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: true,
       };
+    // Rejected keeps its diff readable: the record of what was turned down is the
+    // point, and the run can still be reopened for review.
+    case RUN_STATE.REJECTED:
     case RUN_STATE.APPLIED:
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,

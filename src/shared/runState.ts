@@ -7,6 +7,7 @@ export const RUN_STATE = {
   NO_ACTION_NEEDED: 'noActionNeeded', // ran, produced nothing, and that was correct
   FAILED: 'failed',
   APPROVED: 'approved', // reviewed and ready to land; nothing has landed
+  REJECTED: 'rejected', // reviewed and turned down; the record is kept, the work is not
   APPLIED: 'applied', // landed after an explicit confirmation
 } as const;
 
@@ -55,6 +56,7 @@ export type FailureReason = (typeof FAILURE_REASON)[keyof typeof FAILURE_REASON]
 const TERMINAL_RUN_STATES: readonly RunState[] = [
   RUN_STATE.NO_ACTION_NEEDED,
   RUN_STATE.FAILED,
+  RUN_STATE.REJECTED,
   RUN_STATE.APPLIED,
 ];
 
@@ -76,6 +78,7 @@ const RUN_STATE_URGENCY: readonly RunState[] = [
   RUN_STATE.QUEUED,
   RUN_STATE.APPROVED,
   RUN_STATE.NO_ACTION_NEEDED,
+  RUN_STATE.REJECTED,
   RUN_STATE.APPLIED,
 ];
 
@@ -90,5 +93,9 @@ export function shouldAttractAttention(state: RunState): boolean {
 }
 
 export function shouldSelfCollapse(state: RunState): boolean {
-  return state === RUN_STATE.APPLIED || state === RUN_STATE.NO_ACTION_NEEDED;
+  return (
+    state === RUN_STATE.APPLIED ||
+    state === RUN_STATE.NO_ACTION_NEEDED ||
+    state === RUN_STATE.REJECTED
+  );
 }

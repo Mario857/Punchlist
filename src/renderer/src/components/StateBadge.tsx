@@ -65,6 +65,11 @@ export function StateBadge({ state, size = BADGE_SIZE.SM }: StateBadgeProps) {
           label: 'Approved',
           toneClassName: 'border-state-approved/40 bg-state-approved/15 text-state-approved',
         };
+      case RUN_STATE.REJECTED:
+        return {
+          label: 'Rejected',
+          toneClassName: 'border-neutral/40 bg-neutral/15 text-neutral',
+        };
       case RUN_STATE.APPLIED:
         return {
           label: 'Applied',

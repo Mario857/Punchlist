@@ -3,6 +3,8 @@ import type { PrComment } from '@shared/comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discovery';
 import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
+import type { AuditEntry } from '@shared/audit';
+import type { AssembleLandingRequest, LandingPreview } from '@shared/landing';
 import type { ModelCatalogEntry } from '@shared/models';
 import type {
   AcknowledgeGuardrailRequest,
@@ -78,6 +80,10 @@ const api: AirlockApi = {
     dismiss: (runId: string): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_DISMISS, runId),
     stopAll: (): Promise<IpcResult<RunRecord[]>> => ipcRenderer.invoke(IPC_CHANNEL.RUNS_STOP_ALL),
+    approve: (runIds: string[]): Promise<IpcResult<RunRecord[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_APPROVE, runIds),
+    reject: (runIds: string[]): Promise<IpcResult<RunRecord[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_REJECT, runIds),
     continueRun: (request: ContinueRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_CONTINUE, request),
     writeFile: (request: WriteRunFileRequest): Promise<IpcResult<RunRecord>> =>
@@ -98,6 +104,13 @@ const api: AirlockApi = {
       ipcRenderer.on(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
     },
+  },
+  landing: {
+    assemble: (request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_ASSEMBLE, request),
+  },
+  audit: {
+    list: (): Promise<IpcResult<AuditEntry[]>> => ipcRenderer.invoke(IPC_CHANNEL.AUDIT_LIST),
   },
   autoMode: {
     isEnabled: (): Promise<IpcResult<boolean>> =>

@@ -1,6 +1,8 @@
 import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
+import type { AuditEntry } from './audit';
+import type { AssembleLandingRequest, LandingPreview } from './landing';
 import type { ModelCatalogEntry } from './models';
 import type {
   AcknowledgeGuardrailRequest,
@@ -55,6 +57,10 @@ export const IPC_CHANNEL = {
   RUNS_WRITE_FILE: 'runs:writeFile',
   RUNS_SET_AUTO_MODE: 'runs:setAutoMode',
   RUNS_GET_AUTO_MODE: 'runs:getAutoMode',
+  RUNS_APPROVE: 'runs:approve',
+  RUNS_REJECT: 'runs:reject',
+  LANDING_ASSEMBLE: 'landing:assemble',
+  AUDIT_LIST: 'audit:list',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
@@ -131,6 +137,13 @@ export interface RunsApi {
   /** Cancels every active run at once, so a bad batch needs one action, not twelve. */
   stopAll(): Promise<IpcResult<RunRecord[]>>;
   /**
+   * Marks runs ready to land. It only ever moves them to approved and never lands
+   * anything, which is what keeps bulk approval safe.
+   */
+  approve(runIds: string[]): Promise<IpcResult<RunRecord[]>>;
+  /** Turns resolutions down. The record and its worktree survive until dismissed. */
+  reject(runIds: string[]): Promise<IpcResult<RunRecord[]>>;
+  /**
    * Continues the run's existing agent: the decision reply and the whole-patch
    * follow-up are one mechanism, so context is never rebuilt. Which one it is
    * follows from the run's state rather than a caller-supplied label.
@@ -174,6 +187,20 @@ export interface AutoModeApi {
   setEnabled(isEnabled: boolean): Promise<IpcResult<boolean>>;
 }
 
+export interface LandingApi {
+  /**
+   * Builds the integration result in a sandbox worktree by actually squash-merging
+   * each approved branch, so conflicts are found — and can be re-run — while the real
+   * repository is still untouched. Nothing here leaves the sandbox.
+   */
+  assemble(request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>>;
+}
+
+export interface AuditApi {
+  /** Append-only and newest-first: the history of what the tool did to your repo. */
+  list(): Promise<IpcResult<AuditEntry[]>>;
+}
+
 export interface ModelsApi {
   /** The account's live catalog; the tier mapping is chosen from this, never hardcoded. */
   list(): Promise<IpcResult<ModelCatalogEntry[]>>;
@@ -199,6 +226,8 @@ export interface AirlockApi {
   session: SessionApi;
   cursorKey: CursorKeyApi;
   runs: RunsApi;
+  landing: LandingApi;
+  audit: AuditApi;
   autoMode: AutoModeApi;
   models: ModelsApi;
   sandbox: SandboxApi;
