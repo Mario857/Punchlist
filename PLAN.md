@@ -38,16 +38,22 @@
 
 ### Phase 2 — One agent, one worktree
 
-- [ ] `worktree-engine` — Build src/main/worktree.ts: `git fetch refs/pull/N/head` first so same-repo and fork PRs both work, then create worktrees at that SHA via simple-git, commit, diff, squash-merge, revert-to-revision
-- [ ] `worktree-cleanup` — Three-step teardown (worktree remove, then `git branch -D` of the scratch branch which remove does not delete, then worktree prune); never force-remove a dirty worktree, surface it as unlanded work instead; only tear down terminal states, never running/revising/ready/needsDecision since local agent resume needs the cwd
-- [ ] `worktree-reconcile` — Startup reconciliation: diff `git worktree list --porcelain` against persisted run state, tear down orphans, mark runs whose worktree vanished as broken, prune dead registrations; surface total sandbox disk usage with a manual clean-up-all action
-- [ ] `sandbox-containment` — Build src/main/sandbox.ts: enable extensions.worktreeConfig and set an invalid remote.origin.pushurl per worktree; set worktree-scoped user.name/user.email to the user's identity; scrub GIT_AUTHOR__/GIT_COMMITTER__/EMAIL and GH_TOKEN/GITHUB_TOKEN from the agent env and point GH_CONFIG_DIR at an empty dir; settingSources empty; assert gated ops carry a confirmation
-- [ ] `agent-runner` — Build src/main/agent.ts: Agent.create (never Agent.prompt) with local cwd = worktree, persist agentId for Agent.resume, stream events over IPC, cancel guarded by run.supports, guaranteed disposal, distinguish CursorAgentError from result.status error
-- [ ] `prompt-builder` — Build src/main/prompt.ts: anchored comments get path/line/diffHunk context; unanchored comments get a locate-the-code-first instruction; both include the halt-and-ask protocol for genuine ambiguity and the instruction to write .airlock/summary.json with a draft commit subject and details
-- [ ] `commit-identity` — Resolve the user's git identity from effective repo config and fail preflight if unset; author and committer both set to the user on every commit; no Co-authored-by trailer for the agent
-- [ ] `commit-messages` — Assemble the squashed landing commit message from the agent's summary.json subject plus provenance (comment author, file/line, quoted comment body, PR and thread URLs); template fallback when summary is missing or malformed; editable in the landing preview
-- [ ] `run-state-machine` — Build src/main/runState.ts: explicit state machine (queued/running/needsDecision/ready/revising/noActionNeeded/failed/approved/applied) with revision counter and trigger origin, persisted to the JSON store
-- [ ] `phase2-single-run` — Wire one comment end-to-end (worktree → agent → streaming transcript → Monaco DiffEditor showing candidate patch)
+- [x] `worktree-engine` — Build src/main/worktree.ts: `git fetch refs/pull/N/head` first so same-repo and fork PRs both work, then create worktrees at that SHA via simple-git, commit, diff, squash-merge, revert-to-revision
+- [x] `worktree-cleanup` — Three-step teardown (worktree remove, then `git branch -D` of the scratch branch which remove does not delete, then worktree prune); never force-remove a dirty worktree, surface it as unlanded work instead; only tear down terminal states, never running/revising/ready/needsDecision since local agent resume needs the cwd
+- [x] `worktree-reconcile` — Startup reconciliation: diff `git worktree list --porcelain` against persisted run state, tear down orphans, mark runs whose worktree vanished as broken, prune dead registrations; surface total sandbox disk usage with a manual clean-up-all action
+- [x] `sandbox-containment` — Build src/main/sandbox.ts: enable extensions.worktreeConfig and set an invalid remote.origin.pushurl per worktree; set worktree-scoped user.name/user.email to the user's identity; scrub GIT_AUTHOR__/GIT_COMMITTER__/EMAIL and GH_TOKEN/GITHUB_TOKEN from the agent env and point GH_CONFIG_DIR at an empty dir; settingSources empty; assert gated ops carry a confirmation
+- [x] `agent-runner` — Build src/main/agent.ts: Agent.create (never Agent.prompt) with local cwd = worktree, persist agentId for Agent.resume, stream events over IPC, cancel guarded by run.supports, guaranteed disposal, distinguish CursorAgentError from result.status error
+- [x] `prompt-builder` — Build src/main/prompt.ts: anchored comments get path/line/diffHunk context; unanchored comments get a locate-the-code-first instruction; both include the halt-and-ask protocol for genuine ambiguity and the instruction to write .airlock/summary.json with a draft commit subject and details
+- [x] `commit-identity` — Resolve the user's git identity from effective repo config and fail preflight if unset; author and committer both set to the user on every commit; no Co-authored-by trailer for the agent
+- [x] `commit-messages` — Assemble the squashed landing commit message from the agent's summary.json subject plus provenance (comment author, file/line, quoted comment body, PR and thread URLs); template fallback when summary is missing or malformed; editable in the landing preview
+- [x] `run-state-machine` — Build src/main/runState.ts: explicit state machine (queued/running/needsDecision/ready/revising/noActionNeeded/failed/approved/applied) with revision counter and trigger origin, persisted to the JSON store
+- [x] `phase2-single-run` — Wire one comment end-to-end (worktree → agent → streaming transcript → Monaco DiffEditor showing candidate patch)
+
+#### As built: three notes
+
+- **Containment is process-wide, not per-child.** See the inverted-direction note under "The agent is contained, not merely instructed" — the SDK gives local agents no env override, so the original design could not have worked.
+- **`squash-merge` is not in `worktree.ts` yet.** The `worktree-engine` item listed it, but its only caller is the phase 5 integration branch, and a squash-merge onto anything real is a gated operation with no confirmation type consumer until then. `commit`, `diff` and `revert-to-revision` are all present; the merge lands with `landing.ts`.
+- **`commitMessage.ts` is built but has no caller.** The `commit-messages` item belongs to the landing flow, which is phase 5. It is a pure function with no I/O, so it is verifiable in isolation and carries no risk sitting unused; `landing.ts` will call it. The "editable in the landing preview" half is phase 5 by definition.
 
 ### Phase 3 — Parallel queue and routing
 
