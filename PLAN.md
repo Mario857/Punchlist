@@ -78,10 +78,10 @@
 - [ ] `targeted-edits` — InlinePrompt.tsx selection-scoped revision via agent.send on the same agent: prompt carries path, line range, and selected content verbatim (content is the anchor since line numbers drift), framed differently for modified-side (change this) vs original-side (you missed this) selections; defaults to the free mechanical tier, sends serialized per run, result scope-checked by guardrails, commits as a revision
 - [x] `revising-state` — Add revising run state so the right pane keeps the existing diff dimmed with inline agent progress instead of swapping to a transcript; also expose a whole-patch follow-up prompt in ready state, unifying decision reply / follow-up / targeted edit onto one agent.send path
 - [ ] `revision-history` — One commit per revision in the worktree as an audit trail, with revert-to-revision; squashed at apply time
-- [ ] `guardrails` — Build src/main/guardrails.ts running on every patch that reaches ready and again on the combined landing diff: configurable protected-path list (lock files, generated output, .github/workflows, .env*, vendored trees, .cursor/rules), credential-shaped secret scan, and tier-versus-diff-size plus out-of-anchor-path mismatch; flags block approval until acknowledged and the acknowledgement is audited
+- [x] `guardrails` — Build src/main/guardrails.ts running on every patch that reaches ready and again on the combined landing diff: configurable protected-path list (lock files, generated output, .github/workflows, .env*, vendored trees, .cursor/rules), credential-shaped secret scan, and tier-versus-diff-size plus out-of-anchor-path mismatch; flags block approval until acknowledged and the acknowledgement is audited
 - [ ] `review-shortcuts` — useReviewShortcuts hook for keyboard-driven review (j/k over visible tree rows skipping collapsed subtrees, left/right collapse-expand, a approve, r reject, e focus diff, ]/[ hunk nav, Cmd+K inline prompt on selection matching Cursor's binding, d dismiss, ? help); every shortcut has a visible button equivalent and landing confirmation stays a click
 
-#### Phase 4 progress: two of nine items done
+#### Phase 4 progress: three of nine items done
 
 `decision-protocol` and `revising-state` landed together, because they are one mechanism: `runs:continue` resumes the run's existing agent, and the run's state decides whether that means answering a question (`needsDecision` → `running`) or revising a patch (`ready` → `revising`). Doing the decision reply without the follow-up would have built the same path twice.
 
@@ -90,7 +90,14 @@ Two consequences worth knowing before the remaining items are picked up:
 - **`approved` accepts a continuation in main but is not offered one in the UI.** The whole-patch follow-up is scoped to `ready` per the entry-point table above. Widening it is a one-line change once the approve action exists in phase 5.
 - **`DecisionPrompt` and `FollowUpPrompt` each carry their own textarea styling.** That is the second consumer, so the promotion rule now points at a shared prompt-field primitive in `components/`. It was left duplicated deliberately rather than promoted mid-slice; `targeted-edits` will be the third consumer and is the right moment to extract it.
 
-Still open: `auto-mode`, `auto-mode-visibility`, `hand-edit-diff`, `targeted-edits`, `revision-history`, `guardrails`, `review-shortcuts`.
+`guardrails` landed next, since phase 5 must not be able to reach a real branch before the checks exist. Two parts of that item are deferred by phase ordering rather than by oversight:
+
+- **The acknowledgement is not yet audited.** `audit.ts` is a phase 5 module, so the acknowledgement is recorded on the run but not appended to an audit log. The audit write is a one-line addition at `acknowledgeGuardrail` once that module exists.
+- **"Blocks approval" has nothing to block yet.** The approve action is phase 5. `hasUnacknowledgedFlags` exists and the UI already states how many findings remain before the patch can be approved, so phase 5 wires into the gate rather than retrofitting one.
+
+The combined-landing-diff pass is also phase 5 by definition; `inspectCandidatePatch` was deliberately written without a per-run assumption so it can run against that diff unchanged.
+
+Still open: `auto-mode`, `auto-mode-visibility`, `hand-edit-diff`, `targeted-edits`, `revision-history`, `review-shortcuts`.
 
 ### Phase 5 — Land, gated
 
