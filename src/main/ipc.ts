@@ -7,7 +7,15 @@ import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
-import { assembleLanding } from './landing';
+import {
+  assembleLanding,
+  executeLanding,
+  findUndoableLanding,
+  LANDING_GATE_ACTION,
+  undoLanding,
+  UNDO_LANDING_GATE_ACTION,
+} from './landing';
+import { confirmSandboxExit } from './sandbox';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, rerunConflictedRun, stopAllRuns } from './queue';
 import {
@@ -78,6 +86,27 @@ const writeRunFilePayloadSchema = z.object({
   path: z.string(),
   // Deliberately unconstrained: emptying a file is a legal hand edit.
   content: z.string(),
+});
+
+const landingCommitPlanSchema = z.object({
+  runId: z.string(),
+  commentId: z.string(),
+  subject: z.string(),
+  body: z.string(),
+});
+
+const executeLandingPayloadSchema = z.object({
+  prRef: prRefSchema,
+  targetBranch: z.string().min(MIN_BRANCH_NAME_LENGTH),
+  commits: z.array(landingCommitPlanSchema),
+  replyText: z.string().nullable(),
+  acknowledgedGuardrailIds: z.array(z.string()),
+  isConfirmedByUser: z.boolean(),
+});
+
+const undoLandingPayloadSchema = z.object({
+  landingId: z.string(),
+  isConfirmedByUser: z.boolean(),
 });
 
 const assembleLandingPayloadSchema = z.object({
@@ -229,6 +258,29 @@ export function registerIpcHandlers(): void {
 
   registerHandler(IPC_CHANNEL.LANDING_ASSEMBLE, assembleLandingPayloadSchema, (request) =>
     assembleLanding(request),
+  );
+
+  // The confirmation is minted here, from the same call that carries the reviewed
+  // commits, and nowhere else. That is what makes the branded type meaningful: no
+  // handler can reach a push, a thread resolve or a reply without one.
+  registerHandler(IPC_CHANNEL.LANDING_EXECUTE, executeLandingPayloadSchema, (request) =>
+    executeLanding(
+      request,
+      confirmSandboxExit({
+        action: LANDING_GATE_ACTION,
+        isConfirmedByUser: request.isConfirmedByUser,
+      }),
+    ),
+  );
+  registerHandler(IPC_CHANNEL.LANDING_UNDOABLE, noPayloadSchema, () => findUndoableLanding());
+  registerHandler(IPC_CHANNEL.LANDING_UNDO, undoLandingPayloadSchema, (request) =>
+    undoLanding(
+      request,
+      confirmSandboxExit({
+        action: UNDO_LANDING_GATE_ACTION,
+        isConfirmedByUser: request.isConfirmedByUser,
+      }),
+    ),
   );
 
   registerHandler(IPC_CHANNEL.AUDIT_LIST, noPayloadSchema, () => listAuditEntries());

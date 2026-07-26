@@ -63,7 +63,11 @@ const ALLOWED_TRANSITIONS: Record<RunState, readonly RunState[]> = {
   // Reversible on purpose: turning a resolution down is a review decision, not a
   // destructive one, and the worktree survives until the run is dismissed.
   [RUN_STATE.REJECTED]: [RUN_STATE.READY],
-  [RUN_STATE.APPLIED]: [],
+  // Undo is the only way out of applied, and it is a real transition rather than a
+  // rewrite: the branch was deleted and the threads unresolved, so the run genuinely
+  // is approved-and-not-landed again. Without this edge undo would have to write the
+  // record directly and skip the machine that validates and timestamps it.
+  [RUN_STATE.APPLIED]: [RUN_STATE.APPROVED],
 };
 
 const REVISION_INCREMENT = 1;
