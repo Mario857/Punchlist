@@ -4,7 +4,14 @@ import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discove
 import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
 import type { AuditEntry } from '@shared/audit';
-import type { AssembleLandingRequest, LandingPreview } from '@shared/landing';
+import type {
+  AssembleLandingRequest,
+  ExecuteLandingRequest,
+  LandingPreview,
+  LandingResult,
+  UndoLandingRequest,
+  UndoableLanding,
+} from '@shared/landing';
 import type { ModelCatalogEntry } from '@shared/models';
 import type {
   AcknowledgeGuardrailRequest,
@@ -110,6 +117,12 @@ const api: AirlockApi = {
   landing: {
     assemble: (request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>> =>
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_ASSEMBLE, request),
+    execute: (request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_EXECUTE, request),
+    undoable: (): Promise<IpcResult<UndoableLanding | null>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDOABLE),
+    undo: (request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDO, request),
   },
   audit: {
     list: (): Promise<IpcResult<AuditEntry[]>> => ipcRenderer.invoke(IPC_CHANNEL.AUDIT_LIST),

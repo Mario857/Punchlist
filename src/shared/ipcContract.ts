@@ -2,7 +2,14 @@ import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
 import type { AuditEntry } from './audit';
-import type { AssembleLandingRequest, LandingPreview } from './landing';
+import type {
+  AssembleLandingRequest,
+  ExecuteLandingRequest,
+  LandingPreview,
+  LandingResult,
+  UndoLandingRequest,
+  UndoableLanding,
+} from './landing';
 import type { ModelCatalogEntry } from './models';
 import type {
   AcknowledgeGuardrailRequest,
@@ -60,6 +67,9 @@ export const IPC_CHANNEL = {
   RUNS_APPROVE: 'runs:approve',
   RUNS_REJECT: 'runs:reject',
   LANDING_ASSEMBLE: 'landing:assemble',
+  LANDING_EXECUTE: 'landing:execute',
+  LANDING_UNDOABLE: 'landing:undoable',
+  LANDING_UNDO: 'landing:undo',
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
   AUDIT_LIST: 'audit:list',
   MODELS_LIST: 'models:list',
@@ -201,6 +211,16 @@ export interface LandingApi {
    * repository is still untouched. Nothing here leaves the sandbox.
    */
   assemble(request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>>;
+  /**
+   * The only path out of the sandbox. Publishes the integration branch, pushes it,
+   * resolves the review threads and optionally posts a reply — each audited. The
+   * target branch is never pushed to directly and nothing is ever force-pushed.
+   */
+  execute(request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>>;
+  /** The most recent landing, while it is still the one an undo may reverse. */
+  undoable(): Promise<IpcResult<UndoableLanding | null>>;
+  /** Deletes the pushed branch and unresolves the threads. A reply stays posted. */
+  undo(request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>>;
 }
 
 export interface AuditApi {

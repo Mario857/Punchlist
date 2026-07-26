@@ -59,6 +59,41 @@ export interface AssembleLandingRequest {
 }
 
 /**
+ * What a landing actually did. Returned so the UI can report it without re-reading
+ * the audit log, and shaped to be exactly what an undo needs to reverse.
+ */
+export interface LandingResult {
+  landingId: string;
+  integrationBranchName: string;
+  remoteName: string;
+  resolvedThreadIds: string[];
+  /** A posted reply cannot be unposted, so this is a fact, not a reversible step. */
+  isReplyPosted: boolean;
+  runIds: string[];
+}
+
+/**
+ * Undo is offered only while this is the most recent landing. Once work has been
+ * built on top of it, unwinding is a git operation to perform deliberately rather
+ * than through a button.
+ */
+export interface UndoableLanding {
+  landingId: string;
+  at: string;
+  integrationBranchName: string;
+  remoteName: string;
+  resolvedThreadIds: string[];
+  isReplyPosted: boolean;
+  runIds: string[];
+}
+
+export interface UndoLandingRequest {
+  landingId: string;
+  /** Undo deletes a pushed branch and unresolves threads, so it is itself gated. */
+  isConfirmedByUser: boolean;
+}
+
+/**
  * The payload of the confirmation itself. The edited commit messages travel with it
  * so that what was reviewed in the preview is what gets committed, rather than main
  * re-deriving them and possibly differing.
@@ -74,4 +109,10 @@ export interface ExecuteLandingRequest {
    * for something no individual patch was.
    */
   acknowledgedGuardrailIds: string[];
+  /**
+   * The confirmation itself. Main mints the type-level `SandboxConfirmation` from
+   * this, so no path can push, resolve a thread or post a reply without the user
+   * having said so at this exact step.
+   */
+  isConfirmedByUser: boolean;
 }
