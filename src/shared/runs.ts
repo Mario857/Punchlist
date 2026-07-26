@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { prRefSchema } from './discovery';
 import { guardrailFlagSchema } from './guardrails';
+import { secondOpinionSchema } from './opinion';
 import { FAILURE_REASON, MODEL_TIER, RUN_STATE, RUN_TRIGGER, type ModelTier } from './runState';
 
 /**
@@ -78,6 +79,12 @@ export const runRecordSchema = z.object({
    * offered for landing.
    */
   isStale: z.boolean().default(false),
+  /**
+   * A reviewing agent's verdict on this patch, when one was asked for. Cleared by a
+   * revision: an opinion is about the patch that was read, and a changed patch has
+   * not been reviewed.
+   */
+  secondOpinion: secondOpinionSchema.nullable().default(null),
   /** Recomputed whenever the patch changes, so a revision cannot outrun its checks. */
   guardrailFlags: z.array(guardrailFlagSchema).default([]),
   /**

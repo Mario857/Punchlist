@@ -71,6 +71,7 @@ export const IPC_CHANNEL = {
   LANDING_UNDOABLE: 'landing:undoable',
   LANDING_UNDO: 'landing:undo',
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
+  RUNS_SECOND_OPINION: 'runs:secondOpinion',
   AUDIT_LIST: 'audit:list',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
@@ -154,6 +155,12 @@ export interface RunsApi {
   approve(runIds: string[]): Promise<IpcResult<RunRecord[]>>;
   /** Turns resolutions down. The record and its worktree survive until dismissed. */
   reject(runIds: string[]): Promise<IpcResult<RunRecord[]>>;
+  /**
+   * Asks a fresh agent whether the patch does what the comment asked. It is given
+   * the comment and the diff and deliberately not the first agent's reasoning, since
+   * that would produce agreement rather than review. Advisory: it never blocks.
+   */
+  requestSecondOpinion(runIds: string[]): Promise<IpcResult<RunRecord[]>>;
   /**
    * Continues the run's existing agent: the decision reply and the whole-patch
    * follow-up are one mechanism, so context is never rebuilt. Which one it is

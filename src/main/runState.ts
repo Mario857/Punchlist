@@ -3,6 +3,7 @@ import { upsertRun } from '@main/store';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import type { GuardrailFlag } from '@shared/guardrails';
+import type { SecondOpinion } from '@shared/opinion';
 import type { AgentDecision, AgentSummary, AutoDecision, RunRecord } from '@shared/runs';
 import {
   isRunActive,
@@ -108,6 +109,7 @@ export interface RunTransitionPatch {
    */
   transcript?: string;
   isStale?: boolean;
+  secondOpinion?: SecondOpinion | null;
   /** Recomputed on every patch, so a revision cannot outrun its own checks. */
   guardrailFlags?: GuardrailFlag[];
   acknowledgedGuardrailIds?: string[];
@@ -143,6 +145,7 @@ function applyPatch(run: RunRecord, patch: RunTransitionPatch): RunRecord {
     errorMessage: resolveField(patch.errorMessage, run.errorMessage),
     transcript: resolveField(patch.transcript, run.transcript),
     isStale: resolveField(patch.isStale, run.isStale),
+    secondOpinion: resolveField(patch.secondOpinion, run.secondOpinion),
     guardrailFlags: resolveField(patch.guardrailFlags, run.guardrailFlags),
     acknowledgedGuardrailIds: resolveField(
       patch.acknowledgedGuardrailIds,
@@ -253,6 +256,7 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     isPoolSpending: false,
     trigger: input.trigger,
     isStale: false,
+    secondOpinion: null,
     guardrailFlags: [],
     acknowledgedGuardrailIds: [],
     autoDecisions: [],

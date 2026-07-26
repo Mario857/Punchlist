@@ -91,6 +91,8 @@ const api: AirlockApi = {
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_APPROVE, runIds),
     reject: (runIds: string[]): Promise<IpcResult<RunRecord[]>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_REJECT, runIds),
+    requestSecondOpinion: (runIds: string[]): Promise<IpcResult<RunRecord[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_SECOND_OPINION, runIds),
     continueRun: (request: ContinueRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_CONTINUE, request),
     writeFile: (request: WriteRunFileRequest): Promise<IpcResult<RunRecord>> =>
