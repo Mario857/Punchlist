@@ -4,6 +4,7 @@ import { app, safeStorage } from 'electron';
 import { z } from 'zod';
 import { localRepoSchema, type LocalRepo } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { runRecordSchema, type RunRecord } from '@shared/runs';
 import {
   appSettingsSchema,
   DEFAULT_APP_SETTINGS,
@@ -34,6 +35,8 @@ const KEYCHAIN_UNAVAILABLE_REMEDIATION =
 
 const localReposSchema = z.array(localRepoSchema);
 
+const RUN_NOT_FOUND_INDEX = -1;
+
 /**
  * The persisted store is one of the three mandated Zod boundaries — this file may
  * have been written by an older version of the app. Every section defaults, so a
@@ -44,6 +47,11 @@ const persistedStateSchema = z.object({
   settings: appSettingsSchema.default(DEFAULT_APP_SETTINGS),
   repos: localReposSchema.default([]),
   session: sessionStateSchema.default(DEFAULT_SESSION_STATE),
+  /**
+   * Runs outlive their worktrees: the record and its transcript live here, not in
+   * the sandbox, so landing history stays inspectable after the directory is gone.
+   */
+  runs: z.array(runRecordSchema).default([]),
 });
 
 type PersistedState = z.infer<typeof persistedStateSchema>;
@@ -150,6 +158,34 @@ export function updateSession(patch: Partial<SessionState>): SessionState {
   const session = sessionStateSchema.parse({ ...cachedState.session, ...patch });
   commitState({ ...cachedState, session });
   return session;
+}
+
+export function getRuns(): RunRecord[] {
+  return cachedState.runs;
+}
+
+export function getRunById(runId: string): RunRecord | null {
+  return cachedState.runs.find((run) => run.id === runId) ?? null;
+}
+
+/**
+ * Re-parsed before writing, like every other mutator here: persisting a record the
+ * schema would reject means the next boot's parse fails and resets all other state.
+ */
+export function upsertRun(run: RunRecord): RunRecord {
+  const parsed = runRecordSchema.parse(run);
+  const existingIndex = cachedState.runs.findIndex((candidate) => candidate.id === parsed.id);
+  const runs =
+    existingIndex === RUN_NOT_FOUND_INDEX
+      ? [...cachedState.runs, parsed]
+      : cachedState.runs.map((candidate) => (candidate.id === parsed.id ? parsed : candidate));
+  commitState({ ...cachedState, runs });
+  return parsed;
+}
+
+export function deleteRun(runId: string): void {
+  const runs = cachedState.runs.filter((run) => run.id !== runId);
+  commitState({ ...cachedState, runs });
 }
 
 export function isCursorApiKeySet(): boolean {
