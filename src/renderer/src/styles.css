@@ -1,0 +1,89 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg-0: #0f1419;
+  --color-bg-1: #1a2332;
+  --color-bg-2: #243044;
+  --color-ink: #e8eef6;
+  --color-muted: #9aadc2;
+  --color-accent: #5ec8a0;
+
+  /* Semantic surfaces and lines. Primitives reference these instead of a raw hex,
+     so a palette change is one edit here rather than a sweep through components. */
+  --color-surface: #16212e;
+  --color-surface-raised: #1f2c3d;
+  --color-surface-hover: #26374c;
+  --color-border: #2e3f56;
+  --color-border-strong: #43597a;
+  --color-focus: #7ab6f5;
+
+  /* Feedback */
+  --color-danger: #f4776b;
+  --color-warning: #e6b153;
+  --color-success: #5ec8a0;
+  --color-info: #6fa8e6;
+  --color-neutral: #8fa3b8;
+
+  /* One colour per RUN_STATE member. StateBadge is the single strong always-visible
+     signal on a row, so run state gets its own family and never borrows the muted
+     attribute-badge tones it has to out-shout. */
+  --color-state-queued: #8fa3b8;
+  --color-state-running: #6fa8e6;
+  --color-state-needs-decision: #e6b153;
+  --color-state-ready: #5ec8a0;
+  --color-state-revising: #9d8ce8;
+  --color-state-no-action-needed: #6d8096;
+  --color-state-failed: #f4776b;
+  --color-state-approved: #46c9c0;
+  --color-state-applied: #5f7f9b;
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  --font-body: 'Avenir Next', 'Segoe UI', sans-serif;
+
+  --animate-rise: rise 0.7s ease both;
+  --animate-brand-in: brand-in 0.9s ease both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes brand-in {
+    from {
+      opacity: 0;
+      letter-spacing: 0.08em;
+    }
+    to {
+      opacity: 1;
+      letter-spacing: -0.03em;
+    }
+  }
+}
+
+@layer base {
+  :root {
+    /* The palette is dark, so native scrollbars, selects and text inputs must be told
+       to match — `light` rendered every one of them light-on-dark. */
+    color-scheme: dark;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(94, 200, 160, 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 90% 80%, rgba(80, 140, 220, 0.14), transparent 50%),
+      linear-gradient(160deg, var(--color-bg-0), var(--color-bg-1) 45%, var(--color-bg-2));
+    -webkit-font-smoothing: antialiased;
+  }
+}
