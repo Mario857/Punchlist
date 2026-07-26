@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { upsertRun } from '@main/store';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import type { GuardrailFlag } from '@shared/guardrails';
 import type { AgentDecision, AgentSummary, RunRecord } from '@shared/runs';
 import {
   isRunActive,
@@ -87,6 +88,9 @@ export interface RunTransitionPatch {
    * never written to a log file — including the diagnostics thrown from this module.
    */
   transcript?: string;
+  /** Recomputed on every patch, so a revision cannot outrun its own checks. */
+  guardrailFlags?: GuardrailFlag[];
+  acknowledgedGuardrailIds?: string[];
 }
 
 interface RunTimestamps {
@@ -113,6 +117,11 @@ function applyPatch(run: RunRecord, patch: RunTransitionPatch): RunRecord {
     summary: resolveField(patch.summary, run.summary),
     errorMessage: resolveField(patch.errorMessage, run.errorMessage),
     transcript: resolveField(patch.transcript, run.transcript),
+    guardrailFlags: resolveField(patch.guardrailFlags, run.guardrailFlags),
+    acknowledgedGuardrailIds: resolveField(
+      patch.acknowledgedGuardrailIds,
+      run.acknowledgedGuardrailIds,
+    ),
   };
 }
 

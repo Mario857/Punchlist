@@ -7,6 +7,7 @@ import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcCont
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
+  acknowledgeGuardrail,
   cancelRun,
   cleanupTerminalRuns,
   continueRun,
@@ -49,6 +50,11 @@ const startRunsPayloadSchema = z.object({
 const continueRunPayloadSchema = z.object({
   runId: z.string(),
   message: z.string().min(MIN_CONTINUATION_MESSAGE_LENGTH),
+});
+
+const acknowledgeGuardrailPayloadSchema = z.object({
+  runId: z.string(),
+  flagId: z.string(),
 });
 
 const escalateRunPayloadSchema = z.object({
@@ -146,6 +152,11 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_STOP_ALL, noPayloadSchema, () => stopAllRuns());
   registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, ({ runId, message }) =>
     continueRun(runId, message),
+  );
+  registerHandler(
+    IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL,
+    acknowledgeGuardrailPayloadSchema,
+    ({ runId, flagId }) => acknowledgeGuardrail(runId, flagId),
   );
   registerHandler(IPC_CHANNEL.RUNS_ESCALATE, escalateRunPayloadSchema, (request) =>
     escalateRun(request),

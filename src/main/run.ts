@@ -17,6 +17,8 @@ import {
   type RunTransitionPatch,
 } from '@main/runState';
 import { resolveLocalRepoPath } from '@main/discovery';
+import { fetchPrComments } from '@main/github';
+import { inspectCandidatePatch } from '@main/guardrails';
 import { resolveTierModel } from '@main/router';
 import { resolveGitIdentity } from '@main/sandbox';
 import { deleteRun, getRunById, getRuns } from '@main/store';
@@ -62,6 +64,9 @@ const NO_LOCAL_CLONE_MESSAGE =
 const NO_LOCAL_CLONE_REMEDIATION = 'Register the repository in Settings, then try again.';
 const NO_AGENT_MESSAGE = 'This run has no agent to continue, so it cannot be answered.';
 const NO_AGENT_REMEDIATION = 'Run the comment again to start a fresh agent.';
+const COMMENT_GONE_MESSAGE = 'That comment is no longer on the pull request.';
+const GUARDRAIL_FLAG_NOT_FOUND_MESSAGE =
+  'That guardrail flag is no longer on this run, so there is nothing to acknowledge.';
 const NOT_CONTINUABLE_MESSAGE =
   'This run is not waiting for input, so there is nothing to continue.';
 
@@ -123,6 +128,7 @@ function toModelPatch(model: ResolvedModel): RunTransitionPatch {
 
 interface ResolvedOutcomeInput {
   run: RunRecord;
+  comment: PrComment;
   patch: CandidatePatch;
   summary: Awaited<ReturnType<typeof readAgentSummary>>;
   decidedRun: RunRecord | null;
@@ -136,6 +142,7 @@ interface ResolvedOutcomeInput {
  */
 function resolveCompletedState({
   run,
+  comment,
   patch,
   summary,
   decidedRun,
@@ -144,7 +151,8 @@ function resolveCompletedState({
   // waiting on a person, not finished.
   if (decidedRun !== null) return decidedRun;
   const nextState = patch.isEmpty ? RUN_STATE.NO_ACTION_NEEDED : RUN_STATE.READY;
-  return advance(run, nextState, { summary });
+  const checked = withGuardrailFlags(run, patch, comment);
+  return advance(checked, nextState, { summary });
 }
 
 async function executeRun(
@@ -200,7 +208,7 @@ async function executeRun(
 
     const summary = await readAgentSummary(startedRun.worktreePath);
     const patch = await readCandidatePatch(withTranscript);
-    return resolveCompletedState({ run: withTranscript, patch, summary, decidedRun });
+    return resolveCompletedState({ run: withTranscript, comment, patch, summary, decidedRun });
   } catch (error: unknown) {
     const current = getRunById(startedRun.id);
     if (current === null) throw error;
@@ -389,7 +397,12 @@ export async function continueRun(runId: string, message: string): Promise<RunRe
       const summary = await readAgentSummary(run.worktreePath);
       const patch = await readCandidatePatch(revised);
       const settled = patch.isEmpty ? RUN_STATE.NO_ACTION_NEEDED : RUN_STATE.READY;
-      return advance(revised, settled, { summary });
+      // Fetched only once a revision actually produced changes: the checks need the
+      // comment's anchor and tier, and an empty patch has nothing to inspect.
+      const checked = patch.isEmpty
+        ? revised
+        : withGuardrailFlags(revised, patch, await findRunComment(revised));
+      return advance(checked, settled, { summary });
     } catch (error: unknown) {
       const current = getRunById(runId);
       if (current === null) throw error;
@@ -408,6 +421,52 @@ export async function continueRun(runId: string, message: string): Promise<RunRe
       activeRunControllers.delete(runId);
     }
   });
+}
+
+/**
+ * The comment is re-read from GitHub rather than kept on the run record: the checks
+ * need its anchor and the record stores only the id. Fetched lazily, so a revision
+ * that produced nothing never pays for it.
+ */
+async function findRunComment(run: RunRecord): Promise<PrComment> {
+  const comments = await fetchPrComments(run.prRef);
+  const comment = comments.find((candidate) => candidate.id === run.commentId);
+  if (comment === undefined) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, COMMENT_GONE_MESSAGE, null);
+  }
+  return comment;
+}
+
+/**
+ * Re-checked on every patch rather than once when the run first goes ready, so a
+ * revision cannot outrun its own checks. Acknowledgements are carried across by id,
+ * which is why a flag's id is derived from what it is about: a finding that survives
+ * a revision unchanged stays acknowledged, and a genuinely new one does not.
+ */
+function withGuardrailFlags(run: RunRecord, patch: CandidatePatch, comment: PrComment): RunRecord {
+  const guardrailFlags = inspectCandidatePatch({ patch, comment, tier: run.tier });
+  const flagIds = new Set(guardrailFlags.map((flag) => flag.id));
+  const acknowledgedGuardrailIds = run.acknowledgedGuardrailIds.filter((id) => flagIds.has(id));
+  return patchRun(run, { guardrailFlags, acknowledgedGuardrailIds });
+}
+
+/**
+ * Acknowledging is what unblocks approval later. It is recorded on the run rather
+ * than held in the UI, because the record of what was accepted has to survive a
+ * restart as much as the patch does.
+ */
+export function acknowledgeGuardrail(runId: string, flagId: string): RunRecord {
+  const run = requireRun(runId);
+  if (!run.guardrailFlags.some((flag) => flag.id === flagId)) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, GUARDRAIL_FLAG_NOT_FOUND_MESSAGE, null);
+  }
+  if (run.acknowledgedGuardrailIds.includes(flagId)) return run;
+
+  const acknowledged = patchRun(run, {
+    acknowledgedGuardrailIds: [...run.acknowledgedGuardrailIds, flagId],
+  });
+  emitStateChanged(acknowledged);
+  return acknowledged;
 }
 
 export function listRunsForPr(ref: PrRef): RunRecord[] {
