@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { commentFiltersSchema } from './comments';
 import { prRefSchema } from './discovery';
+import { automationSettingsSchema } from './automation';
 import { tierModelMapSchema } from './models';
 
 /** The concurrency cap bounds how many worktrees and agents exist at once. */
@@ -29,6 +30,8 @@ export const appSettingsSchema = z.object({
    * account. Defaults resolve to the free lane at run time.
    */
   tierModelMap: tierModelMapSchema.default(() => tierModelMapSchema.parse({})),
+  /** Off by default; see automation.ts for why an empty allowlist triggers nothing. */
+  automation: automationSettingsSchema.default(() => automationSettingsSchema.parse({})),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;

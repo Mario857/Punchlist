@@ -107,6 +107,7 @@ export interface RunTransitionPatch {
    * never written to a log file — including the diagnostics thrown from this module.
    */
   transcript?: string;
+  isStale?: boolean;
   /** Recomputed on every patch, so a revision cannot outrun its own checks. */
   guardrailFlags?: GuardrailFlag[];
   acknowledgedGuardrailIds?: string[];
@@ -141,6 +142,7 @@ function applyPatch(run: RunRecord, patch: RunTransitionPatch): RunRecord {
     summary: resolveField(patch.summary, run.summary),
     errorMessage: resolveField(patch.errorMessage, run.errorMessage),
     transcript: resolveField(patch.transcript, run.transcript),
+    isStale: resolveField(patch.isStale, run.isStale),
     guardrailFlags: resolveField(patch.guardrailFlags, run.guardrailFlags),
     acknowledgedGuardrailIds: resolveField(
       patch.acknowledgedGuardrailIds,
@@ -250,6 +252,7 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     model: null,
     isPoolSpending: false,
     trigger: input.trigger,
+    isStale: false,
     guardrailFlags: [],
     acknowledgedGuardrailIds: [],
     autoDecisions: [],

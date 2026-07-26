@@ -4,6 +4,7 @@ import { app, safeStorage } from 'electron';
 import { z } from 'zod';
 import { localRepoSchema, type LocalRepo } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { DEFAULT_WATCHER_STATE, watcherStateSchema, type WatcherState } from '@shared/automation';
 import { runRecordSchema, type RunRecord } from '@shared/runs';
 import {
   appSettingsSchema,
@@ -52,6 +53,11 @@ const persistedStateSchema = z.object({
    * the sandbox, so landing history stays inspectable after the directory is gone.
    */
   runs: z.array(runRecordSchema).default([]),
+  /**
+   * What the watcher remembers between polls. Persisted so a restart does not
+   * re-trigger history: every comment on the PR would otherwise look new.
+   */
+  watcher: watcherStateSchema.default(DEFAULT_WATCHER_STATE),
 });
 
 type PersistedState = z.infer<typeof persistedStateSchema>;
@@ -186,6 +192,16 @@ export function upsertRun(run: RunRecord): RunRecord {
 export function deleteRun(runId: string): void {
   const runs = cachedState.runs.filter((run) => run.id !== runId);
   commitState({ ...cachedState, runs });
+}
+
+export function getWatcherState(): WatcherState {
+  return cachedState.watcher;
+}
+
+export function updateWatcherState(patch: Partial<WatcherState>): WatcherState {
+  const watcher = watcherStateSchema.parse({ ...cachedState.watcher, ...patch });
+  commitState({ ...cachedState, watcher });
+  return watcher;
 }
 
 export function isCursorApiKeySet(): boolean {

@@ -72,6 +72,12 @@ export const runRecordSchema = z.object({
    * sensitive: rendered in the UI, never written to a log file.
    */
   transcript: z.string().default(''),
+  /**
+   * Set when the PR head moved after this run's worktree was created. The patch is
+   * against code that is no longer current, so it is surfaced rather than silently
+   * offered for landing.
+   */
+  isStale: z.boolean().default(false),
   /** Recomputed whenever the patch changes, so a revision cannot outrun its checks. */
   guardrailFlags: z.array(guardrailFlagSchema).default([]),
   /**
