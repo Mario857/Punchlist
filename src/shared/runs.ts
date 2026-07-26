@@ -105,6 +105,13 @@ export interface EscalateRunRequest {
    */
   shouldUseFrontier: boolean;
   /**
+   * Which frontier model, chosen from the live catalog. Required when
+   * `shouldUseFrontier`, because picking one from a built-in preference order would
+   * be the app reaching for a billable model on the user's behalf — the exact thing
+   * the free-lane default exists to prevent.
+   */
+  frontierModelId: string | null;
+  /**
    * Escalation resets the worktree to base, so hand-edits would be lost. The reset
    * refuses on a dirty worktree until this says the loss is intended.
    */
