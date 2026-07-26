@@ -1,0 +1,12 @@
+node_modules
+out
+dist
+release
+coverage
+bun.lock
+*.tsbuildinfo
+
+# Prose and rule docs are hand-formatted: Prettier reflows the embedded code
+# samples and their alignment markers, which is churn in every functional diff.
+*.md
+*.mdc
