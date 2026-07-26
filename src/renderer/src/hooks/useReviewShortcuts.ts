@@ -30,7 +30,12 @@ export type ReviewShortcutGroup =
 
 export const REVIEW_SHORTCUT_AVAILABILITY = {
   AVAILABLE: 'available',
-  /** Documented in the map, deliberately unbound until the review gate lands. */
+  /**
+   * Documented in the map, deliberately unbound until the review gate lands. Approve
+   * and reject were the two that carried it and are now bound, so nothing uses this
+   * today — it stays because documenting a shortcut before binding it is the pattern
+   * that kept the map honest, and the next pending key inherits it.
+   */
   REVIEW_GATE: 'reviewGate',
 } as const;
 
@@ -155,16 +160,20 @@ export const REVIEW_SHORTCUT_BINDINGS: readonly ReviewShortcutBinding[] = [
   {
     id: REVIEW_SHORTCUT_ID.APPROVE,
     group: REVIEW_SHORTCUT_GROUP.REVIEW,
-    availability: REVIEW_SHORTCUT_AVAILABILITY.REVIEW_GATE,
+    availability: REVIEW_SHORTCUT_AVAILABILITY.AVAILABLE,
+    eventKey: 'a',
+    hasCommandModifier: NO_COMMAND_MODIFIER,
     keyLabel: 'a',
-    description: 'Approve the candidate patch',
+    description: 'Mark the selected patch ready to land — it never lands anything',
   },
   {
     id: REVIEW_SHORTCUT_ID.REJECT,
     group: REVIEW_SHORTCUT_GROUP.REVIEW,
-    availability: REVIEW_SHORTCUT_AVAILABILITY.REVIEW_GATE,
+    availability: REVIEW_SHORTCUT_AVAILABILITY.AVAILABLE,
+    eventKey: 'r',
+    hasCommandModifier: NO_COMMAND_MODIFIER,
     keyLabel: 'r',
-    description: 'Reject the candidate patch',
+    description: 'Reject the selected patch, keeping its record and its worktree',
   },
   {
     id: REVIEW_SHORTCUT_ID.SHOW_HELP,
@@ -190,6 +199,17 @@ export interface UseReviewShortcutsOptions {
   onInlinePrompt?: () => void;
   /** Omit while the selected run is not dismissable; an absent handler is a no-op. */
   onDismissRun?: () => void;
+  /**
+   * The review gate on the selected run. Omit each one wherever the decision is not
+   * available — a run with unacknowledged guardrail flags, or one already approved —
+   * so the key reaches nothing rather than being swallowed to do nothing.
+   *
+   * Approving marks a run ready to land and lands nothing, which is what makes it
+   * safe to put on a single keystroke. Landing itself stays a deliberate two-step and
+   * deliberately has no binding at all.
+   */
+  onApproveRun?: () => void;
+  onRejectRun?: () => void;
 }
 
 interface UseReviewShortcutsResult {
@@ -220,6 +240,8 @@ export function useReviewShortcuts({
   onNextHunk,
   onInlinePrompt,
   onDismissRun,
+  onApproveRun,
+  onRejectRun,
 }: UseReviewShortcutsOptions = {}): UseReviewShortcutsResult {
   const [isShortcutHelpOpen, setIsShortcutHelpOpen] = useState(false);
 
@@ -237,6 +259,8 @@ export function useReviewShortcuts({
       [REVIEW_SHORTCUT_ID.NEXT_HUNK]: onNextHunk,
       [REVIEW_SHORTCUT_ID.INLINE_PROMPT]: onInlinePrompt,
       [REVIEW_SHORTCUT_ID.DISMISS_RUN]: onDismissRun,
+      [REVIEW_SHORTCUT_ID.APPROVE]: onApproveRun,
+      [REVIEW_SHORTCUT_ID.REJECT]: onRejectRun,
       [REVIEW_SHORTCUT_ID.SHOW_HELP]: onShowShortcutHelp,
     }),
     [
@@ -249,6 +273,8 @@ export function useReviewShortcuts({
       onNextHunk,
       onInlinePrompt,
       onDismissRun,
+      onApproveRun,
+      onRejectRun,
       onShowShortcutHelp,
     ],
   );

@@ -16,6 +16,7 @@ export interface RunControlsProps {
 }
 
 const SECTION_LABEL = 'Run controls';
+const BULK_REVIEW_HEADING = 'Bulk review';
 const SANDBOX_HEADING = 'Sandbox';
 const CLEANUP_LABEL = 'Clean up finished';
 const CANCEL_LABEL_PREFIX = 'Cancel ';
@@ -34,6 +35,9 @@ const ALERT_CLASS = 'text-danger text-xs leading-relaxed';
 const WARNING_CLASS = 'text-warning flex items-start gap-1.5 text-xs leading-relaxed';
 const ACTIVE_RUN_ROW_CLASS = 'bg-surface-raised flex items-center gap-2 rounded-md px-1.5 py-1';
 const ACTIVE_RUN_LABEL_CLASS = 'text-ink min-w-0 flex-1 truncate text-xs';
+const BLOCK_HEADING_CLASS = 'text-ink text-xs font-medium';
+const BLOCK_COLUMN_CLASS = 'flex flex-col gap-1.5';
+const BUTTON_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 
 export function RunControls({ prRef }: RunControlsProps) {
   const {
@@ -56,6 +60,19 @@ export function RunControls({ prRef }: RunControlsProps) {
     isStopAllRunsPending,
     stopAllErrorMessage,
     onStopAllClick,
+    hasBulkDecisionScope,
+    bulkApproveLabel,
+    isBulkApproveDisabled,
+    isBulkApprovePending,
+    bulkApproveNote,
+    bulkApproveExclusionMessage,
+    bulkApproveErrorMessage,
+    bulkRejectLabel,
+    isBulkRejectDisabled,
+    isBulkRejectPending,
+    bulkRejectErrorMessage,
+    onBulkApproveClick,
+    onBulkRejectClick,
     sandboxUsageLabel,
     sandboxWorktreeLabel,
     isSandboxUsageLoading,
@@ -144,6 +161,61 @@ export function RunControls({ prRef }: RunControlsProps) {
       </p>
     );
 
+  const bulkApproveExclusion =
+    bulkApproveExclusionMessage === null ? null : (
+      <p role="alert" className={WARNING_CLASS}>
+        <AlertTriangleIcon size={ATTENTION_ICON_SIZE} className="mt-0.5 shrink-0" />
+        {bulkApproveExclusionMessage}
+      </p>
+    );
+
+  const bulkApproveError =
+    bulkApproveErrorMessage === null ? null : (
+      <p role="alert" className={ALERT_CLASS}>
+        {bulkApproveErrorMessage}
+      </p>
+    );
+
+  const bulkRejectError =
+    bulkRejectErrorMessage === null ? null : (
+      <p role="alert" className={ALERT_CLASS}>
+        {bulkRejectErrorMessage}
+      </p>
+    );
+
+  // Reviewing one run at a time stays the default, so neither of these is the loud
+  // button in this card. Nothing here reaches the landing gate: a bulk approve only
+  // ever moves records to approved, which is what the note beneath it says.
+  const bulkReview = hasBulkDecisionScope ? (
+    <div className={BLOCK_COLUMN_CLASS}>
+      <p className={BLOCK_HEADING_CLASS}>{BULK_REVIEW_HEADING}</p>
+      <div className={BUTTON_ROW_CLASS}>
+        <Button
+          variant={BUTTON_VARIANT.SECONDARY}
+          size={BUTTON_SIZE.SM}
+          isDisabled={isBulkApproveDisabled}
+          isLoading={isBulkApprovePending}
+          onClick={onBulkApproveClick}
+        >
+          {bulkApproveLabel}
+        </Button>
+        <Button
+          variant={BUTTON_VARIANT.SECONDARY}
+          size={BUTTON_SIZE.SM}
+          isDisabled={isBulkRejectDisabled}
+          isLoading={isBulkRejectPending}
+          onClick={onBulkRejectClick}
+        >
+          {bulkRejectLabel}
+        </Button>
+      </div>
+      <p className={META_CLASS}>{bulkApproveNote}</p>
+      {bulkApproveExclusion}
+      {bulkApproveError}
+      {bulkRejectError}
+    </div>
+  ) : null;
+
   const cleanupAttention =
     cleanupAttentionMessage === null ? null : (
       <p role="alert" className={WARNING_CLASS}>
@@ -188,9 +260,10 @@ export function RunControls({ prRef }: RunControlsProps) {
         {activeRunList}
         {cancelError}
         {stopAllError}
+        {bulkReview}
         <div className={ROW_CLASS}>
           <div className="min-w-0 flex-1">
-            <p className="text-ink text-xs font-medium">{SANDBOX_HEADING}</p>
+            <p className={BLOCK_HEADING_CLASS}>{SANDBOX_HEADING}</p>
             {sandboxSummary}
           </div>
           <Button

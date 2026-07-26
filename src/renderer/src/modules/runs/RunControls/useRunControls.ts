@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { isRecommendedForRun, type PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
-import type { StartRunRequest } from '@shared/runs';
-import type { ModelTier, RunState } from '@shared/runState';
+import { hasUnacknowledgedFlags } from '@shared/guardrails';
+import type { RunRecord, StartRunRequest } from '@shared/runs';
+import { RUN_STATE, type ModelTier, type RunState } from '@shared/runState';
 import { classifyCommentTier } from '@shared/tier';
 import { keyBy } from '@renderer/lib/collections';
 import { formatBytes } from '@renderer/lib/format';
@@ -18,7 +19,9 @@ import {
   type TierLaneResolution,
 } from '@renderer/modules/runs/modelLanes';
 import {
+  useExecuteApproveRuns,
   useExecuteCancelRun,
+  useExecuteRejectRuns,
   useExecuteSandboxCleanup,
   useExecuteStartRun,
   useExecuteStopAllRuns,
@@ -26,7 +29,7 @@ import {
 } from '@renderer/modules/runs/useQueryRuns';
 import { useQueryModelCatalog } from '@renderer/hooks/useQueryModelCatalog';
 import { useQuerySettings } from '@renderer/modules/settings/useQuerySettings';
-import { useActiveRunsForPr } from '@renderer/stores/runStore';
+import { useActiveRunsForPr, useRunsForPr } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
 
 export interface UseRunControlsOptions {
@@ -64,6 +67,22 @@ interface UseRunControlsResult {
   isStopAllRunsPending: boolean;
   stopAllErrorMessage: string | null;
   onStopAllClick: () => void;
+  /** False when no run on this PR is in a state a decision could reach at all. */
+  hasBulkDecisionScope: boolean;
+  bulkApproveLabel: string;
+  isBulkApproveDisabled: boolean;
+  isBulkApprovePending: boolean;
+  /** Says on the control itself that a bulk approve moves records and lands nothing. */
+  bulkApproveNote: string;
+  /** Non-null whenever flags keep runs out of the batch — never a silent exclusion. */
+  bulkApproveExclusionMessage: string | null;
+  bulkApproveErrorMessage: string | null;
+  bulkRejectLabel: string;
+  isBulkRejectDisabled: boolean;
+  isBulkRejectPending: boolean;
+  bulkRejectErrorMessage: string | null;
+  onBulkApproveClick: () => void;
+  onBulkRejectClick: () => void;
   sandboxUsageLabel: string;
   sandboxWorktreeLabel: string;
   isSandboxUsageLoading: boolean;
@@ -114,6 +133,37 @@ const ACKNOWLEDGEMENT_PART_SEPARATOR = ':';
 const DIRTY_WORKTREE_MESSAGE =
   'Some worktrees were kept because they hold uncommitted changes. Land or discard those edits inside the worktree, then clean up again.';
 
+const NO_BULK_APPROVE_LABEL = 'Approve every ready run for landing';
+const SINGLE_BULK_APPROVE_LABEL = 'Approve the 1 ready run for landing';
+const BULK_APPROVE_LABEL_PREFIX = 'Approve all ';
+const BULK_APPROVE_LABEL_SUFFIX = ' ready runs for landing';
+
+const NO_BULK_REJECT_LABEL = 'Reject every run awaiting a decision';
+const SINGLE_BULK_REJECT_LABEL = 'Reject the 1 run awaiting a decision';
+const BULK_REJECT_LABEL_PREFIX = 'Reject all ';
+const BULK_REJECT_LABEL_SUFFIX = ' runs awaiting a decision';
+
+/**
+ * The gate is untouched by anything on this row, and the row says so. Approving a
+ * dozen runs at once is only safe because approval moves records and nothing else.
+ */
+const BULK_APPROVE_NOTE =
+  'Bulk approve only marks runs ready to land. It creates no branch, pushes nothing and resolves no thread — landing stays a separate step behind its own confirmation.';
+
+/**
+ * Main refuses the whole batch when one id carries an unacknowledged flag, so blocked
+ * runs are left out of the request. Saying which and how many is the point: a bulk
+ * action that quietly does less than its label claims is worse than one that refuses.
+ */
+const BULK_APPROVE_EXCLUSION_PREFIX = 'Held out of this batch by unacknowledged guardrail flags: ';
+const SINGLE_BULK_APPROVE_EXCLUSION = '1 ready run';
+const BULK_APPROVE_EXCLUSION_SUFFIX = ' ready runs';
+const BULK_APPROVE_EXCLUSION_REMEDIATION =
+  '. Open each one, acknowledge its flags, then approve it.';
+
+const BULK_APPROVE_ERROR_FALLBACK = 'Could not approve those runs.';
+const BULK_REJECT_ERROR_FALLBACK = 'Could not reject those runs.';
+
 const NO_WORKTREES_LABEL = 'No worktrees on disk';
 const SINGLE_WORKTREE_LABEL = '1 worktree';
 const RECLAIMABLE_SUFFIX = ' reclaimable';
@@ -150,6 +200,61 @@ function describePoolSpending(resolutions: readonly TierLaneResolution[]): strin
   return `${POOL_SPENDING_PREFIX}${parts.join(POOL_SPENDING_TIER_SEPARATOR)}${POOL_SPENDING_SUFFIX}`;
 }
 
+interface BulkDecisionScope {
+  /** `ready` runs with every flag acknowledged: exactly the set main will accept. */
+  approvableRunIds: string[];
+  /** Counted rather than dropped, because the exclusion has to be visible. */
+  flagBlockedCount: number;
+  /** `ready` and `approved` alike — a rejection is legal from both. */
+  rejectableRunIds: string[];
+}
+
+/**
+ * Which runs a bulk decision may touch. Approval is offered only from `ready`, since
+ * main's transition table is the authority on the rest and a button that produced a
+ * refusal would be a worse control than one that is simply not offered.
+ */
+function toBulkDecisionScope(runs: readonly RunRecord[]): BulkDecisionScope {
+  const approvableRunIds: string[] = [];
+  const rejectableRunIds: string[] = [];
+  let flagBlockedCount = EMPTY_COUNT;
+
+  for (const run of runs) {
+    if (run.state === RUN_STATE.READY || run.state === RUN_STATE.APPROVED) {
+      rejectableRunIds.push(run.id);
+    }
+    if (run.state !== RUN_STATE.READY) continue;
+    if (hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds)) {
+      flagBlockedCount += SINGLE_COUNT;
+      continue;
+    }
+    approvableRunIds.push(run.id);
+  }
+
+  return { approvableRunIds, flagBlockedCount, rejectableRunIds };
+}
+
+function buildBulkApproveLabel(approvableCount: number): string {
+  if (approvableCount === EMPTY_COUNT) return NO_BULK_APPROVE_LABEL;
+  if (approvableCount === SINGLE_COUNT) return SINGLE_BULK_APPROVE_LABEL;
+  return `${BULK_APPROVE_LABEL_PREFIX}${approvableCount}${BULK_APPROVE_LABEL_SUFFIX}`;
+}
+
+function buildBulkRejectLabel(rejectableCount: number): string {
+  if (rejectableCount === EMPTY_COUNT) return NO_BULK_REJECT_LABEL;
+  if (rejectableCount === SINGLE_COUNT) return SINGLE_BULK_REJECT_LABEL;
+  return `${BULK_REJECT_LABEL_PREFIX}${rejectableCount}${BULK_REJECT_LABEL_SUFFIX}`;
+}
+
+function buildBulkApproveExclusionMessage(flagBlockedCount: number): string | null {
+  if (flagBlockedCount === EMPTY_COUNT) return null;
+  const countLabel =
+    flagBlockedCount === SINGLE_COUNT
+      ? SINGLE_BULK_APPROVE_EXCLUSION
+      : `${flagBlockedCount}${BULK_APPROVE_EXCLUSION_SUFFIX}`;
+  return `${BULK_APPROVE_EXCLUSION_PREFIX}${countLabel}${BULK_APPROVE_EXCLUSION_REMEDIATION}`;
+}
+
 /** Keyed by the exact tier-and-model set, so an acknowledgement cannot outlive it. */
 function buildAcknowledgementKey(resolutions: readonly TierLaneResolution[]): string {
   return resolutions
@@ -166,6 +271,7 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const setSelectedCommentIds = useSessionStore((state) => state.setSelectedCommentIds);
   const tierOverrideByCommentId = useSessionStore((state) => state.tierOverrideByCommentId);
   const activeRuns = useActiveRunsForPr(prRef);
+  const runsForPr = useRunsForPr(prRef);
 
   const [acknowledgedPoolSpendingKey, setAcknowledgedPoolSpendingKey] = useState<string | null>(
     null,
@@ -178,6 +284,8 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const { startRuns, isStartRunsPending, startRunsError } = useExecuteStartRun(prRef);
   const { cancelRun, isCancelRunPending, cancelRunError } = useExecuteCancelRun();
   const { stopAllRuns, isStopAllRunsPending, stopAllRunsError } = useExecuteStopAllRuns();
+  const { approveRuns, isApproveRunsPending, approveRunsError } = useExecuteApproveRuns();
+  const { rejectRuns, isRejectRunsPending, rejectRunsError } = useExecuteRejectRuns();
   const { sandboxUsage, isSandboxUsageLoading } = useQuerySandboxUsage();
   const { cleanupSandbox, isSandboxCleanupPending, sandboxCleanupError, cleanedSandboxUsage } =
     useExecuteSandboxCleanup();
@@ -305,6 +413,21 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
 
   const onStopAllClick = useCallback(() => stopAllRuns(), [stopAllRuns]);
 
+  const { approvableRunIds, flagBlockedCount, rejectableRunIds } = useMemo(
+    () => toBulkDecisionScope(runsForPr),
+    [runsForPr],
+  );
+
+  const onBulkApproveClick = useCallback(
+    () => approveRuns(approvableRunIds),
+    [approvableRunIds, approveRuns],
+  );
+
+  const onBulkRejectClick = useCallback(
+    () => rejectRuns(rejectableRunIds),
+    [rejectableRunIds, rejectRuns],
+  );
+
   const onCleanupClick = useCallback(() => cleanupSandbox(), [cleanupSandbox]);
 
   return {
@@ -328,6 +451,21 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     isStopAllRunsPending,
     stopAllErrorMessage: toErrorMessage(stopAllRunsError, STOP_ALL_ERROR_FALLBACK),
     onStopAllClick,
+    // A flag-blocked run is a `ready` run, so it is in this scope too: the row stays on
+    // screen carrying its exclusion notice rather than vanishing along with the reason.
+    hasBulkDecisionScope: rejectableRunIds.length > EMPTY_COUNT,
+    bulkApproveLabel: buildBulkApproveLabel(approvableRunIds.length),
+    isBulkApproveDisabled: approvableRunIds.length === EMPTY_COUNT,
+    isBulkApprovePending: isApproveRunsPending,
+    bulkApproveNote: BULK_APPROVE_NOTE,
+    bulkApproveExclusionMessage: buildBulkApproveExclusionMessage(flagBlockedCount),
+    bulkApproveErrorMessage: toErrorMessage(approveRunsError, BULK_APPROVE_ERROR_FALLBACK),
+    bulkRejectLabel: buildBulkRejectLabel(rejectableRunIds.length),
+    isBulkRejectDisabled: rejectableRunIds.length === EMPTY_COUNT,
+    isBulkRejectPending: isRejectRunsPending,
+    bulkRejectErrorMessage: toErrorMessage(rejectRunsError, BULK_REJECT_ERROR_FALLBACK),
+    onBulkApproveClick,
+    onBulkRejectClick,
     sandboxUsageLabel: formatBytes(sandboxUsage?.totalBytes),
     sandboxWorktreeLabel,
     isSandboxUsageLoading,

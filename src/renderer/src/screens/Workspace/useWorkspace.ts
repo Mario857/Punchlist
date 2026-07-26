@@ -6,6 +6,7 @@ import { useReviewShortcuts } from '@renderer/hooks/useReviewShortcuts';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import type { CommentTreeNavigationHandle } from '@renderer/modules/comments/CommentTree/useCommentTreeNavigation';
 import { useExecuteDismissRun, useQueryRuns } from '@renderer/modules/runs/useQueryRuns';
+import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
 import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
 
@@ -72,6 +73,13 @@ export function useWorkspace(): UseWorkspaceResult {
     selectedRun !== null &&
     (selectedRun.state === RUN_STATE.NO_ACTION_NEEDED || selectedRun.state === RUN_STATE.FAILED);
 
+  // The same hook the review pane uses, so the shortcut and the button can never
+  // disagree about whether an action is on offer — both read one source. A null
+  // handler means "not offered", which keeps the shortcut from swallowing the key.
+  const { onApproveClick, onRejectClick } = useReviewDecision({
+    runId: selectedRun?.id ?? null,
+  });
+
   const onDismissSelectedRun = useCallback(() => {
     if (selectedRun === null) return;
     dismissRun(selectedRun.id);
@@ -90,6 +98,8 @@ export function useWorkspace(): UseWorkspaceResult {
     onExpandFocusedRow: useCallback(() => commentTreeRef.current?.expandFocusedRow(), []),
     onFocusDiffPane: useCallback(() => diffPaneRef.current?.focus(), []),
     onDismissRun: isSelectedRunDismissable ? onDismissSelectedRun : undefined,
+    onApproveRun: onApproveClick ?? undefined,
+    onRejectRun: onRejectClick ?? undefined,
   });
 
   // Stamped once the comments actually arrive, so the new-since-last-viewed marker

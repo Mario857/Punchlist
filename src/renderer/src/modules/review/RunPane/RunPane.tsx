@@ -8,6 +8,7 @@ import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUp
 import { AutoDecisions } from '@renderer/modules/review/AutoDecisions/AutoDecisions';
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
+import { ReviewDecision } from '@renderer/modules/review/ReviewDecision/ReviewDecision';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -71,6 +72,13 @@ export function RunPane({ commentId }: RunPaneProps) {
         // without you is something to know before you read the diff it produced.
         const autoDecisions = <AutoDecisions key={view.runId} runId={view.runId} />;
 
+        // Directly under the patch: the decision is what you take once you have read
+        // it, and it must come before the ways of asking for more work rather than
+        // after them.
+        const reviewDecision = view.isReviewDecisionAvailable ? (
+          <ReviewDecision key={view.runId} runId={view.runId} />
+        ) : null;
+
         return (
           <div className={COLUMN_CLASS}>
             {guardrailFlags}
@@ -81,6 +89,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               revisionProgressLabel={view.revisionProgressLabel}
               isEditable={view.isPatchEditable}
             />
+            {reviewDecision}
             {followUpPrompt}
             {revisionHistory}
           </div>

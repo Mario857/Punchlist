@@ -59,6 +59,12 @@ export type RunPaneView =
        * the branch.
        */
       isRevisionHistoryAvailable: boolean;
+      /**
+       * The approve/reject surface, offered wherever a review decision is still open:
+       * `ready` decides, `approved` and `rejected` show what was decided and offer the
+       * way back. Revising has nothing settled to decide on and `applied` is history.
+       */
+      isReviewDecisionAvailable: boolean;
     }
   | { kind: typeof RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED; heading: string; explanation: string }
   | {
@@ -218,6 +224,7 @@ function toView(run: RunRecord): RunPaneView {
         isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: false,
+        isReviewDecisionAvailable: false,
       };
     case RUN_STATE.READY:
       return {
@@ -228,6 +235,7 @@ function toView(run: RunRecord): RunPaneView {
         isPatchEditable: true,
         isFollowUpAvailable: true,
         isRevisionHistoryAvailable: true,
+        isReviewDecisionAvailable: true,
       };
     // Approval is not the point of no return — landing is — so an approved patch can
     // still be rewound, which main handles by putting the run back to ready.
@@ -240,10 +248,23 @@ function toView(run: RunRecord): RunPaneView {
         isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: true,
+        isReviewDecisionAvailable: true,
       };
     // Rejected keeps its diff readable: the record of what was turned down is the
-    // point, and the run can still be reopened for review.
+    // point, and the run can still be reopened for review. The trail is what reopens
+    // it — a revert re-reads the patch and settles the run back in `ready` — so it
+    // stays on offer here even though a landed run's does not.
     case RUN_STATE.REJECTED:
+      return {
+        kind: RUN_PANE_VIEW_KIND.DIFF,
+        runId: run.id,
+        hasGuardrailFlags,
+        revisionProgressLabel: null,
+        isPatchEditable: false,
+        isFollowUpAvailable: false,
+        isRevisionHistoryAvailable: true,
+        isReviewDecisionAvailable: true,
+      };
     case RUN_STATE.APPLIED:
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,
@@ -253,6 +274,7 @@ function toView(run: RunRecord): RunPaneView {
         isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: false,
+        isReviewDecisionAvailable: false,
       };
     case RUN_STATE.NO_ACTION_NEEDED:
       return {

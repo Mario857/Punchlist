@@ -408,6 +408,64 @@ export function useExecuteAcknowledgeGuardrail(): UseExecuteAcknowledgeGuardrail
   };
 }
 
+interface UseExecuteApproveRunsResult {
+  approveRuns: (runIds: string[]) => void;
+  isApproveRunsPending: boolean;
+  /**
+   * An unacknowledged flag refuses the whole batch, and that refusal is the message
+   * the reviewer needs rather than something to swallow.
+   */
+  approveRunsError: unknown;
+}
+
+/**
+ * Marks runs ready to land, and marks nothing else. Nothing reachable from here
+ * touches a branch, a remote or GitHub — the landing gate is still ahead of every
+ * approved run — which is exactly what makes approving a batch at once safe.
+ *
+ * Batched at the IPC level even for one run, because main resolves and checks every
+ * id before committing the first transition. The returned records are authoritative
+ * and the streamed transitions arrive with them, so there is nothing optimistic to
+ * patch: an approval must never read as done before main says it is.
+ */
+export function useExecuteApproveRuns(): UseExecuteApproveRunsResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (runIds: string[]) =>
+      unwrapIpcResult(await requireBridge().runs.approve(runIds)),
+    onSuccess: (approved) => hydrate(approved),
+    onError: (mutationError) => logError(mutationError, 'useExecuteApproveRuns'),
+  });
+
+  return { approveRuns: mutate, isApproveRunsPending: isPending, approveRunsError: error };
+}
+
+interface UseExecuteRejectRunsResult {
+  rejectRuns: (runIds: string[]) => void;
+  isRejectRunsPending: boolean;
+  rejectRunsError: unknown;
+}
+
+/**
+ * Turns resolutions down without tearing anything down: the record and the worktree
+ * survive until the run is dismissed, which is the separate action that reclaims them.
+ * Guardrail flags do not gate this one — they exist to stop unread work being
+ * approved, and rejecting is the outcome they were raised to protect.
+ */
+export function useExecuteRejectRuns(): UseExecuteRejectRunsResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (runIds: string[]) =>
+      unwrapIpcResult(await requireBridge().runs.reject(runIds)),
+    onSuccess: (rejected) => hydrate(rejected),
+    onError: (mutationError) => logError(mutationError, 'useExecuteRejectRuns'),
+  });
+
+  return { rejectRuns: mutate, isRejectRunsPending: isPending, rejectRunsError: error };
+}
+
 interface UseExecuteEscalateRunResult {
   escalateRun: (request: EscalateRunRequest) => void;
   isEscalateRunPending: boolean;
