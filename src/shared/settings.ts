@@ -45,30 +45,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = appSettingsSchema.parse({});
  */
 export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 320, MAX: 560 } as const;
 export const RIGHT_PANE_WIDTH = { MIN: 360, DEFAULT: 560, MAX: 1200 } as const;
-/** Applies when the run pane is along the bottom, where its constraint is height. */
-export const BOTTOM_PANE_HEIGHT = { MIN: 220, DEFAULT: 440, MAX: 1200 } as const;
-
 /**
- * The detail pane and the comment columns have no persisted size — they take what is
- * left — so these are what a drag on a neighbouring divider must leave them. Without
- * them the `MAX` above is the real limit, which means the pane beside a maximised one
- * cannot be shrunk past whatever the window happens to make left over.
+ * The detail pane has no persisted size — it takes what is left — so this is what a drag
+ * on a neighbouring divider must leave it. Without it the `MAX` values above are the
+ * real limit, which means the pane beside a maximised one cannot be shrunk past whatever
+ * the window happens to make left over.
  */
 export const CENTER_PANE_MIN_WIDTH = 320;
-export const COLUMNS_MIN_HEIGHT = 200;
-
-/**
- * Where the run pane lives. A patch is wide before it is tall, so the bottom placement
- * gives it the window's full width — but the side placement keeps the comment and its
- * resolution in view together, which is the better shape for reading one thread. Both
- * are defensible, so it is a setting rather than a decision made on the user's behalf.
- */
-export const RUN_PANE_PLACEMENT = {
-  RIGHT: 'right',
-  BOTTOM: 'bottom',
-} as const;
-
-export type RunPanePlacement = (typeof RUN_PANE_PLACEMENT)[keyof typeof RUN_PANE_PLACEMENT];
 
 /**
  * `.catch` rather than a bare default: a width persisted by an older build, or one
@@ -82,12 +65,6 @@ const paneSizesSchema = z.object({
     .min(RIGHT_PANE_WIDTH.MIN)
     .max(RIGHT_PANE_WIDTH.MAX)
     .catch(RIGHT_PANE_WIDTH.DEFAULT),
-  /** Kept alongside the widths so switching placement restores the size you left it at. */
-  bottom: z
-    .number()
-    .min(BOTTOM_PANE_HEIGHT.MIN)
-    .max(BOTTOM_PANE_HEIGHT.MAX)
-    .catch(BOTTOM_PANE_HEIGHT.DEFAULT),
 });
 
 export type PaneSizes = z.infer<typeof paneSizesSchema>;
@@ -124,7 +101,6 @@ export const sessionStateSchema = z.object({
    */
   targetBranchByPr: z.record(z.string(), z.string()).default({}),
   paneSizes: paneSizesSchema.default(() => paneSizesSchema.parse({})),
-  runPanePlacement: z.enum(RUN_PANE_PLACEMENT).catch(RUN_PANE_PLACEMENT.RIGHT),
   paneVisibility: paneVisibilitySchema.default(() => paneVisibilitySchema.parse({})),
   /**
    * Closed by default. The batch actions and the sandbox summary are accelerators for

@@ -23,12 +23,9 @@ import { useSessionStore } from '@renderer/stores/sessionStore';
 import { useElementSize } from '@renderer/hooks/useElementSize';
 import { clamp } from '@renderer/lib/numbers';
 import {
-  BOTTOM_PANE_HEIGHT,
   CENTER_PANE_MIN_WIDTH,
-  COLUMNS_MIN_HEIGHT,
   LEFT_PANE_WIDTH,
   RIGHT_PANE_WIDTH,
-  RUN_PANE_PLACEMENT,
   type PaneVisibility,
 } from '@shared/settings';
 
@@ -84,10 +81,6 @@ function resolveMaxSize(range: PaneSizeRange, availableSize: number, isMeasured:
 /** A stable identity, so a filling pane does not restyle its element every render. */
 const EMPTY_STYLE: CSSProperties = {};
 
-/** Says where the pane would go, not where it is — it is an action, not a status. */
-const MOVE_TO_BOTTOM_LABEL = 'Run pane to bottom';
-const MOVE_TO_SIDE_LABEL = 'Run pane to side';
-
 /** A stable identity, so an absent result does not remount the tree every render. */
 const EMPTY_COMMENTS: PrComment[] = [];
 
@@ -106,25 +99,18 @@ interface UseWorkspaceResult {
   diffPaneRef: Ref<HTMLDivElement>;
   /** A persisted pixel size cannot be a utility class, so it arrives as a style. */
   leftPaneStyle: CSSProperties;
-  /** Width or height depending on placement, decided here so markup does not branch. */
   runPaneStyle: CSSProperties;
   layoutRef: RefCallback<HTMLDivElement>;
   leftPaneWidth: number;
   rightPaneWidth: number;
-  bottomPaneHeight: number;
   /**
    * Bounded by the window rather than by a constant, so maximising one pane can never
    * make its neighbour unshrinkable.
    */
   leftPaneMaxWidth: number;
   rightPaneMaxWidth: number;
-  bottomPaneMaxHeight: number;
   onLeftPaneWidthChange: (width: number) => void;
   onRightPaneWidthChange: (width: number) => void;
-  onBottomPaneHeightChange: (height: number) => void;
-  isRunPaneOnBottom: boolean;
-  runPanePlacementLabel: string;
-  onToggleRunPanePlacement: () => void;
   paneToggleItems: PaneToggleItem[];
   isCommentListVisible: boolean;
   isCommentDetailVisible: boolean;
@@ -165,8 +151,6 @@ export function useWorkspace(): UseWorkspaceResult {
   const setTargetBranch = useSessionStore((state) => state.setTargetBranch);
   const paneSizes = useSessionStore((state) => state.paneSizes);
   const setPaneSizes = useSessionStore((state) => state.setPaneSizes);
-  const runPanePlacement = useSessionStore((state) => state.runPanePlacement);
-  const setRunPanePlacement = useSessionStore((state) => state.setRunPanePlacement);
   const paneVisibility = useSessionStore((state) => state.paneVisibility);
   const setPaneVisibility = useSessionStore((state) => state.setPaneVisibility);
 
@@ -210,8 +194,6 @@ export function useWorkspace(): UseWorkspaceResult {
     runId: selectedRun?.id ?? null,
   });
 
-  const isRunPaneOnBottom = runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM;
-
   // The detail pane is the one that flexes, so with it hidden the list takes that role
   // and the run pane keeps its persisted width. Leaving both of them fixed is the bug
   // this replaced: nothing absorbed the leftover space, and the only divider left was
@@ -231,16 +213,11 @@ export function useWorkspace(): UseWorkspaceResult {
     onToggle: () => setPaneVisibility({ [key]: !paneVisibility[key] }),
   }));
 
-  const {
-    ref: layoutRef,
-    width: layoutWidth,
-    height: layoutHeight,
-  } = useElementSize<HTMLDivElement>();
+  const { ref: layoutRef, width: layoutWidth } = useElementSize<HTMLDivElement>();
 
   const detailReservedWidth = paneVisibility.commentDetail
     ? CENTER_PANE_MIN_WIDTH
     : NO_RESERVED_SIZE;
-  const isRunPaneBesideColumns = paneVisibility.runPane && !isRunPaneOnBottom;
 
   const isLayoutMeasured = layoutWidth > UNMEASURED_LAYOUT_SIZE;
 
@@ -248,7 +225,7 @@ export function useWorkspace(): UseWorkspaceResult {
     LEFT_PANE_WIDTH,
     layoutWidth -
       detailReservedWidth -
-      (isRunPaneBesideColumns ? RIGHT_PANE_WIDTH.MIN : NO_RESERVED_SIZE),
+      (paneVisibility.runPane ? RIGHT_PANE_WIDTH.MIN : NO_RESERVED_SIZE),
     isLayoutMeasured,
   );
   const rightPaneMaxWidth = resolveMaxSize(
@@ -258,11 +235,6 @@ export function useWorkspace(): UseWorkspaceResult {
       (paneVisibility.commentList ? LEFT_PANE_WIDTH.MIN : NO_RESERVED_SIZE),
     isLayoutMeasured,
   );
-  const bottomPaneMaxHeight = resolveMaxSize(
-    BOTTOM_PANE_HEIGHT,
-    layoutHeight - COLUMNS_MIN_HEIGHT,
-    isLayoutMeasured,
-  );
 
   // A size saved on a wider window would otherwise push its neighbour off screen, so
   // what is rendered is the saved value seen through the current window's limits. The
@@ -270,16 +242,15 @@ export function useWorkspace(): UseWorkspaceResult {
   // the layout you had.
   const leftPaneWidth = clamp(paneSizes.left, LEFT_PANE_WIDTH.MIN, leftPaneMaxWidth);
   const rightPaneWidth = clamp(paneSizes.right, RIGHT_PANE_WIDTH.MIN, rightPaneMaxWidth);
-  const bottomPaneHeight = clamp(paneSizes.bottom, BOTTOM_PANE_HEIGHT.MIN, bottomPaneMaxHeight);
 
   const leftPaneStyle = useMemo(
     () => (isCommentListFilling ? EMPTY_STYLE : { width: leftPaneWidth }),
     [isCommentListFilling, leftPaneWidth],
   );
-  const runPaneStyle = useMemo(() => {
-    if (isRunPaneFilling) return EMPTY_STYLE;
-    return isRunPaneOnBottom ? { height: bottomPaneHeight } : { width: rightPaneWidth };
-  }, [isRunPaneFilling, isRunPaneOnBottom, bottomPaneHeight, rightPaneWidth]);
+  const runPaneStyle = useMemo(
+    () => (isRunPaneFilling ? EMPTY_STYLE : { width: rightPaneWidth }),
+    [isRunPaneFilling, rightPaneWidth],
+  );
 
   const onLeftPaneWidthChange = useCallback(
     (left: number) => setPaneSizes({ left }),
@@ -289,18 +260,6 @@ export function useWorkspace(): UseWorkspaceResult {
     (right: number) => setPaneSizes({ right }),
     [setPaneSizes],
   );
-  const onBottomPaneHeightChange = useCallback(
-    (bottom: number) => setPaneSizes({ bottom }),
-    [setPaneSizes],
-  );
-
-  const onToggleRunPanePlacement = useCallback(() => {
-    setRunPanePlacement(
-      runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM
-        ? RUN_PANE_PLACEMENT.RIGHT
-        : RUN_PANE_PLACEMENT.BOTTOM,
-    );
-  }, [runPanePlacement, setRunPanePlacement]);
 
   const onDismissSelectedRun = useCallback(() => {
     if (selectedRun === null) return;
@@ -348,16 +307,10 @@ export function useWorkspace(): UseWorkspaceResult {
     layoutRef,
     leftPaneWidth,
     rightPaneWidth,
-    bottomPaneHeight,
     leftPaneMaxWidth,
     rightPaneMaxWidth,
-    bottomPaneMaxHeight,
     onLeftPaneWidthChange,
     onRightPaneWidthChange,
-    onBottomPaneHeightChange,
-    isRunPaneOnBottom,
-    runPanePlacementLabel: isRunPaneOnBottom ? MOVE_TO_SIDE_LABEL : MOVE_TO_BOTTOM_LABEL,
-    onToggleRunPanePlacement,
     paneToggleItems,
     isCommentListVisible: paneVisibility.commentList,
     isCommentDetailVisible: paneVisibility.commentDetail,

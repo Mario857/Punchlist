@@ -9,9 +9,9 @@ import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
 import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
 import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
-import { BOTTOM_PANE_HEIGHT, LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
+import { LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
 import { PaneDivider } from './components/PaneDivider/PaneDivider';
-import { PANE_AXIS, PANE_EDGE } from './components/PaneDivider/usePaneDivider';
+import { PANE_EDGE } from './components/PaneDivider/usePaneDivider';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
@@ -25,7 +25,6 @@ const FILLING_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
 const FILLING_LIST_CLASS = 'flex min-w-0 flex-1 flex-col overflow-hidden';
 const LEFT_DIVIDER_LABEL = 'Resize the comment list';
 const RIGHT_DIVIDER_LABEL = 'Resize the run pane';
-const BOTTOM_DIVIDER_LABEL = 'Resize the run pane';
 /** Focusable by the `e` shortcut, but never a stop in the normal tab order. */
 const PANE_FOCUS_TAB_INDEX = -1;
 const COMMENTS_ERROR_FALLBACK = 'Could not load comments for this pull request.';
@@ -48,16 +47,10 @@ export function Workspace() {
     layoutRef,
     leftPaneWidth,
     rightPaneWidth,
-    bottomPaneHeight,
     leftPaneMaxWidth,
     rightPaneMaxWidth,
-    bottomPaneMaxHeight,
     onLeftPaneWidthChange,
     onRightPaneWidthChange,
-    onBottomPaneHeightChange,
-    isRunPaneOnBottom,
-    runPanePlacementLabel,
-    onToggleRunPanePlacement,
     paneToggleItems,
     isCommentListVisible,
     isCommentDetailVisible,
@@ -164,7 +157,6 @@ export function Workspace() {
       isCommentListVisible && isCommentDetailVisible ? (
         <PaneDivider
           label={LEFT_DIVIDER_LABEL}
-          axis={PANE_AXIS.HORIZONTAL}
           edge={PANE_EDGE.LEADING}
           size={leftPaneWidth}
           minSize={LEFT_PANE_WIDTH.MIN}
@@ -191,34 +183,9 @@ export function Workspace() {
     // The run divider needs a pane on each side of it too.
     const hasRunDivider = hasCommentColumns && isRunPaneVisible;
 
-    // Along the bottom the run pane spans the full window, which is the shape a patch
-    // actually wants: a diff is wide before it is tall.
-    if (isRunPaneOnBottom) {
-      const bottomDivider = !hasRunDivider ? null : (
-        <PaneDivider
-          label={BOTTOM_DIVIDER_LABEL}
-          axis={PANE_AXIS.VERTICAL}
-          edge={PANE_EDGE.TRAILING}
-          size={bottomPaneHeight}
-          minSize={BOTTOM_PANE_HEIGHT.MIN}
-          maxSize={bottomPaneMaxHeight}
-          onSizeChange={onBottomPaneHeightChange}
-        />
-      );
-
-      return (
-        <div ref={layoutRef} className="flex min-h-0 flex-1 flex-col">
-          {commentColumns}
-          {bottomDivider}
-          {runPane}
-        </div>
-      );
-    }
-
     const rightDivider = !hasRunDivider ? null : (
       <PaneDivider
         label={RIGHT_DIVIDER_LABEL}
-        axis={PANE_AXIS.HORIZONTAL}
         edge={PANE_EDGE.TRAILING}
         size={rightPaneWidth}
         minSize={RIGHT_PANE_WIDTH.MIN}
@@ -246,8 +213,6 @@ export function Workspace() {
         onRefreshComments={onRefreshComments}
         onShowShortcutHelp={onShowShortcutHelp}
         targetBranch={targetBranch}
-        runPanePlacementLabel={runPanePlacementLabel}
-        onToggleRunPanePlacement={onToggleRunPanePlacement}
         paneToggleItems={paneToggleItems}
         isLandingOpen={isLandingOpen}
         onTargetBranchChange={onTargetBranchChange}
