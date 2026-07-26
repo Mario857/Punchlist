@@ -9,6 +9,8 @@ import type {
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
+  RevertRunRequest,
+  RunRevision,
   RunEvent,
   RunRecord,
   SandboxUsage,
@@ -77,6 +79,10 @@ const api: AirlockApi = {
     stopAll: (): Promise<IpcResult<RunRecord[]>> => ipcRenderer.invoke(IPC_CHANNEL.RUNS_STOP_ALL),
     continueRun: (request: ContinueRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_CONTINUE, request),
+    listRevisions: (runId: string): Promise<IpcResult<RunRevision[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVISIONS, runId),
+    revert: (request: RevertRunRequest): Promise<IpcResult<RunRecord>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVERT, request),
     acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL, request),
     escalate: (request: EscalateRunRequest): Promise<IpcResult<RunRecord>> =>

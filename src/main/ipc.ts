@@ -13,7 +13,9 @@ import {
   continueRun,
   dismissRun,
   getRunPatch,
+  listRunRevisionTrail,
   listRunsForPr,
+  revertRun,
   setRunEventListener,
 } from './run';
 import { listModelCatalog } from './router';
@@ -50,6 +52,12 @@ const startRunsPayloadSchema = z.object({
 const continueRunPayloadSchema = z.object({
   runId: z.string(),
   message: z.string().min(MIN_CONTINUATION_MESSAGE_LENGTH),
+});
+
+const revertRunPayloadSchema = z.object({
+  runId: z.string(),
+  revision: z.string(),
+  isDiscardConfirmed: z.boolean(),
 });
 
 const acknowledgeGuardrailPayloadSchema = z.object({
@@ -153,6 +161,8 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, ({ runId, message }) =>
     continueRun(runId, message),
   );
+  registerHandler(IPC_CHANNEL.RUNS_REVISIONS, z.string(), (runId) => listRunRevisionTrail(runId));
+  registerHandler(IPC_CHANNEL.RUNS_REVERT, revertRunPayloadSchema, (request) => revertRun(request));
   registerHandler(
     IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL,
     acknowledgeGuardrailPayloadSchema,

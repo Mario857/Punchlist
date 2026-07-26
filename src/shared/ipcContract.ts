@@ -7,6 +7,8 @@ import type {
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
+  RevertRunRequest,
+  RunRevision,
   RunEvent,
   RunRecord,
   SandboxUsage,
@@ -47,6 +49,8 @@ export const IPC_CHANNEL = {
   RUNS_ESCALATE: 'runs:escalate',
   RUNS_CONTINUE: 'runs:continue',
   RUNS_ACKNOWLEDGE_GUARDRAIL: 'runs:acknowledgeGuardrail',
+  RUNS_REVISIONS: 'runs:revisions',
+  RUNS_REVERT: 'runs:revert',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
@@ -128,6 +132,10 @@ export interface RunsApi {
    * follows from the run's state rather than a caller-supplied label.
    */
   continueRun(request: ContinueRunRequest): Promise<IpcResult<RunRecord>>;
+  /** The worktree's revision trail, newest first. */
+  listRevisions(runId: string): Promise<IpcResult<RunRevision[]>>;
+  /** Resets the worktree to a revision, discarding every later one. */
+  revert(request: RevertRunRequest): Promise<IpcResult<RunRecord>>;
   /**
    * Records that a guardrail finding was seen and accepted. Flags are not hard
    * blocks — a comment may legitimately ask for a lock-file bump — so the gate is

@@ -111,6 +111,28 @@ export interface ContinueRunRequest {
   message: string;
 }
 
+/**
+ * One commit inside the run's worktree, newest first. These are an internal audit
+ * trail that gets squashed away at landing, so the subject is terse by design.
+ */
+export interface RunRevision {
+  revision: string;
+  subject: string;
+  committedAt: string;
+  /** The base commit the worktree was created at, which is revision zero. */
+  isBase: boolean;
+}
+
+export interface RevertRunRequest {
+  runId: string;
+  revision: string;
+  /**
+   * Reverting discards every later revision, including uncommitted hand-edits, so
+   * it refuses on a dirty worktree until the loss is intended.
+   */
+  isDiscardConfirmed: boolean;
+}
+
 export interface AcknowledgeGuardrailRequest {
   runId: string;
   flagId: string;

@@ -7,7 +7,13 @@ import { recordRunFailure } from '@main/runState';
 import { getRepos, getRuns, getSettings } from '@main/store';
 import { normalizeRemoteUrl, type PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
-import type { CandidatePatch, CandidatePatchFile, RunRecord, SandboxUsage } from '@shared/runs';
+import type {
+  CandidatePatch,
+  CandidatePatchFile,
+  RunRecord,
+  RunRevision,
+  SandboxUsage,
+} from '@shared/runs';
 import { FAILURE_REASON, isTerminalRunState } from '@shared/runState';
 
 const WORKTREE_LOG_SCOPE = '[worktree]';
@@ -88,6 +94,9 @@ const WORKTREE_MISSING_MESSAGE =
   'The run worktree is gone, so its agent can no longer resume in it.';
 
 const NO_BYTES = 0;
+const HEAD_REVISION = 'HEAD';
+const SINGLE_LOG_ENTRY = 1;
+const BASE_REVISION_SUBJECT = 'Pull request head, before any agent work';
 
 export const TEARDOWN_RESULT = {
   REMOVED: 'removed',
@@ -332,6 +341,41 @@ export async function revertToRevision(worktreePath: string, revision: string): 
   await simpleGit(worktreePath).raw([...RESET_HARD_ARGS, revision]);
 }
 
+/**
+ * The revision trail, newest first, ending at the base commit the worktree was
+ * created at. These commits are an internal audit trail squashed away at landing,
+ * so listing them is about making revert-to-revision navigable, not about history
+ * anyone reads.
+ */
+export async function listRunRevisions(worktreePath: string): Promise<RunRevision[]> {
+  const baseRevision = await readBaseRevision(worktreePath);
+  const log = await simpleGit(worktreePath).log({ from: baseRevision, to: HEAD_REVISION });
+
+  const revisions: RunRevision[] = log.all.map((entry) => ({
+    revision: entry.hash,
+    subject: entry.message,
+    committedAt: entry.date,
+    isBase: false,
+  }));
+
+  const base = await simpleGit(worktreePath).log({
+    maxCount: SINGLE_LOG_ENTRY,
+    from: baseRevision,
+  });
+  const baseEntry = base.latest;
+  if (baseEntry === null) return revisions;
+
+  return [
+    ...revisions,
+    {
+      revision: baseEntry.hash,
+      subject: BASE_REVISION_SUBJECT,
+      committedAt: baseEntry.date,
+      isBase: true,
+    },
+  ];
+}
+
 export interface ResetWorktreeToBaseOptions {
   /**
    * A dirty worktree may hold hand-edits the reset would destroy, so it refuses until
@@ -348,23 +392,40 @@ export interface ResetWorktreeToBaseOptions {
  *
  * Returns the base revision, so the caller does not have to read it a second time.
  */
+/**
+ * Shared by the reset-to-base escalation path and revert-to-revision, so both refuse
+ * a dirty worktree on the same terms rather than one of them quietly not checking.
+ */
+async function assertResettable(
+  worktreePath: string,
+  revision: string,
+  isDiscardConfirmed: boolean,
+): Promise<void> {
+  if (isDiscardConfirmed) return;
+  const status = await simpleGit(worktreePath).status();
+  if (status.isClean()) return;
+  throw new AppError(
+    APP_ERROR_KIND.WORKTREE_DIRTY,
+    `${worktreePath} has changes that a reset to ${revision} would discard.`,
+    WORKTREE_RESET_DIRTY_REMEDIATION,
+  );
+}
+
+export async function resetWorktreeToRevision(
+  worktreePath: string,
+  revision: string,
+  options: ResetWorktreeToBaseOptions,
+): Promise<void> {
+  await assertResettable(worktreePath, revision, options.isDiscardConfirmed);
+  await revertToRevision(worktreePath, revision);
+}
+
 export async function resetWorktreeToBase(
   worktreePath: string,
   options: ResetWorktreeToBaseOptions,
 ): Promise<string> {
   const baseRevision = await readBaseRevision(worktreePath);
-
-  if (!options.isDiscardConfirmed) {
-    const status = await simpleGit(worktreePath).status();
-    if (!status.isClean()) {
-      throw new AppError(
-        APP_ERROR_KIND.WORKTREE_DIRTY,
-        `${worktreePath} has changes that a reset to ${baseRevision} would discard.`,
-        WORKTREE_RESET_DIRTY_REMEDIATION,
-      );
-    }
-  }
-
+  await assertResettable(worktreePath, baseRevision, options.isDiscardConfirmed);
   await revertToRevision(worktreePath, baseRevision);
   return baseRevision;
 }

@@ -25,8 +25,10 @@ import { deleteRun, getRunById, getRuns } from '@main/store';
 import {
   commitWorktree,
   createRunWorktree,
+  listRunRevisions,
   readCandidatePatch,
   readSandboxUsage,
+  resetWorktreeToRevision,
   teardownRunWorktree,
 } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
@@ -47,7 +49,9 @@ import {
   RUN_EVENT_KIND,
   type CandidatePatch,
   type RunEvent,
+  type RevertRunRequest,
   type RunRecord,
+  type RunRevision,
   type SandboxUsage,
 } from '@shared/runs';
 
@@ -448,6 +452,32 @@ function withGuardrailFlags(run: RunRecord, patch: CandidatePatch, comment: PrCo
   const flagIds = new Set(guardrailFlags.map((flag) => flag.id));
   const acknowledgedGuardrailIds = run.acknowledgedGuardrailIds.filter((id) => flagIds.has(id));
   return patchRun(run, { guardrailFlags, acknowledgedGuardrailIds });
+}
+
+export async function listRunRevisionTrail(runId: string): Promise<RunRevision[]> {
+  return listRunRevisions(requireRun(runId).worktreePath);
+}
+
+/**
+ * Reverting discards every revision after the chosen one, which is exactly what
+ * makes the trail useful — but it also discards uncommitted hand-edits, so the reset
+ * refuses a dirty worktree until the loss is confirmed.
+ *
+ * The patch is re-read and re-checked afterwards: reverting changes what the run
+ * produced, so its guardrail flags describe the wrong thing until they are recomputed.
+ */
+export async function revertRun(request: RevertRunRequest): Promise<RunRecord> {
+  const run = requireRun(request.runId);
+  await resetWorktreeToRevision(run.worktreePath, request.revision, {
+    isDiscardConfirmed: request.isDiscardConfirmed,
+  });
+
+  const patch = await readCandidatePatch(run);
+  const checked = patch.isEmpty ? run : withGuardrailFlags(run, patch, await findRunComment(run));
+  const nextState = patch.isEmpty ? RUN_STATE.NO_ACTION_NEEDED : RUN_STATE.READY;
+  const reverted = checked.state === nextState ? checked : transitionRun(checked, nextState);
+  emitStateChanged(reverted);
+  return reverted;
 }
 
 /**
