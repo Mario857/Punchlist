@@ -1,12 +1,20 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { z } from 'zod';
 import { prRefSchema } from '@shared/discovery';
+import { CONVENTION_STATE } from '@shared/conventions';
 import { MODEL_TIER } from '@shared/runState';
 import { SELECTION_SIDE } from '@shared/runs';
 import { APP_ERROR_KIND, AppError, toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
+import {
+  captureCommentEvidence,
+  distillConventions,
+  exportConventions,
+  previewConventionExport,
+  setConventionRuleState,
+} from './conventions';
 import { setLandingInProgress } from './automation';
 import {
   assembleLanding,
@@ -16,7 +24,7 @@ import {
   undoLanding,
   UNDO_LANDING_GATE_ACTION,
 } from './landing';
-import { confirmSandboxExit } from './sandbox';
+import { confirmSandboxExit, SANDBOX_EXIT_ACTION } from './sandbox';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, rerunConflictedRun, stopAllRuns } from './queue';
 import {
@@ -48,7 +56,14 @@ import {
 } from './discovery';
 import { getGhAuthStatus } from './ghCli';
 import { fetchPrComments, fetchPrStatus } from './github';
-import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettings } from './store';
+import {
+  getConventionRules,
+  getSession,
+  getSettings,
+  isCursorApiKeySet,
+  updateSession,
+  updateSettings,
+} from './store';
 
 const CLONE_CANCELLED_MESSAGE = 'No folder was chosen, so nothing was cloned.';
 
@@ -134,6 +149,16 @@ async function withLandingPaused<T>(work: () => Promise<T>): Promise<T> {
 
 /** Bulk approve and reject are the same operation applied to many, so one schema. */
 const runIdsPayloadSchema = z.array(z.string());
+
+const setConventionStatePayloadSchema = z.object({
+  ruleId: z.string(),
+  state: z.enum(CONVENTION_STATE),
+});
+
+const exportConventionsPayloadSchema = z.object({
+  repoKey: z.string(),
+  isConfirmedByUser: z.boolean(),
+});
 
 const revertRunPayloadSchema = z.object({
   runId: z.string(),
@@ -233,7 +258,13 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.PRS_RESOLVE_URL, z.string(), (url) => resolvePrUrl(url));
   registerHandler(IPC_CHANNEL.PRS_STATUS, prRefSchema, (ref) => fetchPrStatus(ref));
 
-  registerHandler(IPC_CHANNEL.COMMENTS_FETCH, prRefSchema, (ref) => fetchPrComments(ref));
+  registerHandler(IPC_CHANNEL.COMMENTS_FETCH, prRefSchema, async (ref) => {
+    const comments = await fetchPrComments(ref);
+    // Capture piggybacks on ingestion: it is a store write, deduped on comment id, so
+    // a refresh cannot inflate the recurrence count everything else is measured by.
+    captureCommentEvidence(ref, comments);
+    return comments;
+  });
 
   registerHandler(IPC_CHANNEL.SESSION_GET, noPayloadSchema, () => getSession());
   registerHandler(IPC_CHANNEL.SESSION_UPDATE, sessionStateSchema.partial(), (patch) =>
@@ -320,6 +351,26 @@ export function registerIpcHandlers(): void {
           isConfirmedByUser: request.isConfirmedByUser,
         }),
       ),
+    ),
+  );
+
+  registerHandler(IPC_CHANNEL.CONVENTIONS_LIST, noPayloadSchema, () => getConventionRules());
+  registerHandler(IPC_CHANNEL.CONVENTIONS_DISTILL, noPayloadSchema, () => distillConventions());
+  registerHandler(IPC_CHANNEL.CONVENTIONS_SET_STATE, setConventionStatePayloadSchema, (request) =>
+    setConventionRuleState(request.ruleId, request.state),
+  );
+  registerHandler(IPC_CHANNEL.CONVENTIONS_EXPORT_PREVIEW, z.string(), (repoKey) =>
+    previewConventionExport(repoKey),
+  );
+  // Gated exactly like a landing: the confirmation is minted here, from the call that
+  // carries it, and the path written is one the guardrails otherwise protect.
+  registerHandler(IPC_CHANNEL.CONVENTIONS_EXPORT, exportConventionsPayloadSchema, (request) =>
+    exportConventions(
+      request,
+      confirmSandboxExit({
+        action: SANDBOX_EXIT_ACTION.EXPORT_CONVENTIONS,
+        isConfirmedByUser: request.isConfirmedByUser,
+      }),
     ),
   );
 
