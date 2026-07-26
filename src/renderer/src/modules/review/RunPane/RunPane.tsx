@@ -5,6 +5,7 @@ import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentT
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
 import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUpPrompt';
+import { AutoDecisions } from '@renderer/modules/review/AutoDecisions/AutoDecisions';
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
@@ -66,13 +67,19 @@ export function RunPane({ commentId }: RunPaneProps) {
           <RevisionHistory key={view.runId} runId={view.runId} />
         ) : null;
 
+        // Beside the flags and above the patch, for the same reason: a decision taken
+        // without you is something to know before you read the diff it produced.
+        const autoDecisions = <AutoDecisions key={view.runId} runId={view.runId} />;
+
         return (
           <div className={COLUMN_CLASS}>
             {guardrailFlags}
+            {autoDecisions}
             <DiffReview
               key={view.runId}
               runId={view.runId}
               revisionProgressLabel={view.revisionProgressLabel}
+              isEditable={view.isPatchEditable}
             />
             {followUpPrompt}
             {revisionHistory}

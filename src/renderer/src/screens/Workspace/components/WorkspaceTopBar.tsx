@@ -10,9 +10,13 @@ interface Props {
   isRefreshing: boolean;
   onTogglePicker: () => void;
   onRefreshComments: () => void;
+  onShowShortcutHelp: () => void;
 }
 
 const NO_PR_LABEL = 'No pull request selected';
+/** The visible equivalent of `?`, so the keyboard map is discoverable by mouse. */
+const SHORTCUT_HELP_LABEL = '?';
+const SHORTCUT_HELP_TITLE = 'Keyboard shortcuts';
 
 export function WorkspaceTopBar({
   selectedPr,
@@ -20,6 +24,7 @@ export function WorkspaceTopBar({
   isRefreshing,
   onTogglePicker,
   onRefreshComments,
+  onShowShortcutHelp,
 }: Props) {
   const prLabel = selectedPr === null ? NO_PR_LABEL : `${selectedPr.repoKey} #${selectedPr.number}`;
 
@@ -51,6 +56,14 @@ export function WorkspaceTopBar({
           isDisabled={isRefreshDisabled}
           onClick={onRefreshComments}
         />
+        <Button
+          variant={BUTTON_VARIANT.GHOST}
+          size={BUTTON_SIZE.SM}
+          title={SHORTCUT_HELP_TITLE}
+          onClick={onShowShortcutHelp}
+        >
+          {SHORTCUT_HELP_LABEL}
+        </Button>
         <Button
           variant={BUTTON_VARIANT.SECONDARY}
           size={BUTTON_SIZE.SM}

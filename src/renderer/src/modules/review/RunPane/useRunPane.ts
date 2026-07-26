@@ -42,6 +42,12 @@ export type RunPaneView =
       /** Non-null only while revising, which keeps the diff on screen but dimmed. */
       revisionProgressLabel: string | null;
       /**
+       * Hand edits and targeted edits are offered in `ready` only, and for the same
+       * reason the follow-up is: revising means the agent holds the run, and an
+       * approved or applied patch is no longer a candidate to rewrite.
+       */
+      isPatchEditable: boolean;
+      /**
        * The whole-patch follow-up is offered in `ready` only: revising means the agent
        * already has the run, and an applied patch is no longer a candidate.
        */
@@ -209,6 +215,7 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         revisionProgressLabel: toRevisionProgressLabel(run),
+        isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: false,
       };
@@ -218,6 +225,7 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         revisionProgressLabel: null,
+        isPatchEditable: true,
         isFollowUpAvailable: true,
         isRevisionHistoryAvailable: true,
       };
@@ -229,6 +237,7 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         revisionProgressLabel: null,
+        isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: true,
       };
@@ -238,6 +247,7 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         revisionProgressLabel: null,
+        isPatchEditable: false,
         isFollowUpAvailable: false,
         isRevisionHistoryAvailable: false,
       };

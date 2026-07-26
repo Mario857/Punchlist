@@ -60,9 +60,7 @@ export interface PendingReviewShortcutBinding extends ReviewShortcutDescription 
  * A pending binding has no key at all rather than a key with no handler, so an
  * unimplemented shortcut cannot swallow a keypress on its way to a real one.
  */
-export type ReviewShortcutBinding =
-  | AvailableReviewShortcutBinding
-  | PendingReviewShortcutBinding;
+export type ReviewShortcutBinding = AvailableReviewShortcutBinding | PendingReviewShortcutBinding;
 
 const NO_COMMAND_MODIFIER = false;
 const WITH_COMMAND_MODIFIER = true;

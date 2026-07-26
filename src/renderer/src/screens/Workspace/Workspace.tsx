@@ -1,3 +1,4 @@
+import { ShortcutHelp } from '@renderer/components/ShortcutHelp/ShortcutHelp';
 import { Spinner } from '@renderer/components/Spinner';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
@@ -13,6 +14,8 @@ import { useWorkspace } from './useWorkspace';
 const LEFT_PANE_CLASS = 'border-border flex w-80 shrink-0 flex-col overflow-hidden border-r';
 const CENTER_PANE_CLASS = 'border-border min-w-0 flex-1 overflow-y-auto border-r';
 const RIGHT_PANE_CLASS = 'w-96 shrink-0 overflow-y-auto';
+/** Focusable by the `e` shortcut, but never a stop in the normal tab order. */
+const PANE_FOCUS_TAB_INDEX = -1;
 const COMMENTS_ERROR_FALLBACK = 'Could not load comments for this pull request.';
 
 export function Workspace() {
@@ -26,6 +29,11 @@ export function Workspace() {
     isPrCommentsFetching,
     prCommentsError,
     runStateByCommentId,
+    commentTreeRef,
+    diffPaneRef,
+    isShortcutHelpOpen,
+    onShowShortcutHelp,
+    onCloseShortcutHelp,
     onSelectPr,
     onSelectComment,
     onTogglePicker,
@@ -64,6 +72,7 @@ export function Workspace() {
             selectedCommentId={selectedCommentId}
             onSelectComment={onSelectComment}
             runStateByCommentId={runStateByCommentId}
+            ref={commentTreeRef}
           />
         </div>
       </>
@@ -86,7 +95,9 @@ export function Workspace() {
         <div className={CENTER_PANE_CLASS}>
           <CommentDetail comment={selectedComment} />
         </div>
-        <div className={RIGHT_PANE_CLASS}>
+        {/* tabIndex makes the pane a focus target for the `e` shortcut, without
+            making it a tab stop in the normal order. */}
+        <div className={RIGHT_PANE_CLASS} ref={diffPaneRef} tabIndex={PANE_FOCUS_TAB_INDEX}>
           <RunPane commentId={selectedCommentId} />
         </div>
       </div>
@@ -101,9 +112,11 @@ export function Workspace() {
         isRefreshing={isPrCommentsFetching}
         onTogglePicker={onTogglePicker}
         onRefreshComments={onRefreshComments}
+        onShowShortcutHelp={onShowShortcutHelp}
       />
       <RunControls prRef={selectedPr} />
       {body}
+      <ShortcutHelp isOpen={isShortcutHelpOpen} onClose={onCloseShortcutHelp} />
     </main>
   );
 }

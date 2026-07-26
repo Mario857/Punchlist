@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrRef } from '@shared/discovery';
 import type {
   AcknowledgeGuardrailRequest,
@@ -10,6 +10,7 @@ import type {
   RunRevision,
   SandboxUsage,
   StartRunRequest,
+  WriteRunFileRequest,
 } from '@shared/runs';
 import { logError } from '@renderer/lib/logError';
 import { createQueryKey, queryKeys } from '@renderer/lib/queryKeys';
@@ -84,7 +85,13 @@ interface UseQueryCandidatePatchResult {
   candidatePatchError: unknown;
 }
 
-/** The patch is read from git in main, never from an editor buffer. */
+/**
+ * The patch is read from git in main, never from an editor buffer.
+ *
+ * A revision changes the key, and dropping to a spinner there would unmount the diff
+ * editor — losing the cursor mid-hand-edit, since a hand edit is itself a revision. The
+ * previous patch therefore stays on screen until the new one arrives.
+ */
 export function useQueryCandidatePatch(
   runId: string,
   revisionCount: number,
@@ -92,6 +99,7 @@ export function useQueryCandidatePatch(
   const { data, isLoading, error } = useQuery({
     queryKey: runsQueryKeys.candidatePatch(runId, revisionCount),
     queryFn: async () => unwrapIpcResult(await requireBridge().runs.getPatch(runId)),
+    placeholderData: keepPreviousData,
   });
 
   return {
@@ -295,6 +303,42 @@ export function useExecuteContinueRun(): UseExecuteContinueRunResult {
   });
 
   return { continueRun: mutate, isContinueRunPending: isPending, continueRunError: error };
+}
+
+interface UseExecuteWriteRunFileResult {
+  writeRunFile: (request: WriteRunFileRequest) => void;
+  isWriteRunFilePending: boolean;
+  /** A rejected write — a protected path, a vanished worktree — must stay visible. */
+  writeRunFileError: unknown;
+}
+
+/**
+ * Writes a hand-edited file back into the run's worktree. Main re-reads the patch from
+ * git after the write, so both reads keyed by the run's revision counter are
+ * invalidated rather than the editor buffer being treated as the truth: an edit to a
+ * file the agent also touched cannot desync the view that way.
+ */
+export function useExecuteWriteRunFile(): UseExecuteWriteRunFileResult {
+  const queryClient = useQueryClient();
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (request: WriteRunFileRequest) =>
+      unwrapIpcResult(await requireBridge().runs.writeFile(request)),
+    onSuccess: (written) => {
+      hydrate([written]);
+      void queryClient.invalidateQueries({
+        queryKey: runsQueryKeys.candidatePatch(written.id, written.revisionCount),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runRevisions(written.id, written.revisionCount),
+      });
+    },
+    // The request carries file contents, so only the failure is logged, never the edit.
+    onError: (mutationError) => logError(mutationError, 'useExecuteWriteRunFile'),
+  });
+
+  return { writeRunFile: mutate, isWriteRunFilePending: isPending, writeRunFileError: error };
 }
 
 interface UseExecuteRevertRunResult {
