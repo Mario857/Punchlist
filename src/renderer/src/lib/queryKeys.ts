@@ -17,9 +17,13 @@ const QUERY_DOMAIN = {
   DISCOVERED_PRS: 'discoveredPrs',
   PR_COMMENTS: 'prComments',
   SESSION: 'session',
+  MODELS: 'models',
+  CURSOR_KEY: 'cursorKey',
 } as const;
 
 const LIST_SCOPE = 'list';
+const CATALOG_SCOPE = 'catalog';
+const STATUS_SCOPE = 'status';
 
 /**
  * The only source of TanStack Query cache keys. An ad-hoc array at a call site
@@ -34,4 +38,6 @@ export const queryKeys = {
   prComments: (repoKey: string, prNumber: number) =>
     createQueryKey(QUERY_DOMAIN.PR_COMMENTS, repoKey, prNumber),
   session: () => createQueryKey(QUERY_DOMAIN.SESSION),
+  modelCatalog: () => createQueryKey(QUERY_DOMAIN.MODELS, CATALOG_SCOPE),
+  cursorKeyStatus: () => createQueryKey(QUERY_DOMAIN.CURSOR_KEY, STATUS_SCOPE),
 } as const;
