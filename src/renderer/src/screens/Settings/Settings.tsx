@@ -2,6 +2,7 @@ import { SettingsIcon } from '@renderer/components/icons/SettingsIcon';
 import { GeneralSettings } from '@renderer/modules/settings/GeneralSettings/GeneralSettings';
 import { GhAuthStatusCard } from '@renderer/modules/settings/GhAuthStatusCard/GhAuthStatusCard';
 import { RepoRegistry } from '@renderer/modules/settings/RepoRegistry/RepoRegistry';
+import { TierModelMapping } from '@renderer/modules/settings/TierModelMapping/TierModelMapping';
 
 /** Larger than the 16px body-text default because it sits beside the page title. */
 const PAGE_ICON_SIZE = 20;
@@ -23,6 +24,7 @@ export function Settings() {
         <GhAuthStatusCard />
         <RepoRegistry />
         <GeneralSettings />
+        <TierModelMapping />
       </div>
     </main>
   );
