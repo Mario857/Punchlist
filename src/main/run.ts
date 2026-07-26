@@ -1,8 +1,8 @@
 import { AGENT_OUTCOME_KIND, executeAgentRun } from '@main/agent';
 import { readAgentSummary, watchForDecision, type DecisionWatch } from '@main/decision';
-import { fetchPrComments } from '@main/github';
 import { buildResolutionPrompt } from '@main/prompt';
 import {
+  canTransitionRunState,
   createRunRecord,
   patchRun,
   recordRunFailure,
@@ -21,12 +21,13 @@ import {
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import {
   FAILURE_REASON,
-  MODEL_TIER,
   RUN_STATE,
-  RUN_TRIGGER,
   isTerminalRunState,
+  type ModelTier,
+  type RunTrigger,
 } from '@shared/runState';
 import {
   RUN_EVENT_KIND,
@@ -34,17 +35,12 @@ import {
   type RunEvent,
   type RunRecord,
   type SandboxUsage,
-  type StartRunRequest,
 } from '@shared/runs';
 
-/**
- * Phase 2 runs one comment at a time. `queue.ts` adds the concurrency cap and the
- * router in phase 3, and calls into here rather than growing its own execution path.
- */
-const DEFAULT_TIER = MODEL_TIER.STANDARD;
-
+// One run, end to end: worktree, prompt, agent, decision watch, state transitions.
+// queue.ts owns the concurrency cap, tier routing and escalation, and calls into here
+// rather than growing an execution path of its own.
 const RUN_LOG_SCOPE = '[run]';
-const COMMENT_NOT_FOUND_MESSAGE = 'That comment is no longer on the pull request.';
 const RUN_NOT_FOUND_MESSAGE = 'That run no longer exists.';
 const CANCEL_NOT_ACTIVE_MESSAGE = 'That run has already finished, so there is nothing to cancel.';
 const DISMISS_NOT_TERMINAL_MESSAGE =
@@ -52,6 +48,8 @@ const DISMISS_NOT_TERMINAL_MESSAGE =
 const NO_LOCAL_CLONE_MESSAGE =
   'This pull request has no local clone, and a resolution runs in a git worktree.';
 const NO_LOCAL_CLONE_REMEDIATION = 'Register the repository in Settings, then try again.';
+const RESTART_NOT_RETRYABLE_MESSAGE =
+  'Only a finished run can be retried, because a restart discards the work in progress.';
 const MALFORMED_DECISION_MESSAGE =
   'The agent halted but wrote an unreadable decision file, so its question could not be read.';
 
@@ -84,7 +82,7 @@ function advance(run: RunRecord, nextState: RunRecord['state'], patch?: RunTrans
   return next;
 }
 
-function requireRun(runId: string): RunRecord {
+export function requireRun(runId: string): RunRecord {
   const run = getRunById(runId);
   if (run === null) {
     throw new AppError(APP_ERROR_KIND.NOT_FOUND, RUN_NOT_FOUND_MESSAGE, null);
@@ -93,17 +91,11 @@ function requireRun(runId: string): RunRecord {
 }
 
 /**
- * The comment is re-read from GitHub rather than accepted from the renderer. The
- * prompt is built from its body and diff hunk, and main should not build an agent
- * instruction out of content the renderer handed it.
+ * Recorded on the way into `running` rather than only once `Agent.create` returns, so
+ * a run that never starts is still attributable to the model it was about to spend on.
  */
-async function findComment(ref: PrRef, commentId: string): Promise<PrComment> {
-  const comments = await fetchPrComments(ref);
-  const comment = comments.find((candidate) => candidate.id === commentId);
-  if (comment === undefined) {
-    throw new AppError(APP_ERROR_KIND.NOT_FOUND, COMMENT_NOT_FOUND_MESSAGE, null);
-  }
-  return comment;
+function toModelPatch(model: ResolvedModel): RunTransitionPatch {
+  return { model: model.modelId, isPoolSpending: isPoolSpending(model.lane) };
 }
 
 interface ResolvedOutcomeInput {
@@ -116,8 +108,8 @@ interface ResolvedOutcomeInput {
 /**
  * An empty diff is not a failure here. A run that finished having changed nothing
  * either genuinely had nothing to do or misread the comment, and the two are told
- * apart by a human reading the transcript — escalation on an empty diff is a phase 3
- * decision, so this only records the outcome.
+ * apart by a human reading the transcript — whether that outcome is worth escalating
+ * depends on the run's trigger, which queue.ts decides, so this only records it.
  */
 function resolveCompletedState({
   run,
@@ -132,7 +124,11 @@ function resolveCompletedState({
   return advance(run, nextState, { summary });
 }
 
-async function executeRun(startedRun: RunRecord, comment: PrComment): Promise<RunRecord> {
+async function executeRun(
+  startedRun: RunRecord,
+  comment: PrComment,
+  model: ResolvedModel,
+): Promise<RunRecord> {
   const controller = new AbortController();
   activeRunControllers.set(startedRun.id, controller);
 
@@ -165,6 +161,7 @@ async function executeRun(startedRun: RunRecord, comment: PrComment): Promise<Ru
       runId: startedRun.id,
       worktreePath: startedRun.worktreePath,
       message: buildResolutionPrompt(comment),
+      model,
       onTranscriptChunk: (chunk) => emitTranscriptChunk(startedRun.id, chunk),
       signal: controller.signal,
     });
@@ -201,14 +198,11 @@ async function executeRun(startedRun: RunRecord, comment: PrComment): Promise<Ru
 }
 
 /**
- * Creates the worktree and record, then executes. The git identity preflight runs
- * first because there is no sensible default to invent for it, and failing after a
- * worktree exists would leave a sandbox behind for a run that never started.
+ * Resolved once per batch rather than per run. The git identity preflight runs here
+ * because there is no sensible default to invent for it, and failing after a worktree
+ * exists would leave a sandbox behind for a run that never started.
  */
-export async function startRuns(
-  ref: PrRef,
-  requests: readonly StartRunRequest[],
-): Promise<RunRecord[]> {
+export async function prepareRunRepoPath(ref: PrRef): Promise<string> {
   const repoPath = resolveLocalRepoPath(ref.repoKey);
   if (repoPath === null) {
     throw new AppError(
@@ -218,30 +212,77 @@ export async function startRuns(
     );
   }
   await resolveGitIdentity(repoPath);
+  return repoPath;
+}
 
-  const started: RunRecord[] = [];
-  for (const request of requests) {
-    const comment = await findComment(ref, request.commentId);
-    const worktree = await createRunWorktree({
-      repoPath,
-      prRef: ref,
-      commentId: request.commentId,
-    });
-    const queued = createRunRecord({
-      commentId: request.commentId,
-      prRef: ref,
-      repoPath,
-      tier: request.tier ?? DEFAULT_TIER,
-      trigger: RUN_TRIGGER.MANUAL,
-      worktreePath: worktree.worktreePath,
-      branchName: worktree.branchName,
-    });
-    emitStateChanged(queued);
+export interface StartRunInput {
+  ref: PrRef;
+  repoPath: string;
+  /**
+   * Re-read from GitHub by the caller rather than accepted from the renderer: the
+   * prompt is built from the body and diff hunk, and main should not build an agent
+   * instruction out of content the renderer handed it.
+   */
+  comment: PrComment;
+  tier: ModelTier;
+  model: ResolvedModel;
+  trigger: RunTrigger;
+}
 
-    const running = advance(queued, RUN_STATE.RUNNING);
-    started.push(await executeRun(running, comment));
+/**
+ * Creates the worktree and record, then executes. Resolves once the run has stopped
+ * moving on its own — ready, needsDecision, noActionNeeded or failed.
+ */
+export async function startRun(input: StartRunInput): Promise<RunRecord> {
+  const worktree = await createRunWorktree({
+    repoPath: input.repoPath,
+    prRef: input.ref,
+    commentId: input.comment.id,
+  });
+  const queued = createRunRecord({
+    commentId: input.comment.id,
+    prRef: input.ref,
+    repoPath: input.repoPath,
+    tier: input.tier,
+    trigger: input.trigger,
+    worktreePath: worktree.worktreePath,
+    branchName: worktree.branchName,
+  });
+  emitStateChanged(queued);
+
+  const running = advance(queued, RUN_STATE.RUNNING, toModelPatch(input.model));
+  return executeRun(running, input.comment, input.model);
+}
+
+export interface RestartRunInput {
+  runId: string;
+  comment: PrComment;
+  model: ResolvedModel;
+}
+
+/**
+ * Escalation and retry: a *fresh* agent over the existing worktree, never a follow-up
+ * on the previous conversation, which would anchor the stronger model to the weaker
+ * one's failed approach. Resetting the worktree to base is the caller's job, because
+ * only it knows whether discarding what is there was confirmed.
+ *
+ * The old `agentId` goes with it. Leaving it would let a later resume reach the
+ * abandoned conversation, and the decision and summary it wrote describe an attempt
+ * that no longer exists.
+ */
+export async function restartRun(input: RestartRunInput): Promise<RunRecord> {
+  const run = requireRun(input.runId);
+  if (!canTransitionRunState(run.state, RUN_STATE.RUNNING)) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, RESTART_NOT_RETRYABLE_MESSAGE, null);
   }
-  return started;
+
+  const running = advance(run, RUN_STATE.RUNNING, {
+    ...toModelPatch(input.model),
+    agentId: null,
+    decision: null,
+    summary: null,
+  });
+  return executeRun(running, input.comment, input.model);
 }
 
 export function listRunsForPr(ref: PrRef): RunRecord[] {
@@ -258,6 +299,22 @@ export async function cancelRun(runId: string): Promise<RunRecord> {
   }
   controller.abort();
   return run;
+}
+
+/**
+ * Every in-flight run at once, so a bad prompt or a wrong target branch is one action
+ * to halt rather than twelve. Each abort reaches the same path a single cancel does —
+ * the run is cancelled where it supports it and its agent is disposed either way — and
+ * the records are read before aborting, since the cancelled state lands asynchronously.
+ */
+export function cancelActiveRuns(): RunRecord[] {
+  const cancelled: RunRecord[] = [];
+  for (const [runId, controller] of activeRunControllers) {
+    const run = getRunById(runId);
+    if (run !== null) cancelled.push(run);
+    controller.abort();
+  }
+  return cancelled;
 }
 
 export async function getRunPatch(runId: string): Promise<CandidatePatch> {

@@ -5,6 +5,7 @@ import { MODEL_TIER } from '@shared/runState';
 import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
+import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
   cancelRun,
   cleanupTerminalRuns,
@@ -12,8 +13,8 @@ import {
   getRunPatch,
   listRunsForPr,
   setRunEventListener,
-  startRuns,
 } from './run';
+import { listModelCatalog } from './router';
 import { readSandboxUsage } from './worktree';
 import {
   addRepoByPath,
@@ -39,6 +40,14 @@ const startRunsPayloadSchema = z.object({
       tier: z.enum(MODEL_TIER).nullable(),
     }),
   ),
+});
+
+const escalateRunPayloadSchema = z.object({
+  runId: z.string(),
+  shouldUseFrontier: z.boolean(),
+  /** Required in practice when crossing lanes; null falls back to the account's first. */
+  frontierModelId: z.string().nullable(),
+  isDiscardConfirmed: z.boolean(),
 });
 
 /**
@@ -120,11 +129,21 @@ export function registerIpcHandlers(): void {
 
   registerHandler(IPC_CHANNEL.RUNS_LIST, prRefSchema, (ref) => listRunsForPr(ref));
   registerHandler(IPC_CHANNEL.RUNS_START, startRunsPayloadSchema, ({ ref, requests }) =>
-    startRuns(ref, requests),
+    enqueueRuns(ref, requests),
   );
   registerHandler(IPC_CHANNEL.RUNS_CANCEL, z.string(), (runId) => cancelRun(runId));
   registerHandler(IPC_CHANNEL.RUNS_PATCH, z.string(), (runId) => getRunPatch(runId));
   registerHandler(IPC_CHANNEL.RUNS_DISMISS, z.string(), (runId) => dismissRun(runId));
+  registerHandler(IPC_CHANNEL.RUNS_STOP_ALL, noPayloadSchema, () => stopAllRuns());
+  registerHandler(IPC_CHANNEL.RUNS_ESCALATE, escalateRunPayloadSchema, (request) =>
+    escalateRun(request),
+  );
+
+  // The settings card forces a refresh so a newly-granted model appears without a
+  // restart; the run path takes the cached catalog.
+  registerHandler(IPC_CHANNEL.MODELS_LIST, noPayloadSchema, () =>
+    listModelCatalog({ shouldRefresh: true }),
+  );
 
   registerHandler(IPC_CHANNEL.SANDBOX_USAGE, noPayloadSchema, () => readSandboxUsage());
   registerHandler(IPC_CHANNEL.SANDBOX_CLEANUP, noPayloadSchema, () => cleanupTerminalRuns());

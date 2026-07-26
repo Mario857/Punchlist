@@ -81,6 +81,8 @@ const FALLBACK_NAME_SEGMENT = 'unnamed';
 const WORKTREE_DIRTY_PATTERNS = ['contains modified or untracked files', 'is dirty'] as const;
 const WORKTREE_DIRTY_REMEDIATION =
   'Review the worktree, land or discard its changes, then remove it.';
+const WORKTREE_RESET_DIRTY_REMEDIATION =
+  'Land or discard the changes, or escalate again confirming that they may be discarded.';
 const BASE_REVISION_MISSING_REMEDIATION = 'Re-run the comment to rebuild its worktree.';
 const WORKTREE_MISSING_MESSAGE =
   'The run worktree is gone, so its agent can no longer resume in it.';
@@ -328,6 +330,43 @@ export async function revertToRevision(worktreePath: string, revision: string): 
   // Destructive by design, and safe because it only ever discards work that exists
   // inside the sandbox. This is not --force, which is banned everywhere.
   await simpleGit(worktreePath).raw([...RESET_HARD_ARGS, revision]);
+}
+
+export interface ResetWorktreeToBaseOptions {
+  /**
+   * A dirty worktree may hold hand-edits the reset would destroy, so it refuses until
+   * the caller says the loss is intended.
+   */
+  isDiscardConfirmed: boolean;
+}
+
+/**
+ * Puts a worktree back at the commit it was created from. Escalation runs a *fresh*
+ * agent rather than continuing the previous conversation, so it must also start from
+ * a clean tree — otherwise the stronger model inherits the weaker one's failed edits,
+ * which is the opposite of what escalation is for.
+ *
+ * Returns the base revision, so the caller does not have to read it a second time.
+ */
+export async function resetWorktreeToBase(
+  worktreePath: string,
+  options: ResetWorktreeToBaseOptions,
+): Promise<string> {
+  const baseRevision = await readBaseRevision(worktreePath);
+
+  if (!options.isDiscardConfirmed) {
+    const status = await simpleGit(worktreePath).status();
+    if (!status.isClean()) {
+      throw new AppError(
+        APP_ERROR_KIND.WORKTREE_DIRTY,
+        `${worktreePath} has changes that a reset to ${baseRevision} would discard.`,
+        WORKTREE_RESET_DIRTY_REMEDIATION,
+      );
+    }
+  }
+
+  await revertToRevision(worktreePath, baseRevision);
+  return baseRevision;
 }
 
 function toWorktreeRemovalError(error: unknown, worktreePath: string): Error {

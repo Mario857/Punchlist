@@ -1,11 +1,9 @@
 // A static import from the CJS main process, not `import()`: @cursor/sdk ships a CJS
 // build behind the `require` condition in its exports map, so the ESM-only carve-out in
 // the no-dynamic-imports rule does not apply here.
-import { Agent, Cursor, CursorAgentError } from '@cursor/sdk';
+import { Agent, CursorAgentError } from '@cursor/sdk';
 import type {
   AgentOptions,
-  ModelListItem,
-  ModelSelection,
   Run,
   RunOperation,
   RunResultStatus,
@@ -15,7 +13,9 @@ import type {
   ToolUseBlock,
 } from '@cursor/sdk';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import { FAILURE_REASON, type FailureReason } from '@shared/runState';
+import { toModelSelection } from './router';
 import { getCursorApiKey, getRunById, upsertRun } from './store';
 
 const AGENT_LOG_SCOPE = '[agent]';
@@ -75,32 +75,6 @@ const START_FAILURE_FALLBACK_MESSAGE = 'The Cursor agent could not be started.';
 const AGENT_ERROR_FALLBACK_MESSAGE = 'The agent reported an error without a message.';
 const CANCELLED_MESSAGE = 'The run was cancelled.';
 const TIMEOUT_MESSAGE = `The run exceeded its ${RUN_TIMEOUT_MINUTES}-minute limit and was cancelled.`;
-const NO_MODELS_MESSAGE = 'The Cursor account has no models available to the SDK.';
-const NO_MODELS_REMEDIATION = 'Check the plan and API key at cursor.com/settings, then retry.';
-
-/**
- * Cursor's free lane — Auto plus the first-party Composer and Grok models — is
- * unlimited on paid plans and does not draw down the included dollar pool, so every
- * tier defaults into it and a frontier model is only ever an explicit opt-in.
- *
- * This is a preference order matched against the live `Cursor.models.list()` output,
- * never a hardcoded id: the SDK docs warn that model lists evolve per account. The
- * tier-to-model mapping, and per-tier reasoning effort taken from each model's
- * `parameters`, move into src/main/router.ts in phase 3 — there is no router here.
- */
-const FREE_LANE_MODEL_PREFERENCE = [
-  'auto',
-  'composer-2.5',
-  'composer',
-  'cursor-grok',
-  'grok',
-] as const;
-
-interface ResolvedModel {
-  selection: ModelSelection;
-  /** True when the choice could not be confirmed to sit in the free lane. */
-  isPoolSpending: boolean;
-}
 
 export const AGENT_OUTCOME_KIND = {
   COMPLETED: 'completed',
@@ -143,6 +117,12 @@ interface AgentTurnBase {
   worktreePath: string;
   message: string;
   /**
+   * Resolved by router.ts and handed in, never chosen here. Which model a tier maps to
+   * and which lane it bills against is a routing and cost decision; this module only
+   * spends what it is given, and reports back what that was.
+   */
+  model: ResolvedModel;
+  /**
    * Injected so the orchestrator owns transport: this module never imports ipc.ts or
    * BrowserWindow, and streaming stays a callback rather than a channel.
    */
@@ -171,7 +151,6 @@ type AgentStart =
 
 interface StartedAgentTurn {
   agent: SDKAgent;
-  model: ResolvedModel;
   run: Run;
 }
 
@@ -215,64 +194,6 @@ function elapsedMs(startedAtMs: number): number {
   return Date.now() - startedAtMs;
 }
 
-function toModelNames(model: ModelListItem): string[] {
-  return [model.id, ...(model.aliases ?? [])].map((name) => name.toLowerCase());
-}
-
-function findFreeLaneModel(models: readonly ModelListItem[]): ModelListItem | null {
-  for (const preferred of FREE_LANE_MODEL_PREFERENCE) {
-    const exact = models.find((model) => toModelNames(model).includes(preferred));
-    if (exact !== undefined) return exact;
-  }
-
-  // A second pass on families rather than exact ids, so a future `composer-3` is still
-  // recognised as free-lane without shipping an app update to name it.
-  for (const preferred of FREE_LANE_MODEL_PREFERENCE) {
-    const family = models.find((model) =>
-      toModelNames(model).some((name) => name.includes(preferred)),
-    );
-    if (family !== undefined) return family;
-  }
-
-  return null;
-}
-
-/**
- * Resolved once per session rather than per run: the list costs a round trip and the
- * account's models do not change between two runs of the same batch.
- */
-let cachedFreeLaneModel: ResolvedModel | null = null;
-
-async function resolveFreeLaneModel(apiKey: string): Promise<ResolvedModel> {
-  if (cachedFreeLaneModel !== null) return cachedFreeLaneModel;
-
-  const models = await Cursor.models.list({ apiKey });
-  if (models.length === 0) {
-    throw new AppError(APP_ERROR_KIND.AGENT_START_FAILED, NO_MODELS_MESSAGE, NO_MODELS_REMEDIATION);
-  }
-
-  const freeLane = findFreeLaneModel(models);
-  if (freeLane === null) {
-    // Falling back to the first listed model is better than failing the run, but it
-    // cannot be assumed free, and defaulting `isPoolSpending` to true is the safe way
-    // round for something the UI marks as spending the included pool.
-    console.warn(
-      AGENT_LOG_SCOPE,
-      `No free-lane model matched; falling back to ${models[0].id}, which may draw down the included pool.`,
-    );
-  }
-
-  // `params` are deliberately left unset: the model's default variant is correct until
-  // router.ts starts setting reasoning effort per tier.
-  const resolved: ResolvedModel =
-    freeLane === null
-      ? { selection: { id: models[0].id }, isPoolSpending: true }
-      : { selection: { id: freeLane.id }, isPoolSpending: false };
-
-  cachedFreeLaneModel = resolved;
-  return resolved;
-}
-
 function persistAgentStart(runId: string, agentId: string, model: ResolvedModel): void {
   const run = getRunById(runId);
   if (run === null) {
@@ -285,8 +206,8 @@ function persistAgentStart(runId: string, agentId: string, model: ResolvedModel)
   upsertRun({
     ...run,
     agentId,
-    model: model.selection.id,
-    isPoolSpending: model.isPoolSpending,
+    model: model.modelId,
+    isPoolSpending: isPoolSpending(model.lane),
     updatedAt: new Date().toISOString(),
   });
 }
@@ -312,7 +233,7 @@ async function createOrResumeAgent(
 ): Promise<SDKAgent> {
   const options: AgentOptions = {
     apiKey,
-    model: model.selection,
+    model: toModelSelection(model),
     name: AGENT_NAME,
     mode: AGENT_MODE_AGENT,
     // An empty `settingSources` keeps ambient user, project and team settings out of
@@ -335,20 +256,19 @@ async function startAgentTurn(
   turn: AgentTurnBase,
   apiKey: string,
 ): Promise<StartedAgentTurn> {
-  const model = await resolveFreeLaneModel(apiKey);
-  const agent = await createOrResumeAgent(start, turn.worktreePath, apiKey, model);
+  const agent = await createOrResumeAgent(start, turn.worktreePath, apiKey, turn.model);
 
   try {
     if (start.mode === AGENT_START_MODE.CREATE) {
       // Written before the run does any work: answering a decision after an app
       // restart goes through Agent.resume, which needs this id to exist.
-      persistAgentStart(start.runId, agent.agentId, model);
+      persistAgentStart(start.runId, agent.agentId, turn.model);
     }
 
     // Agent.create + agent.send, never Agent.prompt: prompt disposes the agent on
     // return, and revisions and decision replies both need the same conversation.
     const run = await agent.send(turn.message);
-    return { agent, model, run };
+    return { agent, run };
   } catch (error: unknown) {
     // The agent already holds a child process, so a failure between creating it and
     // getting a run back still has to dispose it before the error propagates.
@@ -460,8 +380,8 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     return {
       kind: AGENT_OUTCOME_KIND.FAILED,
       agentId: null,
-      model: null,
-      isPoolSpending: false,
+      model: turn.model.modelId,
+      isPoolSpending: isPoolSpending(turn.model.lane),
       transcript,
       durationMs: elapsedMs(startedAtMs),
       reason: FAILURE_REASON.START_FAILED,
@@ -473,15 +393,15 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
   try {
     started = await startAgentTurn(start, turn, apiKey);
   } catch (error: unknown) {
-    // Thrown before a run exists — a CursorAgentError for auth or config, a missing
-    // model list — means the run never started. That is a settings prompt in the UI,
-    // which is why it is a different reason from a run that started and then failed.
+    // Thrown before a run exists — a CursorAgentError for auth or config, a model that
+    // has left the account — means the run never started. That is a settings prompt in
+    // the UI, which is why it is a different reason from a run that started and failed.
     console.warn(AGENT_LOG_SCOPE, 'The agent never started.', describeErrorKind(error));
     return {
       kind: AGENT_OUTCOME_KIND.FAILED,
       agentId: null,
-      model: null,
-      isPoolSpending: false,
+      model: turn.model.modelId,
+      isPoolSpending: isPoolSpending(turn.model.lane),
       transcript,
       durationMs: elapsedMs(startedAtMs),
       reason: FAILURE_REASON.START_FAILED,
@@ -489,11 +409,11 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     };
   }
 
-  const { agent, model } = started;
+  const { agent } = started;
   const identity = {
     agentId: agent.agentId,
-    model: model.selection.id,
-    isPoolSpending: model.isPoolSpending,
+    model: turn.model.modelId,
+    isPoolSpending: isPoolSpending(turn.model.lane),
   };
 
   try {
