@@ -3,20 +3,29 @@ import { clamp } from '@renderer/lib/numbers';
 
 /** Which side of the handle the pane being resized is on. */
 export const PANE_EDGE = {
-  /** The pane is to the left, so dragging right widens it. */
+  /** Above or to the left of the handle, so dragging away from the origin widens it. */
   LEADING: 'leading',
-  /** The pane is to the right, so dragging right narrows it. */
+  /** Below or to the right, so dragging away from the origin narrows it. */
   TRAILING: 'trailing',
 } as const;
 
 export type PaneEdge = (typeof PANE_EDGE)[keyof typeof PANE_EDGE];
 
+/** The axis the drag moves along, which is perpendicular to the divider itself. */
+export const PANE_AXIS = {
+  HORIZONTAL: 'horizontal',
+  VERTICAL: 'vertical',
+} as const;
+
+export type PaneAxis = (typeof PANE_AXIS)[keyof typeof PANE_AXIS];
+
 export interface UsePaneDividerParams {
+  axis: PaneAxis;
   edge: PaneEdge;
-  width: number;
-  minWidth: number;
-  maxWidth: number;
-  onWidthChange: (width: number) => void;
+  size: number;
+  minSize: number;
+  maxSize: number;
+  onSizeChange: (size: number) => void;
 }
 
 interface UsePaneDividerResult {
@@ -29,15 +38,31 @@ interface UsePaneDividerResult {
 
 interface DragOrigin {
   pointerId: number;
-  clientX: number;
-  width: number;
+  position: number;
+  size: number;
 }
 
 const ARROW_LEFT_KEY = 'ArrowLeft';
 const ARROW_RIGHT_KEY = 'ArrowRight';
+const ARROW_UP_KEY = 'ArrowUp';
+const ARROW_DOWN_KEY = 'ArrowDown';
 const KEYBOARD_STEP = 16;
 /** Shift is the accelerator, so crossing a wide monitor is not forty keypresses. */
 const KEYBOARD_COARSE_STEP = 64;
+
+/** The pointer coordinate that matters; the other one is noise for this drag. */
+function toPointerPosition(event: PointerEvent<HTMLDivElement>, axis: PaneAxis): number {
+  return axis === PANE_AXIS.HORIZONTAL ? event.clientX : event.clientY;
+}
+
+/** The key that grows the pane, whichever axis it lives on. */
+function toGrowKey(axis: PaneAxis): string {
+  return axis === PANE_AXIS.HORIZONTAL ? ARROW_RIGHT_KEY : ARROW_DOWN_KEY;
+}
+
+function toShrinkKey(axis: PaneAxis): string {
+  return axis === PANE_AXIS.HORIZONTAL ? ARROW_LEFT_KEY : ARROW_UP_KEY;
+}
 
 /**
  * A drag is measured from where it started rather than accumulated per move event, so
@@ -45,21 +70,22 @@ const KEYBOARD_COARSE_STEP = 64;
  * having quietly drifted out of step with it.
  */
 export function usePaneDivider({
+  axis,
   edge,
-  width,
-  minWidth,
-  maxWidth,
-  onWidthChange,
+  size,
+  minSize,
+  maxSize,
+  onSizeChange,
 }: UsePaneDividerParams): UsePaneDividerResult {
   const dragOriginRef = useRef<DragOrigin | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const applyDelta = useCallback(
-    (startWidth: number, delta: number) => {
+    (startSize: number, delta: number) => {
       const signedDelta = edge === PANE_EDGE.LEADING ? delta : -delta;
-      onWidthChange(clamp(startWidth + signedDelta, minWidth, maxWidth));
+      onSizeChange(clamp(startSize + signedDelta, minSize, maxSize));
     },
-    [edge, minWidth, maxWidth, onWidthChange],
+    [edge, minSize, maxSize, onSizeChange],
   );
 
   const onPointerDown = useCallback(
@@ -67,19 +93,23 @@ export function usePaneDivider({
       // Without this the drag selects the text of whichever pane it passes over.
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
-      dragOriginRef.current = { pointerId: event.pointerId, clientX: event.clientX, width };
+      dragOriginRef.current = {
+        pointerId: event.pointerId,
+        position: toPointerPosition(event, axis),
+        size,
+      };
       setIsDragging(true);
     },
-    [width],
+    [axis, size],
   );
 
   const onPointerMove = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       const origin = dragOriginRef.current;
       if (origin === null) return;
-      applyDelta(origin.width, event.clientX - origin.clientX);
+      applyDelta(origin.size, toPointerPosition(event, axis) - origin.position);
     },
-    [applyDelta],
+    [applyDelta, axis],
   );
 
   const onPointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
@@ -92,12 +122,14 @@ export function usePaneDivider({
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== ARROW_LEFT_KEY && event.key !== ARROW_RIGHT_KEY) return;
+      const growKey = toGrowKey(axis);
+      const shrinkKey = toShrinkKey(axis);
+      if (event.key !== growKey && event.key !== shrinkKey) return;
       event.preventDefault();
       const step = event.shiftKey ? KEYBOARD_COARSE_STEP : KEYBOARD_STEP;
-      applyDelta(width, event.key === ARROW_RIGHT_KEY ? step : -step);
+      applyDelta(size, event.key === growKey ? step : -step);
     },
-    [applyDelta, width],
+    [applyDelta, axis, size],
   );
 
   return { isDragging, onPointerDown, onPointerMove, onPointerUp, onKeyDown };

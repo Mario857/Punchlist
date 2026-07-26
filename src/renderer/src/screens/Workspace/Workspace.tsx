@@ -9,18 +9,20 @@ import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
 import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
 import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
-import { LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
+import { BOTTOM_PANE_HEIGHT, LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
 import { PaneDivider } from './components/PaneDivider/PaneDivider';
-import { PANE_EDGE } from './components/PaneDivider/usePaneDivider';
+import { PANE_AXIS, PANE_EDGE } from './components/PaneDivider/usePaneDivider';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
 // The dividers carry the border now, so the panes no longer draw their own.
+const COLUMNS_CLASS = 'flex min-h-0 min-w-0 flex-1';
 const LEFT_PANE_CLASS = 'flex shrink-0 flex-col overflow-hidden';
 const CENTER_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
-const RIGHT_PANE_CLASS = 'shrink-0 overflow-y-auto';
+const RUN_PANE_CLASS = 'shrink-0 overflow-y-auto';
 const LEFT_DIVIDER_LABEL = 'Resize the comment list';
 const RIGHT_DIVIDER_LABEL = 'Resize the run pane';
+const BOTTOM_DIVIDER_LABEL = 'Resize the run pane';
 /** Focusable by the `e` shortcut, but never a stop in the normal tab order. */
 const PANE_FOCUS_TAB_INDEX = -1;
 const COMMENTS_ERROR_FALLBACK = 'Could not load comments for this pull request.';
@@ -39,11 +41,16 @@ export function Workspace() {
     commentTreeRef,
     diffPaneRef,
     leftPaneStyle,
-    rightPaneStyle,
+    runPaneStyle,
     leftPaneWidth,
     rightPaneWidth,
+    bottomPaneHeight,
     onLeftPaneWidthChange,
     onRightPaneWidthChange,
+    onBottomPaneHeightChange,
+    isRunPaneOnBottom,
+    runPanePlacementLabel,
+    onToggleRunPanePlacement,
     targetBranch,
     isLandingOpen,
     onTargetBranchChange,
@@ -116,40 +123,73 @@ export function Workspace() {
         </div>
       );
     }
-    return (
-      <div className="flex min-h-0 flex-1">
+    // Extracted so both placements render the same pane rather than two that can drift.
+    const runPane = (
+      /* tabIndex makes the pane a focus target for the `e` shortcut, without making it
+         a tab stop in the normal order. */
+      <div
+        className={RUN_PANE_CLASS}
+        style={runPaneStyle}
+        ref={diffPaneRef}
+        tabIndex={PANE_FOCUS_TAB_INDEX}
+      >
+        <RunPane commentId={selectedCommentId} />
+      </div>
+    );
+
+    const commentColumns = (
+      <div className={COLUMNS_CLASS}>
         <div className={LEFT_PANE_CLASS} style={leftPaneStyle}>
           {leftPane}
         </div>
         <PaneDivider
           label={LEFT_DIVIDER_LABEL}
+          axis={PANE_AXIS.HORIZONTAL}
           edge={PANE_EDGE.LEADING}
-          width={leftPaneWidth}
-          minWidth={LEFT_PANE_WIDTH.MIN}
-          maxWidth={LEFT_PANE_WIDTH.MAX}
-          onWidthChange={onLeftPaneWidthChange}
+          size={leftPaneWidth}
+          minSize={LEFT_PANE_WIDTH.MIN}
+          maxSize={LEFT_PANE_WIDTH.MAX}
+          onSizeChange={onLeftPaneWidthChange}
         />
         <div className={CENTER_PANE_CLASS}>
           <CommentDetail comment={selectedComment} />
         </div>
+      </div>
+    );
+
+    // Along the bottom the run pane spans the full window, which is the shape a patch
+    // actually wants: a diff is wide before it is tall.
+    if (isRunPaneOnBottom) {
+      return (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {commentColumns}
+          <PaneDivider
+            label={BOTTOM_DIVIDER_LABEL}
+            axis={PANE_AXIS.VERTICAL}
+            edge={PANE_EDGE.TRAILING}
+            size={bottomPaneHeight}
+            minSize={BOTTOM_PANE_HEIGHT.MIN}
+            maxSize={BOTTOM_PANE_HEIGHT.MAX}
+            onSizeChange={onBottomPaneHeightChange}
+          />
+          {runPane}
+        </div>
+      );
+    }
+
+    return (
+      <div className={COLUMNS_CLASS}>
+        {commentColumns}
         <PaneDivider
           label={RIGHT_DIVIDER_LABEL}
+          axis={PANE_AXIS.HORIZONTAL}
           edge={PANE_EDGE.TRAILING}
-          width={rightPaneWidth}
-          minWidth={RIGHT_PANE_WIDTH.MIN}
-          maxWidth={RIGHT_PANE_WIDTH.MAX}
-          onWidthChange={onRightPaneWidthChange}
+          size={rightPaneWidth}
+          minSize={RIGHT_PANE_WIDTH.MIN}
+          maxSize={RIGHT_PANE_WIDTH.MAX}
+          onSizeChange={onRightPaneWidthChange}
         />
-        {/* tabIndex makes the pane a focus target for the `e` shortcut, without
-            making it a tab stop in the normal order. */}
-        <div
-          className={RIGHT_PANE_CLASS}
-          style={rightPaneStyle}
-          ref={diffPaneRef}
-          tabIndex={PANE_FOCUS_TAB_INDEX}
-        >
-          <RunPane commentId={selectedCommentId} />
-        </div>
+        {runPane}
       </div>
     );
   })();
@@ -164,6 +204,8 @@ export function Workspace() {
         onRefreshComments={onRefreshComments}
         onShowShortcutHelp={onShowShortcutHelp}
         targetBranch={targetBranch}
+        runPanePlacementLabel={runPanePlacementLabel}
+        onToggleRunPanePlacement={onToggleRunPanePlacement}
         isLandingOpen={isLandingOpen}
         onTargetBranchChange={onTargetBranchChange}
         onToggleLanding={onToggleLanding}

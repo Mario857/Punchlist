@@ -13,6 +13,9 @@ interface Props {
   onRefreshComments: () => void;
   onShowShortcutHelp: () => void;
   targetBranch: string;
+  /** Names the placement the button would move to, so it reads as an action. */
+  runPanePlacementLabel: string;
+  onToggleRunPanePlacement: () => void;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
   onToggleLanding: () => void;
@@ -27,6 +30,8 @@ const TARGET_BRANCH_LABEL = 'Target branch';
 /** Says where a landing would go, not that anything has gone there. */
 const TARGET_BRANCH_TITLE =
   'Where an approved batch would land. Defaults to the branch this pull request is open against; the integration branch is pushed as its own branch, and this one is never pushed to directly.';
+const RUN_PANE_PLACEMENT_TITLE =
+  'Move the run pane between the right-hand column and a full-width row along the bottom. The bottom gives a patch the whole window; the side keeps the comment and its resolution in view together.';
 const OPEN_LANDING_LABEL = 'Review landing';
 const CLOSE_LANDING_LABEL = 'Back to comments';
 const TARGET_BRANCH_INPUT_CLASS =
@@ -40,6 +45,8 @@ export function WorkspaceTopBar({
   onRefreshComments,
   onShowShortcutHelp,
   targetBranch,
+  runPanePlacementLabel,
+  onToggleRunPanePlacement,
   isLandingOpen,
   onTargetBranchChange,
   onToggleLanding,
@@ -56,6 +63,8 @@ export function WorkspaceTopBar({
   const isPickerToggleDisabled = selectedPr === null && isPickerOpen;
   const isRefreshDisabled = selectedPr === null;
   const isTargetBranchDisabled = selectedPr === null;
+  // Nothing to rearrange until there are panes to rearrange.
+  const isLayoutToggleDisabled = selectedPr === null;
   const landingLabel = isLandingOpen ? CLOSE_LANDING_LABEL : OPEN_LANDING_LABEL;
 
   return (
@@ -96,6 +105,15 @@ export function WorkspaceTopBar({
           isDisabled={isRefreshDisabled}
           onClick={onRefreshComments}
         />
+        <Button
+          variant={BUTTON_VARIANT.GHOST}
+          size={BUTTON_SIZE.SM}
+          isDisabled={isLayoutToggleDisabled}
+          title={RUN_PANE_PLACEMENT_TITLE}
+          onClick={onToggleRunPanePlacement}
+        >
+          {runPanePlacementLabel}
+        </Button>
         <Button
           variant={BUTTON_VARIANT.GHOST}
           size={BUTTON_SIZE.SM}

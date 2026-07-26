@@ -19,6 +19,7 @@ import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useRe
 import { prRefKey } from '@shared/discovery';
 import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
+import { RUN_PANE_PLACEMENT } from '@shared/settings';
 
 /**
  * Only reached before the PR's own base branch is known — not every repository
@@ -26,6 +27,10 @@ import { useSessionStore } from '@renderer/stores/sessionStore';
  * and its status arriving, never a claim about where the landing should go.
  */
 const FALLBACK_TARGET_BRANCH = 'main';
+
+/** Says where the pane would go, not where it is — it is an action, not a status. */
+const MOVE_TO_BOTTOM_LABEL = 'Run pane to bottom';
+const MOVE_TO_SIDE_LABEL = 'Run pane to side';
 
 /** A stable identity, so an absent result does not remount the tree every render. */
 const EMPTY_COMMENTS: PrComment[] = [];
@@ -43,13 +48,19 @@ interface UseWorkspaceResult {
   runStateByCommentId: Readonly<Record<string, RunState>>;
   commentTreeRef: Ref<CommentTreeNavigationHandle>;
   diffPaneRef: Ref<HTMLDivElement>;
-  /** A persisted pixel width cannot be a utility class, so it arrives as a style. */
+  /** A persisted pixel size cannot be a utility class, so it arrives as a style. */
   leftPaneStyle: CSSProperties;
-  rightPaneStyle: CSSProperties;
+  /** Width or height depending on placement, decided here so markup does not branch. */
+  runPaneStyle: CSSProperties;
   leftPaneWidth: number;
   rightPaneWidth: number;
+  bottomPaneHeight: number;
   onLeftPaneWidthChange: (width: number) => void;
   onRightPaneWidthChange: (width: number) => void;
+  onBottomPaneHeightChange: (height: number) => void;
+  isRunPaneOnBottom: boolean;
+  runPanePlacementLabel: string;
+  onToggleRunPanePlacement: () => void;
   targetBranch: string;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
@@ -78,8 +89,10 @@ export function useWorkspace(): UseWorkspaceResult {
   const [isLandingOpen, setIsLandingOpen] = useState(false);
   const targetBranchByPr = useSessionStore((state) => state.targetBranchByPr);
   const setTargetBranch = useSessionStore((state) => state.setTargetBranch);
-  const paneWidths = useSessionStore((state) => state.paneWidths);
-  const setPaneWidths = useSessionStore((state) => state.setPaneWidths);
+  const paneSizes = useSessionStore((state) => state.paneSizes);
+  const setPaneSizes = useSessionStore((state) => state.setPaneSizes);
+  const runPanePlacement = useSessionStore((state) => state.runPanePlacement);
+  const setRunPanePlacement = useSessionStore((state) => state.setRunPanePlacement);
 
   const {
     prComments,
@@ -121,17 +134,34 @@ export function useWorkspace(): UseWorkspaceResult {
     runId: selectedRun?.id ?? null,
   });
 
-  const leftPaneStyle = useMemo(() => ({ width: paneWidths.left }), [paneWidths.left]);
-  const rightPaneStyle = useMemo(() => ({ width: paneWidths.right }), [paneWidths.right]);
+  const isRunPaneOnBottom = runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM;
+
+  const leftPaneStyle = useMemo(() => ({ width: paneSizes.left }), [paneSizes.left]);
+  const runPaneStyle = useMemo(
+    () => (isRunPaneOnBottom ? { height: paneSizes.bottom } : { width: paneSizes.right }),
+    [isRunPaneOnBottom, paneSizes.bottom, paneSizes.right],
+  );
 
   const onLeftPaneWidthChange = useCallback(
-    (left: number) => setPaneWidths({ left }),
-    [setPaneWidths],
+    (left: number) => setPaneSizes({ left }),
+    [setPaneSizes],
   );
   const onRightPaneWidthChange = useCallback(
-    (right: number) => setPaneWidths({ right }),
-    [setPaneWidths],
+    (right: number) => setPaneSizes({ right }),
+    [setPaneSizes],
   );
+  const onBottomPaneHeightChange = useCallback(
+    (bottom: number) => setPaneSizes({ bottom }),
+    [setPaneSizes],
+  );
+
+  const onToggleRunPanePlacement = useCallback(() => {
+    setRunPanePlacement(
+      runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM
+        ? RUN_PANE_PLACEMENT.RIGHT
+        : RUN_PANE_PLACEMENT.BOTTOM,
+    );
+  }, [runPanePlacement, setRunPanePlacement]);
 
   const onDismissSelectedRun = useCallback(() => {
     if (selectedRun === null) return;
@@ -175,11 +205,16 @@ export function useWorkspace(): UseWorkspaceResult {
     commentTreeRef,
     diffPaneRef,
     leftPaneStyle,
-    rightPaneStyle,
-    leftPaneWidth: paneWidths.left,
-    rightPaneWidth: paneWidths.right,
+    runPaneStyle,
+    leftPaneWidth: paneSizes.left,
+    rightPaneWidth: paneSizes.right,
+    bottomPaneHeight: paneSizes.bottom,
     onLeftPaneWidthChange,
     onRightPaneWidthChange,
+    onBottomPaneHeightChange,
+    isRunPaneOnBottom,
+    runPanePlacementLabel: isRunPaneOnBottom ? MOVE_TO_SIDE_LABEL : MOVE_TO_BOTTOM_LABEL,
+    onToggleRunPanePlacement,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,
