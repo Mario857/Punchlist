@@ -6,6 +6,7 @@ import {
   type SandboxConfirmation,
 } from '@main/sandbox';
 import { AUDIT_ACTION } from '@shared/audit';
+import type { PrStatus } from '@shared/automation';
 import {
   COMMENT_KIND,
   type CommentAuthor,
@@ -93,6 +94,22 @@ query PrConversationComments($owner: String!, $repo: String!, $number: Int!, $pa
           author { login __typename }
         }
       }
+    }
+  }
+}
+`;
+
+/**
+ * The watcher's first stage. `headRefOid` is a scalar on the pull request itself, so
+ * the whole check is one unpaginated object rather than a walk over commits — which is
+ * the point: the three queries above only run when `updatedAt` here has moved.
+ */
+const PR_STATUS_QUERY = `
+query PrStatus($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) {
+    pullRequest(number: $number) {
+      updatedAt
+      headRefOid
     }
   }
 }
@@ -206,6 +223,17 @@ const conversationCommentPagesSchema = z.array(
     }),
   }),
 );
+
+const prStatusResultSchema = z.object({
+  data: z.object({
+    repository: z.object({
+      pullRequest: z.object({
+        updatedAt: z.string(),
+        headRefOid: z.string(),
+      }),
+    }),
+  }),
+});
 
 /**
  * `isResolved` is pinned to the state the mutation is supposed to have produced, so a
@@ -421,6 +449,37 @@ export async function fetchPrComments(ref: PrRef): Promise<PrComment[]> {
   ]);
 
   return [...inlineThreads, ...reviewBodies, ...conversationComments].sort(compareByCreatedAt);
+}
+
+/**
+ * The cheap first stage of the watcher's poll: one small query the watcher can afford
+ * every sixty seconds, whose result decides whether `fetchPrComments` runs at all.
+ *
+ * Built like the mutations rather than like the queries above — no `--paginate` and no
+ * `--slurp`, because a single object has no pages to follow and the output is one JSON
+ * object rather than an array of them.
+ */
+export async function fetchPrStatus(ref: PrRef): Promise<PrStatus> {
+  const { owner, repo } = splitRepoKey(ref.repoKey);
+  const result = await runGhJson(
+    [
+      'api',
+      'graphql',
+      '-f',
+      `query=${PR_STATUS_QUERY}`,
+      '-f',
+      `owner=${owner}`,
+      '-f',
+      `repo=${repo}`,
+      // -F sends a typed value; -f would send this as String and fail the Int! variable.
+      '-F',
+      `number=${ref.number}`,
+    ],
+    prStatusResultSchema,
+  );
+
+  const { updatedAt, headRefOid } = result.data.repository.pullRequest;
+  return { updatedAt, headSha: headRefOid };
 }
 
 /**
