@@ -1,18 +1,27 @@
-import { AGENT_OUTCOME_KIND, executeAgentRun } from '@main/agent';
-import { readAgentSummary, watchForDecision, type DecisionWatch } from '@main/decision';
+import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
+import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
+import {
+  clearAgentDecision,
+  readAgentSummary,
+  watchForDecision,
+  type DecisionWatch,
+} from '@main/decision';
 import { buildResolutionPrompt } from '@main/prompt';
 import {
   canTransitionRunState,
   createRunRecord,
   patchRun,
   recordRunFailure,
+  recordRunRevision,
   transitionRun,
   type RunTransitionPatch,
 } from '@main/runState';
 import { resolveLocalRepoPath } from '@main/discovery';
+import { resolveTierModel } from '@main/router';
 import { resolveGitIdentity } from '@main/sandbox';
 import { deleteRun, getRunById, getRuns } from '@main/store';
 import {
+  commitWorktree,
   createRunWorktree,
   readCandidatePatch,
   readSandboxUsage,
@@ -24,9 +33,12 @@ import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import {
   FAILURE_REASON,
+  REVISION_KIND,
   RUN_STATE,
   isTerminalRunState,
   type ModelTier,
+  type RevisionKind,
+  type RunState,
   type RunTrigger,
 } from '@shared/runState';
 import {
@@ -48,6 +60,17 @@ const DISMISS_NOT_TERMINAL_MESSAGE =
 const NO_LOCAL_CLONE_MESSAGE =
   'This pull request has no local clone, and a resolution runs in a git worktree.';
 const NO_LOCAL_CLONE_REMEDIATION = 'Register the repository in Settings, then try again.';
+const NO_AGENT_MESSAGE = 'This run has no agent to continue, so it cannot be answered.';
+const NO_AGENT_REMEDIATION = 'Run the comment again to start a fresh agent.';
+const NOT_CONTINUABLE_MESSAGE =
+  'This run is not waiting for input, so there is nothing to continue.';
+
+/** needsDecision is waiting on a person; ready and approved accept a follow-up. */
+const CONTINUABLE_RUN_STATES: readonly RunState[] = [
+  RUN_STATE.NEEDS_DECISION,
+  RUN_STATE.READY,
+  RUN_STATE.APPROVED,
+];
 const RESTART_NOT_RETRYABLE_MESSAGE =
   'Only a finished run can be retried, because a restart discards the work in progress.';
 const MALFORMED_DECISION_MESSAGE =
@@ -283,6 +306,108 @@ export async function restartRun(input: RestartRunInput): Promise<RunRecord> {
     summary: null,
   });
   return executeRun(running, input.comment, input.model);
+}
+
+/**
+ * An agent handling one send cannot take another, so a second prompt has to queue
+ * rather than race it. Keyed by run, because serializing globally would make one
+ * slow revision block every other run's follow-up.
+ */
+const continuationChains = new Map<string, Promise<unknown>>();
+
+function serializePerRun<T>(runId: string, work: () => Promise<T>): Promise<T> {
+  const previous = continuationChains.get(runId) ?? Promise.resolve();
+  // Chained off the settled result, so one failed continuation does not poison every
+  // later one for the same run.
+  const next = previous.then(work, work);
+  continuationChains.set(
+    runId,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+/**
+ * The decision reply and the whole-patch follow-up are the same mechanism: both are
+ * `agent.send` on the *same* agent, so context is never rebuilt — it already knows
+ * the comment, the code, and what it tried. Which one this is follows from the run's
+ * state rather than a caller-supplied label the two could disagree about.
+ */
+function resolveContinuation(run: RunRecord): { nextState: RunState; revisionKind: RevisionKind } {
+  if (run.state === RUN_STATE.NEEDS_DECISION) {
+    return {
+      nextState: RUN_STATE.RUNNING,
+      revisionKind: REVISION_KIND.DECISION_CONTINUATION,
+    };
+  }
+  // revising rather than running, so the right pane keeps showing the existing diff
+  // dimmed instead of swapping to a transcript and discarding what was being read.
+  return { nextState: RUN_STATE.REVISING, revisionKind: REVISION_KIND.FOLLOW_UP };
+}
+
+export async function continueRun(runId: string, message: string): Promise<RunRecord> {
+  return serializePerRun(runId, async () => {
+    const run = requireRun(runId);
+    if (run.agentId === null) {
+      throw new AppError(APP_ERROR_KIND.NOT_FOUND, NO_AGENT_MESSAGE, NO_AGENT_REMEDIATION);
+    }
+    if (!CONTINUABLE_RUN_STATES.includes(run.state)) {
+      throw new AppError(APP_ERROR_KIND.NOT_FOUND, NOT_CONTINUABLE_MESSAGE, null);
+    }
+
+    const { nextState, revisionKind } = resolveContinuation(run);
+    // Consumed, so it cannot re-trigger needsDecision the moment the agent resumes.
+    await clearAgentDecision(run.worktreePath);
+
+    const model = await resolveTierModel(run.tier);
+    advance(run, nextState, { decision: null });
+    const controller = new AbortController();
+    activeRunControllers.set(runId, controller);
+
+    try {
+      const outcome = await resumeAgentRun({
+        agentId: run.agentId,
+        worktreePath: run.worktreePath,
+        message,
+        model,
+        onTranscriptChunk: (chunk) => emitTranscriptChunk(runId, chunk),
+        signal: controller.signal,
+      });
+
+      const afterAgent = patchRun(requireRun(runId), { transcript: outcome.transcript });
+      if (outcome.kind === AGENT_OUTCOME_KIND.FAILED) {
+        const failed = recordRunFailure(afterAgent, outcome.reason, outcome.errorMessage);
+        emitStateChanged(failed);
+        return failed;
+      }
+
+      // Every change after the agent's first result is its own revision, which is
+      // what makes revert-to-revision possible later.
+      const revised = recordRunRevision(afterAgent);
+      await commitWorktree(run.worktreePath, REVISION_COMMIT_SUBJECT[revisionKind]);
+
+      const summary = await readAgentSummary(run.worktreePath);
+      const patch = await readCandidatePatch(revised);
+      const settled = patch.isEmpty ? RUN_STATE.NO_ACTION_NEEDED : RUN_STATE.READY;
+      return advance(revised, settled, { summary });
+    } catch (error: unknown) {
+      const current = getRunById(runId);
+      if (current === null) throw error;
+      console.error(
+        `${RUN_LOG_SCOPE} continuation failed`,
+        error instanceof Error ? error.name : 'unknown',
+      );
+      const failed = recordRunFailure(
+        current,
+        FAILURE_REASON.AGENT_ERROR,
+        error instanceof Error ? error.message : String(error),
+      );
+      emitStateChanged(failed);
+      return failed;
+    } finally {
+      activeRunControllers.delete(runId);
+    }
+  });
 }
 
 export function listRunsForPr(ref: PrRef): RunRecord[] {

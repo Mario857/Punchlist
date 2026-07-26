@@ -4,6 +4,7 @@ import type { AppErrorPayload, IpcResult } from './errors';
 import type { ModelCatalogEntry } from './models';
 import type {
   CandidatePatch,
+  ContinueRunRequest,
   EscalateRunRequest,
   RunEvent,
   RunRecord,
@@ -43,6 +44,7 @@ export const IPC_CHANNEL = {
   RUNS_DISMISS: 'runs:dismiss',
   RUNS_STOP_ALL: 'runs:stopAll',
   RUNS_ESCALATE: 'runs:escalate',
+  RUNS_CONTINUE: 'runs:continue',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
@@ -118,6 +120,12 @@ export interface RunsApi {
   dismiss(runId: string): Promise<IpcResult<void>>;
   /** Cancels every active run at once, so a bad batch needs one action, not twelve. */
   stopAll(): Promise<IpcResult<RunRecord[]>>;
+  /**
+   * Continues the run's existing agent: the decision reply and the whole-patch
+   * follow-up are one mechanism, so context is never rebuilt. Which one it is
+   * follows from the run's state rather than a caller-supplied label.
+   */
+  continueRun(request: ContinueRunRequest): Promise<IpcResult<RunRecord>>;
   /**
    * Retries a hard failure with a fresh agent against the worktree reset to base.
    * `shouldUseFrontier` crosses into the pool-spending lane and is never automatic.

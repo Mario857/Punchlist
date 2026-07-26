@@ -9,6 +9,7 @@ import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
   cancelRun,
   cleanupTerminalRuns,
+  continueRun,
   dismissRun,
   getRunPatch,
   listRunsForPr,
@@ -28,6 +29,9 @@ import { getGhAuthStatus } from './ghCli';
 import { fetchPrComments } from './github';
 import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettings } from './store';
 
+/** An empty follow-up would resume the agent with nothing to act on. */
+const MIN_CONTINUATION_MESSAGE_LENGTH = 1;
+
 /** Channels that take no payload; `invoke` with no argument arrives as undefined. */
 const noPayloadSchema = z.undefined();
 
@@ -40,6 +44,11 @@ const startRunsPayloadSchema = z.object({
       tier: z.enum(MODEL_TIER).nullable(),
     }),
   ),
+});
+
+const continueRunPayloadSchema = z.object({
+  runId: z.string(),
+  message: z.string().min(MIN_CONTINUATION_MESSAGE_LENGTH),
 });
 
 const escalateRunPayloadSchema = z.object({
@@ -135,6 +144,9 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_PATCH, z.string(), (runId) => getRunPatch(runId));
   registerHandler(IPC_CHANNEL.RUNS_DISMISS, z.string(), (runId) => dismissRun(runId));
   registerHandler(IPC_CHANNEL.RUNS_STOP_ALL, noPayloadSchema, () => stopAllRuns());
+  registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, ({ runId, message }) =>
+    continueRun(runId, message),
+  );
   registerHandler(IPC_CHANNEL.RUNS_ESCALATE, escalateRunPayloadSchema, (request) =>
     escalateRun(request),
   );

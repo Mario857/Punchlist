@@ -97,6 +97,12 @@ export interface StartRunRequest {
   tier: ModelTier | null;
 }
 
+export interface ContinueRunRequest {
+  runId: string;
+  /** The answer to the agent's question, or the follow-up on the whole patch. */
+  message: string;
+}
+
 export interface EscalateRunRequest {
   runId: string;
   /**
