@@ -57,11 +57,17 @@
 
 ### Phase 3 — Parallel queue and routing
 
-- [ ] `model-router` — Build src/main/router.ts: pure heuristic mapping PrComment to mechanical/standard/complex from anchoring, body length and verb, diffHunk size, design vocabulary, and reply depth; resolve tier to model via Cursor.models.list() with the mapping configurable in settings, never hardcoded; all tiers default to the unlimited lane (Auto / Composer 2.5)
-- [ ] `tier-badges` — Show the suggested tier as a badge on every comment before running, overridable per comment and per batch; mark any frontier-model selection as pool-spending so cost is never incurred accidentally
-- [ ] `escalation` — Auto-escalate only on result.status error or an empty diff, and only within the unlimited lane by raising reasoning effort; crossing to a frontier model is a manual, labelled action; escalation starts a fresh agent against the worktree reset to base, warning first if hand-edits would be discarded
-- [ ] `parallel-queue` — Build src/main/queue.ts concurrency-capped scheduler calling the router per comment; queue UI with live per-run state badges and cancel
-- [ ] `stop-all-and-timeout` — Stop-all control cancelling every active run (guarded by run.supports cancel) with disposal; per-run max duration after which the run is cancelled and marked failed with a timeout reason distinct from an agent error
+- [x] `model-router` — Build src/main/router.ts: pure heuristic mapping PrComment to mechanical/standard/complex from anchoring, body length and verb, diffHunk size, design vocabulary, and reply depth; resolve tier to model via Cursor.models.list() with the mapping configurable in settings, never hardcoded; all tiers default to the unlimited lane (Auto / Composer 2.5)
+- [x] `tier-badges` — Show the suggested tier as a badge on every comment before running, overridable per comment and per batch; mark any frontier-model selection as pool-spending so cost is never incurred accidentally
+- [x] `escalation` — Auto-escalate only on result.status error or an empty diff, and only within the unlimited lane by raising reasoning effort; crossing to a frontier model is a manual, labelled action; escalation starts a fresh agent against the worktree reset to base, warning first if hand-edits would be discarded
+- [x] `parallel-queue` — Build src/main/queue.ts concurrency-capped scheduler calling the router per comment; queue UI with live per-run state badges and cancel
+- [x] `stop-all-and-timeout` — Stop-all control cancelling every active run (guarded by run.supports cancel) with disposal; per-run max duration after which the run is cancelled and marked failed with a timeout reason distinct from an agent error
+
+#### As built: three notes
+
+- **The tier heuristic lives in `src/shared/tier.ts`, not `src/main/router.ts`.** The tier renders as a badge on every comment *before* anything runs, so the renderer needs it; an IPC round trip per row for a pure function over data the renderer already holds would be absurd. `router.ts` keeps the SDK-facing tier-to-model resolution, which is the half that genuinely belongs in main.
+- **Reasoning effort is not on `RunRecord`,** so repeated *manual* escalations climb the effort ladder through a session-scoped map in `queue.ts`. After a restart the ladder restarts from the tier's configured position. The clean fix is a field on the run record, written where `agentId` already is; it was not worth the cross-file churn mid-phase. Attribution of spend is unaffected — tier, model and lane are all persisted.
+- **`resetWorktreeToBase` is `reset --hard` only,** so an untracked file left behind by a failed attempt survives into the escalated run. Removing it would need `git clean -f`, and the never-force rule outranks the tidiness. Worth revisiting only if it produces a real misdiagnosis in practice.
 
 ### Phase 4 — Revise
 
