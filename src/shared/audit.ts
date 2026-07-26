@@ -14,6 +14,7 @@ export const AUDIT_ACTION = {
   THREAD_UNRESOLVED: 'threadUnresolved',
   REPLY_POSTED: 'replyPosted',
   LANDING_UNDONE: 'landingUndone',
+  CONVENTIONS_EXPORTED: 'conventionsExported',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTION)[keyof typeof AUDIT_ACTION];

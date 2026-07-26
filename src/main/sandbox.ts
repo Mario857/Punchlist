@@ -238,6 +238,8 @@ export const SANDBOX_EXIT_ACTION = {
   RESOLVE_REVIEW_THREAD: 'resolveReviewThread',
   UNRESOLVE_REVIEW_THREAD: 'unresolveReviewThread',
   POST_REPLY: 'postReply',
+  /** Writing distilled conventions into the user's repository. */
+  EXPORT_CONVENTIONS: 'exportConventions',
 } as const;
 
 export type SandboxExitAction = (typeof SANDBOX_EXIT_ACTION)[keyof typeof SANDBOX_EXIT_ACTION];

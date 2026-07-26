@@ -5,6 +5,12 @@ import { z } from 'zod';
 import { localRepoSchema, type LocalRepo } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { DEFAULT_WATCHER_STATE, watcherStateSchema, type WatcherState } from '@shared/automation';
+import {
+  conventionEvidenceSchema,
+  conventionRuleSchema,
+  type ConventionEvidence,
+  type ConventionRule,
+} from '@shared/conventions';
 import { runRecordSchema, type RunRecord } from '@shared/runs';
 import {
   appSettingsSchema,
@@ -38,6 +44,15 @@ const localReposSchema = z.array(localRepoSchema);
 
 const RUN_NOT_FOUND_INDEX = -1;
 
+const conventionsStateSchema = z.object({
+  evidence: z.array(conventionEvidenceSchema).default([]),
+  rules: z.array(conventionRuleSchema).default([]),
+});
+
+type ConventionsState = z.infer<typeof conventionsStateSchema>;
+
+const DEFAULT_CONVENTIONS_STATE: ConventionsState = conventionsStateSchema.parse({});
+
 /**
  * The persisted store is one of the three mandated Zod boundaries — this file may
  * have been written by an older version of the app. Every section defaults, so a
@@ -58,6 +73,12 @@ const persistedStateSchema = z.object({
    * re-trigger history: every comment on the PR would otherwise look new.
    */
   watcher: watcherStateSchema.default(DEFAULT_WATCHER_STATE),
+  /**
+   * Comment evidence and the rules distilled from it. Evidence quotes review
+   * comments, so it is as sensitive as a transcript: stored and rendered, never
+   * logged.
+   */
+  conventions: conventionsStateSchema.default(DEFAULT_CONVENTIONS_STATE),
 });
 
 type PersistedState = z.infer<typeof persistedStateSchema>;
@@ -192,6 +213,22 @@ export function upsertRun(run: RunRecord): RunRecord {
 export function deleteRun(runId: string): void {
   const runs = cachedState.runs.filter((run) => run.id !== runId);
   commitState({ ...cachedState, runs });
+}
+
+export function getConventionEvidence(): ConventionEvidence[] {
+  return cachedState.conventions.evidence;
+}
+
+export function getConventionRules(): ConventionRule[] {
+  return cachedState.conventions.rules;
+}
+
+export function setConventionsState(
+  evidence: readonly ConventionEvidence[],
+  rules: readonly ConventionRule[],
+): void {
+  const conventions = conventionsStateSchema.parse({ evidence, rules });
+  commitState({ ...cachedState, conventions });
 }
 
 export function getWatcherState(): WatcherState {

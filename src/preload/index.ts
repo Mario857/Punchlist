@@ -5,6 +5,12 @@ import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
 import type { AuditEntry } from '@shared/audit';
 import type {
+  ConventionExportPreview,
+  ConventionRule,
+  ConventionState,
+  ExportConventionsRequest,
+} from '@shared/conventions';
+import type {
   AssembleLandingRequest,
   ExecuteLandingRequest,
   LandingPreview,
@@ -125,6 +131,18 @@ const api: AirlockApi = {
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDOABLE),
     undo: (request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>> =>
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDO, request),
+  },
+  conventions: {
+    list: (): Promise<IpcResult<ConventionRule[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CONVENTIONS_LIST),
+    distill: (): Promise<IpcResult<ConventionRule[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CONVENTIONS_DISTILL),
+    setState: (ruleId: string, state: ConventionState): Promise<IpcResult<ConventionRule[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CONVENTIONS_SET_STATE, { ruleId, state }),
+    previewExport: (repoKey: string): Promise<IpcResult<ConventionExportPreview>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CONVENTIONS_EXPORT_PREVIEW, repoKey),
+    export: (request: ExportConventionsRequest): Promise<IpcResult<ConventionRule[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CONVENTIONS_EXPORT, request),
   },
   audit: {
     list: (): Promise<IpcResult<AuditEntry[]>> => ipcRenderer.invoke(IPC_CHANNEL.AUDIT_LIST),

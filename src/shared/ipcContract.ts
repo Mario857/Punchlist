@@ -3,6 +3,12 @@ import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
 import type { AuditEntry } from './audit';
 import type {
+  ConventionExportPreview,
+  ConventionRule,
+  ConventionState,
+  ExportConventionsRequest,
+} from './conventions';
+import type {
   AssembleLandingRequest,
   ExecuteLandingRequest,
   LandingPreview,
@@ -73,6 +79,11 @@ export const IPC_CHANNEL = {
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
   RUNS_SECOND_OPINION: 'runs:secondOpinion',
   AUDIT_LIST: 'audit:list',
+  CONVENTIONS_LIST: 'conventions:list',
+  CONVENTIONS_DISTILL: 'conventions:distill',
+  CONVENTIONS_SET_STATE: 'conventions:setState',
+  CONVENTIONS_EXPORT_PREVIEW: 'conventions:exportPreview',
+  CONVENTIONS_EXPORT: 'conventions:export',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
@@ -230,6 +241,25 @@ export interface LandingApi {
   undo(request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>>;
 }
 
+export interface ConventionsApi {
+  list(): Promise<IpcResult<ConventionRule[]>>;
+  /**
+   * One free-lane agent over the undistilled evidence. Batched rather than
+   * per-comment: a call per comment could not deduplicate, and would emit twenty
+   * near-identical naming rules because each call sees one comment.
+   */
+  distill(): Promise<IpcResult<ConventionRule[]>>;
+  /** Confirm, reject or edit. A rejection is remembered so it is never re-proposed. */
+  setState(ruleId: string, state: ConventionState): Promise<IpcResult<ConventionRule[]>>;
+  previewExport(repoKey: string): Promise<IpcResult<ConventionExportPreview>>;
+  /**
+   * Writes into the user's real repository, so it is gated and audited like any
+   * other action that leaves the sandbox — and recorded as a deliberate exception to
+   * the protected-path rule that otherwise guards `.cursor/rules/**`.
+   */
+  export(request: ExportConventionsRequest): Promise<IpcResult<ConventionRule[]>>;
+}
+
 export interface AuditApi {
   /** Append-only and newest-first: the history of what the tool did to your repo. */
   list(): Promise<IpcResult<AuditEntry[]>>;
@@ -261,6 +291,7 @@ export interface AirlockApi {
   cursorKey: CursorKeyApi;
   runs: RunsApi;
   landing: LandingApi;
+  conventions: ConventionsApi;
   audit: AuditApi;
   autoMode: AutoModeApi;
   models: ModelsApi;
