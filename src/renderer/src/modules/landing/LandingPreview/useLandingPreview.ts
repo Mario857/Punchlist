@@ -1,0 +1,378 @@
+import { useMemo, useState, type ChangeEvent } from 'react';
+import type { PrComment } from '@shared/comments';
+import type { PrRef } from '@shared/discovery';
+import { selectUnacknowledgedFlags, type GuardrailFlag } from '@shared/guardrails';
+import type {
+  AssembleLandingRequest,
+  LandingCommitPlan,
+  LandingConflict,
+  LandingThread,
+} from '@shared/landing';
+import { keyBy } from '@renderer/lib/collections';
+import { isDefined } from '@renderer/lib/guards';
+import { isIpcError } from '@renderer/lib/unwrapIpcResult';
+import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
+import { useQueryLandingPreview } from '@renderer/modules/landing/useQueryLandingPreview';
+import {
+  ASSEMBLE_ERROR_FALLBACK,
+  ASSEMBLING_LABEL,
+  buildAcknowledgeLabel,
+  buildConflictPathsLabel,
+  buildGuardrailStatusLabel,
+  buildOutstandingFlagsBlocker,
+  COMBINED_DIFF_EMPTY_LABEL,
+  COMBINED_DIFF_EXPLANATION,
+  COMBINED_DIFF_HEADING,
+  COMMENT_LINK_LABEL,
+  COMMIT_BODY_LABEL,
+  COMMIT_BODY_ROW_COUNT,
+  COMMIT_SUBJECT_LABEL,
+  COMMITS_EMPTY_LABEL,
+  COMMITS_EXPLANATION,
+  COMMITS_HEADING,
+  CONFIRM_HEADING,
+  CONFIRM_LABEL,
+  CONFLICTS_EXPLANATION,
+  CONFLICTS_HEADING,
+  EXECUTION_UNAVAILABLE_NOTICE,
+  GUARDRAIL_ACKNOWLEDGED_LABEL,
+  GUARDRAILS_EXPLANATION,
+  GUARDRAILS_HEADING,
+  LANDING_EXPLANATION,
+  LANDING_GUARDRAIL_KIND_LABEL,
+  LANDING_HEADING,
+  LANDING_VIEW_KIND,
+  NO_REPLY_LABEL,
+  NOTHING_TO_LAND_BLOCKER,
+  NOTHING_TO_PREVIEW_LABEL,
+  REASSEMBLE_LABEL,
+  REPLY_HEADING,
+  RETRY_LABEL,
+  TARGET_BRANCH_LABEL,
+  TARGET_EXPLANATION,
+  TARGET_HEADING,
+  TARGET_INTEGRATION_BRANCH_LABEL,
+  TARGET_ITEM_KEY,
+  TARGET_PULL_REQUEST_LABEL,
+  TARGET_REMOTE_LABEL,
+  THREADS_EMPTY_LABEL,
+  THREADS_EXPLANATION,
+  THREADS_HEADING,
+  toCommentSummary,
+  type LandingCommitItem,
+  type LandingConflictItem,
+  type LandingGuardrailItem,
+  type LandingView,
+} from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
+
+export interface UseLandingPreviewOptions {
+  /** Null before a PR is selected: the gate then has nothing to describe. */
+  prRef: PrRef | null;
+  /** The branch the integration branch is assembled onto. Never pushed to itself. */
+  targetBranch: string | null;
+}
+
+interface UseLandingPreviewResult {
+  heading: string;
+  explanation: string;
+  view: LandingView;
+}
+
+/** One hand-edited commit message, held only for the runs whose message was touched. */
+interface LandingCommitMessageDraft {
+  subject: string;
+  body: string;
+}
+
+/**
+ * There is no execute channel on the bridge: `landing.assemble` exists, the step that
+ * publishes the integration branch, pushes it, resolves the threads and posts the reply
+ * does not. The gate is therefore complete and permanently closed, and the flag says so
+ * in one place rather than the confirm control quietly having no handler.
+ */
+const IS_LANDING_EXECUTABLE = false;
+
+/** Stable identities, so an absent preview does not rebuild every list each render. */
+const NO_DRAFTS: ReadonlyMap<string, LandingCommitMessageDraft> = new Map();
+const NO_ACKNOWLEDGED_IDS: readonly string[] = [];
+const NO_COMMIT_PLANS: readonly LandingCommitPlan[] = [];
+const NO_GUARDRAIL_FLAGS: readonly GuardrailFlag[] = [];
+const NO_THREADS: readonly LandingThread[] = [];
+const NO_CONFLICTS: readonly LandingConflict[] = [];
+const NO_COMMENTS: readonly PrComment[] = [];
+
+const EMPTY_LENGTH = 0;
+
+const PR_NUMBER_PREFIX = ' #';
+const COMMIT_FIELD_ID_PREFIX = 'landing-commit-';
+const COMMENT_FIELD_ID_SUFFIX = '-comment';
+const SUBJECT_FIELD_ID_SUFFIX = '-subject';
+const BODY_FIELD_ID_SUFFIX = '-body';
+
+/**
+ * The confirmation gate. Every value it renders is derived here, including the reason
+ * confirming is unavailable, so the component stays a mapping from state to surface and
+ * the rule "nothing runs until the user confirms" is expressed as data rather than as
+ * markup that happens to be missing a handler.
+ */
+export function useLandingPreview({
+  prRef,
+  targetBranch,
+}: UseLandingPreviewOptions): UseLandingPreviewResult {
+  // Edits are stored only for the runs whose message was touched, so a re-assembled
+  // preview shows the fresh agent summary everywhere the user did not overrule it —
+  // and does so without an effect copying data into state.
+  const [draftsByRunId, setDraftsByRunId] =
+    useState<ReadonlyMap<string, LandingCommitMessageDraft>>(NO_DRAFTS);
+  // Acknowledging the combined diff's flags is local because it travels with the
+  // confirmation itself, not with any run: the per-patch acknowledgements do not carry
+  // over, since the combined diff is a different artifact.
+  const [acknowledgedGuardrailIds, setAcknowledgedGuardrailIds] =
+    useState<readonly string[]>(NO_ACKNOWLEDGED_IDS);
+
+  const request: AssembleLandingRequest | null =
+    prRef !== null && targetBranch !== null ? { prRef, targetBranch } : null;
+
+  const {
+    landingPreview,
+    isLandingPreviewLoading,
+    isLandingPreviewFetching,
+    landingPreviewError,
+    refetchLandingPreview,
+  } = useQueryLandingPreview(request);
+  // Already fetched for the comment tree, so this is a cache read rather than a second
+  // round trip; it turns a comment id in the plan into the comment a person recognises.
+  const { prComments } = useQueryPrComments(prRef);
+
+  const commentsById = useMemo(
+    () => keyBy(isDefined(prComments) ? prComments : NO_COMMENTS, (comment) => comment.id),
+    [prComments],
+  );
+
+  const commitPlans = isDefined(landingPreview) ? landingPreview.commits : NO_COMMIT_PLANS;
+  const guardrailFlags = isDefined(landingPreview)
+    ? landingPreview.guardrailFlags
+    : NO_GUARDRAIL_FLAGS;
+  const conflicts = isDefined(landingPreview) ? landingPreview.conflicts : NO_CONFLICTS;
+  const threads = isDefined(landingPreview) ? landingPreview.threadsToResolve : NO_THREADS;
+
+  /**
+   * The plans with the hand-edited messages applied. This array is exactly the shape
+   * `ExecuteLandingRequest.commits` takes, so what was read in the preview is what gets
+   * committed rather than main re-deriving a message and possibly differing.
+   */
+  const commits = useMemo<LandingCommitPlan[]>(
+    () =>
+      commitPlans.map((plan) => {
+        const draft = draftsByRunId.get(plan.runId);
+        if (draft === undefined) return plan;
+        return { ...plan, subject: draft.subject, body: draft.body };
+      }),
+    [commitPlans, draftsByRunId],
+  );
+
+  const commitItems = useMemo<LandingCommitItem[]>(
+    () =>
+      commits.map((commit) => {
+        const summary = toCommentSummary(commit.commentId, commentsById.get(commit.commentId));
+        const fieldIdBase = `${COMMIT_FIELD_ID_PREFIX}${commit.runId}`;
+
+        return {
+          runId: commit.runId,
+          commentLabel: summary.label,
+          commentUrl: summary.url,
+          commentLinkLabel: COMMENT_LINK_LABEL,
+          commentFieldId: `${fieldIdBase}${COMMENT_FIELD_ID_SUFFIX}`,
+          subjectFieldId: `${fieldIdBase}${SUBJECT_FIELD_ID_SUFFIX}`,
+          subjectLabel: COMMIT_SUBJECT_LABEL,
+          subjectValue: commit.subject,
+          bodyFieldId: `${fieldIdBase}${BODY_FIELD_ID_SUFFIX}`,
+          bodyLabel: COMMIT_BODY_LABEL,
+          bodyValue: commit.body,
+          bodyRowCount: COMMIT_BODY_ROW_COUNT,
+          // The handler closes over the already-merged commit, so the untouched half of
+          // the message is carried forward without reading state back out.
+          onSubjectChange: (event: ChangeEvent<HTMLInputElement>) => {
+            const subject = event.target.value;
+            setDraftsByRunId((previous) =>
+              new Map(previous).set(commit.runId, { subject, body: commit.body }),
+            );
+          },
+          onBodyChange: (event: ChangeEvent<HTMLTextAreaElement>) => {
+            const body = event.target.value;
+            setDraftsByRunId((previous) =>
+              new Map(previous).set(commit.runId, { subject: commit.subject, body }),
+            );
+          },
+        };
+      }),
+    [commentsById, commits],
+  );
+
+  const guardrailItems = useMemo<LandingGuardrailItem[]>(
+    () =>
+      guardrailFlags.map((flag) => {
+        const kindLabel = LANDING_GUARDRAIL_KIND_LABEL[flag.kind];
+        return {
+          id: flag.id,
+          kindLabel,
+          path: flag.path,
+          detail: flag.detail,
+          isAcknowledged: acknowledgedGuardrailIds.includes(flag.id),
+          acknowledgedLabel: GUARDRAIL_ACKNOWLEDGED_LABEL,
+          acknowledgeLabel: buildAcknowledgeLabel(kindLabel, flag.path),
+          onAcknowledgeClick: () => {
+            setAcknowledgedGuardrailIds((previous) =>
+              previous.includes(flag.id) ? previous : [...previous, flag.id],
+            );
+          },
+        };
+      }),
+    [acknowledgedGuardrailIds, guardrailFlags],
+  );
+
+  const conflictItems = useMemo<LandingConflictItem[]>(
+    () =>
+      conflicts.map((conflict) => {
+        const summary = toCommentSummary(conflict.commentId, commentsById.get(conflict.commentId));
+        return {
+          runId: conflict.runId,
+          commentLabel: summary.label,
+          commentUrl: summary.url,
+          commentLinkLabel: COMMENT_LINK_LABEL,
+          pathsLabel: buildConflictPathsLabel(conflict.paths),
+        };
+      }),
+    [commentsById, conflicts],
+  );
+
+  const outstandingFlagCount = selectUnacknowledgedFlags(
+    guardrailFlags,
+    acknowledgedGuardrailIds,
+  ).length;
+
+  const view = ((): LandingView => {
+    if (request === null) {
+      return {
+        kind: LANDING_VIEW_KIND.NOTHING_TO_PREVIEW,
+        emptyStateLabel: NOTHING_TO_PREVIEW_LABEL,
+      };
+    }
+
+    if (isLandingPreviewLoading) {
+      return { kind: LANDING_VIEW_KIND.ASSEMBLING, assemblingLabel: ASSEMBLING_LABEL };
+    }
+
+    if (isDefined(landingPreviewError)) {
+      return {
+        kind: LANDING_VIEW_KIND.FAILED,
+        errorMessage: isIpcError(landingPreviewError)
+          ? landingPreviewError.message
+          : ASSEMBLE_ERROR_FALLBACK,
+        errorRemediation: isIpcError(landingPreviewError) ? landingPreviewError.remediation : null,
+        retryLabel: RETRY_LABEL,
+        onRetryClick: refetchLandingPreview,
+      };
+    }
+
+    if (!isDefined(landingPreview)) {
+      return { kind: LANDING_VIEW_KIND.ASSEMBLING, assemblingLabel: ASSEMBLING_LABEL };
+    }
+
+    const hasConflicts = conflicts.length > EMPTY_LENGTH;
+
+    const blockerLabel = ((): string | null => {
+      if (commits.length === EMPTY_LENGTH) return NOTHING_TO_LAND_BLOCKER;
+      if (outstandingFlagCount > EMPTY_LENGTH) {
+        return buildOutstandingFlagsBlocker(outstandingFlagCount);
+      }
+      return null;
+    })();
+
+    return {
+      kind: LANDING_VIEW_KIND.PREVIEW,
+      target: {
+        heading: TARGET_HEADING,
+        explanation: TARGET_EXPLANATION,
+        items: [
+          {
+            key: TARGET_ITEM_KEY.PULL_REQUEST,
+            label: TARGET_PULL_REQUEST_LABEL,
+            value: `${landingPreview.prRef.repoKey}${PR_NUMBER_PREFIX}${landingPreview.prRef.number}`,
+          },
+          {
+            key: TARGET_ITEM_KEY.REMOTE,
+            label: TARGET_REMOTE_LABEL,
+            value: landingPreview.remoteName,
+          },
+          {
+            key: TARGET_ITEM_KEY.TARGET_BRANCH,
+            label: TARGET_BRANCH_LABEL,
+            value: landingPreview.targetBranch,
+          },
+          {
+            key: TARGET_ITEM_KEY.INTEGRATION_BRANCH,
+            label: TARGET_INTEGRATION_BRANCH_LABEL,
+            value: landingPreview.integrationBranchName,
+          },
+        ],
+      },
+      // Null rather than an empty card: a conflict section that is usually absent
+      // should be absent, and its presence is itself the signal.
+      conflicts: hasConflicts
+        ? {
+            heading: CONFLICTS_HEADING,
+            explanation: CONFLICTS_EXPLANATION,
+            items: conflictItems,
+            reassembleLabel: REASSEMBLE_LABEL,
+            isReassembling: isLandingPreviewFetching,
+            onReassembleClick: refetchLandingPreview,
+          }
+        : null,
+      commits: {
+        heading: COMMITS_HEADING,
+        explanation: COMMITS_EXPLANATION,
+        items: commitItems,
+        hasCommits: commitItems.length > EMPTY_LENGTH,
+        emptyLabel: COMMITS_EMPTY_LABEL,
+      },
+      guardrails: {
+        heading: GUARDRAILS_HEADING,
+        explanation: GUARDRAILS_EXPLANATION,
+        items: guardrailItems,
+        hasFlags: guardrailItems.length > EMPTY_LENGTH,
+        statusLabel: buildGuardrailStatusLabel(outstandingFlagCount),
+      },
+      combinedDiff: {
+        heading: COMBINED_DIFF_HEADING,
+        explanation: COMBINED_DIFF_EXPLANATION,
+        files: landingPreview.combinedFiles,
+        hasChanges: landingPreview.combinedFiles.length > EMPTY_LENGTH,
+        emptyLabel: COMBINED_DIFF_EMPTY_LABEL,
+      },
+      threads: {
+        heading: THREADS_HEADING,
+        explanation: THREADS_EXPLANATION,
+        items: threads.map((thread) => ({ threadId: thread.threadId, url: thread.url })),
+        hasThreads: threads.length > EMPTY_LENGTH,
+        emptyLabel: THREADS_EMPTY_LABEL,
+        replyHeading: REPLY_HEADING,
+        replyText: landingPreview.replyText,
+        noReplyLabel: NO_REPLY_LABEL,
+      },
+      // Not offered at all while a conflict stands, which is the difference between a
+      // gate and a button someone waits on.
+      confirm: hasConflicts
+        ? null
+        : {
+            heading: CONFIRM_HEADING,
+            confirmLabel: CONFIRM_LABEL,
+            isConfirmDisabled: blockerLabel !== null || !IS_LANDING_EXECUTABLE,
+            blockerLabel,
+            executionNoticeLabel: EXECUTION_UNAVAILABLE_NOTICE,
+          },
+    };
+  })();
+
+  return { heading: LANDING_HEADING, explanation: LANDING_EXPLANATION, view };
+}

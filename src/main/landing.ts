@@ -120,7 +120,8 @@ const NOTHING_APPROVED_MESSAGE =
 const NOTHING_APPROVED_REMEDIATION = 'Approve at least one reviewed resolution, then try again.';
 const MIXED_CLONE_MESSAGE =
   'The approved runs were created from different local clones, so their branches do not live in one repository.';
-const MIXED_CLONE_REMEDIATION = 'Reject the runs from the other clone, or re-run them from this one.';
+const MIXED_CLONE_REMEDIATION =
+  'Reject the runs from the other clone, or re-run them from this one.';
 const COMMENT_GONE_MESSAGE =
   'A run is approved for a comment that is no longer on the pull request, so its commit would have no provenance.';
 const COMMENT_GONE_REMEDIATION = 'Reject that run, then assemble the landing again.';
@@ -128,6 +129,10 @@ const CONFLICTS_UNRESOLVED_MESSAGE =
   'Some approved resolutions still conflict with the integration branch, so the landing was not prepared.';
 const CONFLICTS_UNRESOLVED_REMEDIATION =
   'Re-run each conflicting comment against the updated integration state, or reject it.';
+const NO_INTEGRATION_BRANCH_MESSAGE =
+  'This pull request has no assembled integration branch, so a conflicting comment has nothing to be re-run against.';
+const NO_INTEGRATION_BRANCH_REMEDIATION =
+  'Assemble the landing preview first, then re-run the conflicting comment.';
 const UNACKNOWLEDGED_FLAGS_REMEDIATION =
   'Acknowledge each combined-diff finding in the landing preview, then confirm again.';
 
@@ -595,6 +600,32 @@ export async function assembleLanding(request: AssembleLandingRequest): Promise<
     threadsToResolve: assembled.threadsToResolve,
     replyText: null,
   };
+}
+
+/**
+ * The tip of the branch a previous assembly built, which is what a conflicting comment
+ * has to be re-run against: its patch conflicted with *this* state, not with the PR head
+ * it was originally written on.
+ *
+ * Resolved here rather than accepted as an argument. A git revision that arrived from
+ * the renderer would become the base of a worktree, and main has no reason to trust one
+ * when it can read the branch it assembled itself. The branch name is derived from the
+ * PR for the same reason, so a caller cannot name a different branch either.
+ */
+export async function resolveIntegrationRevision(prRef: PrRef, repoPath: string): Promise<string> {
+  const branchName = buildIntegrationBranchName(prRef);
+  const git = simpleGit(repoPath);
+
+  const branches = await git.branchLocal();
+  if (!branches.all.includes(branchName)) {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      NO_INTEGRATION_BRANCH_MESSAGE,
+      NO_INTEGRATION_BRANCH_REMEDIATION,
+    );
+  }
+
+  return (await git.revparse([branchName])).trim();
 }
 
 function assertNoConflicts(assembled: AssembledIntegration): void {

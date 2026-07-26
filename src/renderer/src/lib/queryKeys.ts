@@ -20,6 +20,8 @@ const QUERY_DOMAIN = {
   MODELS: 'models',
   CURSOR_KEY: 'cursorKey',
   RUN_REVISIONS: 'runRevisions',
+  AUDIT: 'audit',
+  LANDING_PREVIEW: 'landingPreview',
 } as const;
 
 const LIST_SCOPE = 'list';
@@ -47,6 +49,19 @@ export const queryKeys = {
    */
   runRevisions: (runId: string, revisionCount: number) =>
     createQueryKey(QUERY_DOMAIN.RUN_REVISIONS, runId, revisionCount),
+  /**
+   * Unkeyed by PR on purpose: the log is one history of everything the tool did to
+   * your repositories, and slicing it per PR would hide the entries a landing wrote
+   * before a PR was ever selected.
+   */
+  auditLog: () => createQueryKey(QUERY_DOMAIN.AUDIT, LIST_SCOPE),
+  /**
+   * Keyed by the target branch as well as the PR: assembling squash-merges the
+   * approved branches onto that target, so a different target is a different merge
+   * result rather than the same preview seen again.
+   */
+  landingPreview: (repoKey: string, prNumber: number, targetBranch: string) =>
+    createQueryKey(QUERY_DOMAIN.LANDING_PREVIEW, repoKey, prNumber, targetBranch),
   modelCatalog: () => createQueryKey(QUERY_DOMAIN.MODELS, CATALOG_SCOPE),
   cursorKeyStatus: () => createQueryKey(QUERY_DOMAIN.CURSOR_KEY, STATUS_SCOPE),
 } as const;

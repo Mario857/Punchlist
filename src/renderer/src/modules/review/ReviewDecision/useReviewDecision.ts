@@ -247,7 +247,9 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
     approveLabel: copy.approveLabel,
     isApproveDisabled: isApproveBlocked,
     approveBlockedMessage:
-      isApproveOffered && isApproveBlocked ? buildApproveBlockedMessage(outstandingFlagCount) : null,
+      isApproveOffered && isApproveBlocked
+        ? buildApproveBlockedMessage(outstandingFlagCount)
+        : null,
     rejectLabel: copy.rejectLabel,
     reopenHint: copy.reopenHint,
     isDecisionPending: isApproveRunsPending || isRejectRunsPending,
