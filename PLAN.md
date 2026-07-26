@@ -143,6 +143,13 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 - [ ] `automation-ui` — AutomationSettings.tsx for the enable toggle and author allowlist; native notification when auto-runs finish; queue distinguishes auto from manual runs
 - [ ] `no-action-state` — Add noActionNeeded run state so an auto-triggered run producing an empty diff resolves cleanly instead of auto-escalating forever
 
+### Phase 9 — Second opinion
+
+- [ ] `opinion-model` — Define the verdict model in src/shared/opinion.ts: Zod-backed, with verdict (addresses/partial/misses/harmful), concerns as plain strings, and the run it belongs to; treated as an agent-written file like decision.json
+- [ ] `opinion-prompt` — Build the reviewer prompt in src/main/prompt.ts: the original comment and the candidate diff, explicitly without the first agent's transcript or summary, plus the instruction to write .airlock/opinion.json and to change nothing
+- [ ] `opinion-runner` — Run a fresh agent in the run's worktree, parse the verdict, and verify the patch is byte-identical afterwards; a reviewer that edited anything is itself a finding
+- [ ] `opinion-ui` — Render the verdict and its concerns beside the diff alongside the guardrail flags and auto-decisions, and offer it per run and per batch; never blocking
+
 ### Phase 8 — Learn from the comments
 
 - [ ] `convention-model` — Define the rule model in src/shared/conventions.ts: Zod-backed, with scope (repo/global), category, imperative rule text, rationale, evidence refs, and state (candidate/confirmed/rejected/exported)
@@ -889,6 +896,40 @@ Reviewing twenty agent-written patches is genuinely tiring, and that is a design
 
 **And one thing that inescapably costs attention:** every diff still needs the user's eyes, by design. That is the review gate, and no amount of interface work should erode it. What the interface can do is make sure the attention goes to the diffs rather than to finding them, remembering where you were, or reading eight badges.
 
+## Second opinion (phase 9)
+
+A resolution can be plausible and wrong. The guardrails catch mechanical problems — a lock file touched, a credential-shaped literal, a diff far larger than its tier implies — but they say nothing about whether the patch actually does what the reviewer asked. That judgment currently rests entirely on the person reading the diff, which is exactly the attention the rest of this design is trying to spend well.
+
+So: after a run reaches `ready`, a **second agent can be asked whether the first one got it right**.
+
+### Independence is the entire value
+
+The reviewer gets the original comment and the candidate diff. It does **not** get the first agent's transcript, its summary, or its reasoning. Handing those over would produce agreement rather than review — the same failure as continuing a conversation to escalate it, which is why escalation already starts a fresh agent against the worktree reset to base.
+
+It is therefore a fresh `Agent.create` in the run's worktree, not an `agent.send` on the existing one. That costs a second agent invocation, which is why it is opt-in rather than automatic; see the cost note below.
+
+### The reviewer changes nothing
+
+It is asked to inspect and report, and the prompt says so — but a prompt is a request, so the patch is re-read afterwards and compared. **A reviewer that modified anything is itself a finding**, surfaced rather than quietly reverted, because an agent ignoring an explicit instruction is worth knowing about regardless of what it wrote.
+
+The verdict goes to `.airlock/opinion.json`, the same file-based convention as `decision.json` and `summary.json`, for the same reason: format compliance in prose is unreliable, while a file either exists or does not. It is parsed with Zod and a malformed one degrades to "no opinion available" rather than crashing anything.
+
+### It advises; it never blocks
+
+A disagreeing second opinion does **not** prevent approval. Guardrail flags block until acknowledged because they are deterministic and cheap to check. This is a judgment call from a language model, and it will sometimes be confidently wrong — giving it veto power over your reading of the diff would be worse than not having it. It renders beside the diff with the guardrail flags and the auto-decisions, in the family of "things worth knowing before you start reading".
+
+The verdict is a small closed set — addresses, partial, misses, harmful — plus concerns as plain text. No score and no confidence value, for the same reason the tier heuristic has none: a number would imply a precision that is not there.
+
+### Cost, and why it is opt-in
+
+This doubles the agent work for any comment it is used on. It stays in the free lane like everything else by default, so the marginal cost is time and a concurrency slot rather than money — but doubling every run's wall-clock by default would be a poor trade, and the tool already knows how to ask.
+
+So it is offered per run and per batch, in the same place approval is. The natural habit it supports is asking for one on the changes you were already unsure about, which is where a second reading is worth the wait.
+
+### What it is not
+
+It is not a gate, not a second approval, and not a way to review less. Every diff still needs the user's eyes — that is the review gate, and nothing here erodes it. A second opinion is a way to make the reading better informed, in the same spirit as flagging a suspicious diff before you open it.
+
 ## Convention memory (phase 8)
 
 Every PR comment this tool ingests is a statement about how your code is supposed to look. Resolving one fixes a single line; the reusable value is the rule behind it. So the comments are also treated as a corpus, distilled into a small set of durable conventions that can be handed to a **future** coding agent — in Cursor, in Claude Code, anywhere — as project context rather than re-learned from scratch on every task.
@@ -946,6 +987,7 @@ Each phase is independently useful and de-risks the next.
 - **5 — Land, gated.** Approve/reject with bulk variants, sandbox integration worktree, squash-merge per comment, conflict re-run loop, and the landing preview with the combined-diff guardrail scan. The confirmation gate and audit log are built here, before any code path can reach the real repo.
 - **6 — Close the loop.** Publish the branch, push, `resolveReviewThread`, optional reply comment, and undo of the most recent landing — all behind the phase 5 gate.
 - **7 — Optional automation.** Author-allowlist auto-triggering, the polling watcher, and staleness detection. Last because it only pays off once the review loop is trustworthy, and it changes nothing about the approval gate.
+- **9 — Second opinion.** A fresh agent reviews a candidate patch against the comment that prompted it, without the first agent's reasoning. Independent of phases 7 and 8 and buildable before either; placed last only because it is an enhancement to review rather than a missing capability.
 - **8 — Learn from the comments.** Distil the ingested comment corpus into durable, reusable conventions and export them as context for future coding agents. Placed last because capture is retroactive: evidence accumulates in the store from phase 1 onward, so distillation can run over history whenever it is built. It also depends on the phase 5 gate, since export writes to a real repo.
 
 ## Assumptions
