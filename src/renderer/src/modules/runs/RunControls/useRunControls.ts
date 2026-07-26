@@ -4,7 +4,7 @@ import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
 import { hasUnacknowledgedFlags } from '@shared/guardrails';
 import type { RunRecord, StartRunRequest } from '@shared/runs';
-import { RUN_STATE, type ModelTier, type RunState } from '@shared/runState';
+import { RUN_STATE, RUN_TRIGGER, type ModelTier, type RunState } from '@shared/runState';
 import { classifyCommentTier } from '@shared/tier';
 import { keyBy } from '@renderer/lib/collections';
 import { formatBytes } from '@renderer/lib/format';
@@ -40,6 +40,10 @@ export interface ActiveRunItem {
   runId: string;
   label: string;
   state: RunState;
+  /** True for a run the watcher started on its own rather than one you asked for. */
+  isAutoTriggered: boolean;
+  /** The PR head moved after this run's worktree was created. */
+  isStale: boolean;
   /** Bound here so the row markup carries no inline arrow. */
   onCancelClick: () => void;
 }
@@ -107,6 +111,15 @@ const NO_SELECTION_LABEL = 'Start selected';
 const SINGLE_SELECTION_LABEL = 'Start 1 comment';
 const NO_ACTIVE_RUNS_LABEL = 'Nothing running';
 const SINGLE_ACTIVE_RUN_LABEL = '1 run in flight';
+
+/**
+ * Which of the runs in flight nobody asked for. Said at the queue level as well as on
+ * the row, because "four runs in flight" reads very differently when three of them
+ * started while you were away.
+ */
+const AUTO_RUNS_LABEL_SEPARATOR = ' · ';
+const SINGLE_AUTO_RUN_LABEL = '1 auto';
+const AUTO_RUNS_LABEL_SUFFIX = ' auto';
 const SINGLE_ACTIVE_RUN_STOP_LABEL = 'Stop the run';
 const START_ERROR_FALLBACK = 'Could not start a run for the selected comments.';
 const CANCEL_ERROR_FALLBACK = 'Could not cancel that run.';
@@ -330,6 +343,10 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
         // identifies the run before that, and both beat showing a raw uuid.
         label: isDefined(run.summary) ? run.summary.subject : run.branchName,
         state: run.state,
+        isAutoTriggered: run.trigger === RUN_TRIGGER.AUTO,
+        // Every run in this list is still in flight, so the watcher's rule that a
+        // terminal run is history rather than a warning cannot apply here.
+        isStale: run.isStale,
         onCancelClick: () => cancelRun(run.id),
       })),
     [activeRuns, cancelRun],
@@ -341,10 +358,20 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     return `Start ${selectedCount} comments`;
   })();
 
+  const autoRunCount = activeRunItems.filter((item) => item.isAutoTriggered).length;
+
   const activeRunsLabel = (() => {
     if (activeRunItems.length === EMPTY_COUNT) return NO_ACTIVE_RUNS_LABEL;
-    if (activeRunItems.length === SINGLE_COUNT) return SINGLE_ACTIVE_RUN_LABEL;
-    return `${activeRunItems.length} runs in flight`;
+    const countLabel =
+      activeRunItems.length === SINGLE_COUNT
+        ? SINGLE_ACTIVE_RUN_LABEL
+        : `${activeRunItems.length} runs in flight`;
+    if (autoRunCount === EMPTY_COUNT) return countLabel;
+    const autoLabel =
+      autoRunCount === SINGLE_COUNT
+        ? SINGLE_AUTO_RUN_LABEL
+        : `${autoRunCount}${AUTO_RUNS_LABEL_SUFFIX}`;
+    return `${countLabel}${AUTO_RUNS_LABEL_SEPARATOR}${autoLabel}`;
   })();
 
   const stopAllLabel =

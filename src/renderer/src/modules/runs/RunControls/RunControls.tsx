@@ -1,4 +1,5 @@
 import type { PrRef } from '@shared/discovery';
+import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
@@ -24,8 +25,16 @@ const SANDBOX_LOADING_LABEL = 'Measuring sandbox…';
 const SANDBOX_SEPARATOR = ' · ';
 const POOL_SPENDING_ACKNOWLEDGE_LABEL = 'Spend the included pool for this batch';
 
+const AUTO_TRIGGER_LABEL = 'Auto';
+const AUTO_TRIGGER_TITLE = 'Started by automation from an allowlisted author, not by you';
+const STALE_LABEL = 'Stale';
+const STALE_TITLE =
+  'The PR head moved after this run started, so its patch is against code that is no longer current';
+
 const CANCEL_ICON_SIZE = 11;
 const ATTENTION_ICON_SIZE = 12;
+/** Matches the comment tree's row glyphs, so a badge means the same thing in both panes. */
+const ROW_ALERT_ICON_SIZE = 11;
 
 const ROW_CLASS = 'flex items-center gap-2';
 const META_CLASS = 'text-muted text-xs';
@@ -84,21 +93,45 @@ export function RunControls({ prRef }: RunControlsProps) {
     onAutoModeEnabled,
   } = useRunControls({ prRef });
 
-  const activeRunRows = activeRunItems.map((item) => (
-    <li key={item.runId} className={ACTIVE_RUN_ROW_CLASS}>
-      <StateBadge state={item.state} />
-      <span className={ACTIVE_RUN_LABEL_CLASS} title={item.label}>
-        {item.label}
-      </span>
-      <IconButton
-        label={`${CANCEL_LABEL_PREFIX}${item.label}`}
-        icon={<XIcon size={CANCEL_ICON_SIZE} />}
-        size={ICON_BUTTON_SIZE.SM}
-        isDisabled={isCancelRunPending}
-        onClick={item.onCancelClick}
-      />
-    </li>
-  ));
+  const activeRunRows = activeRunItems.map((item) => {
+    // Muted and only when true: StateBadge stays the row's one strong signal, and
+    // provenance is exactly the kind of secondary attribute that budget is for.
+    const autoBadge = item.isAutoTriggered ? (
+      <Badge tone={BADGE_TONE.NEUTRAL} isMuted title={AUTO_TRIGGER_TITLE}>
+        {AUTO_TRIGGER_LABEL}
+      </Badge>
+    ) : null;
+
+    // Staleness gets more weight than provenance because it is a trap rather than a
+    // fact: the run reads as landable while its patch is against a head that moved.
+    const staleBadge = item.isStale ? (
+      <Badge
+        tone={BADGE_TONE.WARNING}
+        title={STALE_TITLE}
+        icon={<AlertTriangleIcon size={ROW_ALERT_ICON_SIZE} />}
+      >
+        {STALE_LABEL}
+      </Badge>
+    ) : null;
+
+    return (
+      <li key={item.runId} className={ACTIVE_RUN_ROW_CLASS}>
+        <StateBadge state={item.state} />
+        <span className={ACTIVE_RUN_LABEL_CLASS} title={item.label}>
+          {item.label}
+        </span>
+        {staleBadge}
+        {autoBadge}
+        <IconButton
+          label={`${CANCEL_LABEL_PREFIX}${item.label}`}
+          icon={<XIcon size={CANCEL_ICON_SIZE} />}
+          size={ICON_BUTTON_SIZE.SM}
+          isDisabled={isCancelRunPending}
+          onClick={item.onCancelClick}
+        />
+      </li>
+    );
+  });
 
   const activeRunList = hasActiveRuns ? (
     <ul className="flex flex-col gap-1">{activeRunRows}</ul>

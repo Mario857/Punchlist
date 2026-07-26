@@ -1,4 +1,5 @@
 import { SettingsIcon } from '@renderer/components/icons/SettingsIcon';
+import { AutomationSettings } from '@renderer/modules/settings/AutomationSettings/AutomationSettings';
 import { GeneralSettings } from '@renderer/modules/settings/GeneralSettings/GeneralSettings';
 import { GhAuthStatusCard } from '@renderer/modules/settings/GhAuthStatusCard/GhAuthStatusCard';
 import { RepoRegistry } from '@renderer/modules/settings/RepoRegistry/RepoRegistry';
@@ -25,6 +26,7 @@ export function Settings() {
         <RepoRegistry />
         <GeneralSettings />
         <TierModelMapping />
+        <AutomationSettings />
       </div>
     </main>
   );
