@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { prRefKey, type PrListItem, type PrRef } from '@shared/discovery';
-import { formatRelativeTime } from '@renderer/lib/format';
+import { formatRelativeTime, readNowMs, toElapsedMs } from '@renderer/lib/format';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import type { PrPickerAlertProps } from '@renderer/modules/discovery/PrPicker/components/PrPickerAlert';
@@ -13,8 +13,6 @@ import {
 const EMPTY_PR_URL = '';
 const EMPTY_LENGTH = 0;
 const SINGLE_PR_COUNT = 1;
-/** Clock skew can put `updatedAt` in the future; an elapsed time never goes negative. */
-const NO_ELAPSED_MS = 0;
 
 const PR_NUMBER_PREFIX = '#';
 const AUTHOR_LABEL_PREFIX = 'by ';
@@ -48,21 +46,6 @@ interface UsePrPickerResult {
   onPrUrlChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onPrUrlSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClearPrUrlClick: () => void;
-}
-
-function readNowMs(): number {
-  return Date.now();
-}
-
-/**
- * `Date.parse` returns NaN for anything it does not recognise, and `updatedAt` reaches
- * the renderer from `gh` stdout, so an unparseable timestamp degrades to a label rather
- * than rendering "NaN".
- */
-function toElapsedMs(timestamp: string, nowMs: number): number | null {
-  const parsedMs = Date.parse(timestamp);
-  if (Number.isNaN(parsedMs)) return null;
-  return Math.max(nowMs - parsedMs, NO_ELAPSED_MS);
 }
 
 function toAlert(error: unknown): PrPickerAlertProps | null {

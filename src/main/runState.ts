@@ -226,6 +226,7 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     trigger: input.trigger,
     guardrailFlags: [],
     acknowledgedGuardrailIds: [],
+    autoDecisions: [],
     worktreePath: input.worktreePath,
     branchName: input.branchName,
     agentId: null,

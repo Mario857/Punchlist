@@ -9,6 +9,7 @@ import type {
   EscalateRunRequest,
   RevertRunRequest,
   RunRevision,
+  WriteRunFileRequest,
   RunEvent,
   RunRecord,
   SandboxUsage,
@@ -51,6 +52,9 @@ export const IPC_CHANNEL = {
   RUNS_ACKNOWLEDGE_GUARDRAIL: 'runs:acknowledgeGuardrail',
   RUNS_REVISIONS: 'runs:revisions',
   RUNS_REVERT: 'runs:revert',
+  RUNS_WRITE_FILE: 'runs:writeFile',
+  RUNS_SET_AUTO_MODE: 'runs:setAutoMode',
+  RUNS_GET_AUTO_MODE: 'runs:getAutoMode',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
@@ -132,6 +136,11 @@ export interface RunsApi {
    * follows from the run's state rather than a caller-supplied label.
    */
   continueRun(request: ContinueRunRequest): Promise<IpcResult<RunRecord>>;
+  /**
+   * Writes a hand-edited file back into the worktree and re-reads the patch from
+   * git, so the diff cannot desync from what is actually on disk.
+   */
+  writeFile(request: WriteRunFileRequest): Promise<IpcResult<RunRecord>>;
   /** The worktree's revision trail, newest first. */
   listRevisions(runId: string): Promise<IpcResult<RunRevision[]>>;
   /** Resets the worktree to a revision, discarding every later one. */
@@ -154,6 +163,15 @@ export interface RunsApi {
    * the caller must invoke on unmount or listeners accumulate per mount.
    */
   onEvent(listener: (event: RunEvent) => void): () => void;
+}
+
+export interface AutoModeApi {
+  /**
+   * Off on every app start, which is why it is process state in main rather than a
+   * persisted setting: it must not be possible to leave it on by accident.
+   */
+  isEnabled(): Promise<IpcResult<boolean>>;
+  setEnabled(isEnabled: boolean): Promise<IpcResult<boolean>>;
 }
 
 export interface ModelsApi {
@@ -181,6 +199,7 @@ export interface AirlockApi {
   session: SessionApi;
   cursorKey: CursorKeyApi;
   runs: RunsApi;
+  autoMode: AutoModeApi;
   models: ModelsApi;
   sandbox: SandboxApi;
 }

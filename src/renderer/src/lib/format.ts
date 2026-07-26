@@ -18,6 +18,7 @@ const HOURS_PER_DAY = 24;
 const MS_PER_DAY = MS_PER_HOUR * HOURS_PER_DAY;
 const DAYS_PER_YEAR = 365;
 const MS_PER_YEAR = MS_PER_DAY * DAYS_PER_YEAR;
+/** Clock skew can put a timestamp in the future; an elapsed time never goes negative. */
 const NO_ELAPSED_MS = 0;
 const JUST_NOW_LABEL = 'just now';
 const RELATIVE_TIME_LABEL_SUFFIX = ' ago';
@@ -127,4 +128,26 @@ export function formatBytes(bytes: number | null | undefined): string {
   // A raw byte count reads as noise with a decimal place; a scaled unit needs one.
   const numberFormat = exponent === FIRST_UNIT_EXPONENT ? wholeNumberFormat : scaledValueFormat;
   return `${numberFormat.format(scaled)} ${BYTE_UNITS[exponent]}`;
+}
+
+/**
+ * The reference clock for relative labels. Read through a helper rather than
+ * inline, because `Date.now()` during render fails the React compiler's purity
+ * rule — callers hold it in state and re-read it when the data they are labelling
+ * actually changes.
+ */
+export function readNowMs(): number {
+  return Date.now();
+}
+
+/**
+ * Elapsed milliseconds since an ISO timestamp, or null when it cannot be parsed.
+ * `Date.parse` returns NaN for anything it does not recognise, and these timestamps
+ * reach the renderer from `gh` stdout and from git, so an unparseable one degrades
+ * to a label rather than rendering "NaN".
+ */
+export function toElapsedMs(isoTimestamp: string, nowMs: number): number | null {
+  const parsedMs = Date.parse(isoTimestamp);
+  if (Number.isNaN(parsedMs)) return null;
+  return Math.max(nowMs - parsedMs, NO_ELAPSED_MS);
 }

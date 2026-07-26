@@ -11,6 +11,7 @@ import type {
   EscalateRunRequest,
   RevertRunRequest,
   RunRevision,
+  WriteRunFileRequest,
   RunEvent,
   RunRecord,
   SandboxUsage,
@@ -79,6 +80,8 @@ const api: AirlockApi = {
     stopAll: (): Promise<IpcResult<RunRecord[]>> => ipcRenderer.invoke(IPC_CHANNEL.RUNS_STOP_ALL),
     continueRun: (request: ContinueRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_CONTINUE, request),
+    writeFile: (request: WriteRunFileRequest): Promise<IpcResult<RunRecord>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_WRITE_FILE, request),
     listRevisions: (runId: string): Promise<IpcResult<RunRevision[]>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVISIONS, runId),
     revert: (request: RevertRunRequest): Promise<IpcResult<RunRecord>> =>
@@ -95,6 +98,12 @@ const api: AirlockApi = {
       ipcRenderer.on(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
     },
+  },
+  autoMode: {
+    isEnabled: (): Promise<IpcResult<boolean>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_GET_AUTO_MODE),
+    setEnabled: (isEnabled: boolean): Promise<IpcResult<boolean>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_SET_AUTO_MODE, isEnabled),
   },
   models: {
     list: (): Promise<IpcResult<ModelCatalogEntry[]>> =>

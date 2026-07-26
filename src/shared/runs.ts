@@ -33,6 +33,14 @@ export const agentSummarySchema = z.object({
   details: z.string().nullable().default(null),
 });
 
+export const autoDecisionSchema = z.object({
+  question: z.string(),
+  chosenOption: z.string(),
+  /** Kept so review can show what was passed over, not just what was taken. */
+  alternatives: z.array(z.string()),
+  decidedAt: z.string(),
+});
+
 export const runRecordSchema = z.object({
   id: z.string(),
   commentId: z.string(),
@@ -67,6 +75,12 @@ export const runRecordSchema = z.object({
   /** Recomputed whenever the patch changes, so a revision cannot outrun its checks. */
   guardrailFlags: z.array(guardrailFlagSchema).default([]),
   /**
+   * What auto mode decided on this run's behalf. Auto mode defers decisions rather
+   * than hiding them: a wrong call has to surface while the diff is being reviewed
+   * instead of after it lands, which it cannot do unless the alternatives are kept.
+   */
+  autoDecisions: z.array(autoDecisionSchema).default([]),
+  /**
    * Acknowledgements survive re-checking because a flag's id is derived from what it
    * is about, so an unchanged finding stays acknowledged across revisions.
    */
@@ -78,6 +92,7 @@ export const runRecordSchema = z.object({
   durationMs: z.number().nonnegative().nullable().default(null),
 });
 
+export type AutoDecision = z.infer<typeof autoDecisionSchema>;
 export type AgentDecision = z.infer<typeof agentDecisionSchema>;
 export type AgentSummary = z.infer<typeof agentSummarySchema>;
 export type RunRecord = z.infer<typeof runRecordSchema>;
@@ -105,10 +120,43 @@ export interface StartRunRequest {
   tier: ModelTier | null;
 }
 
+export const SELECTION_SIDE = {
+  /** Code the agent wrote: "change this". */
+  MODIFIED: 'modified',
+  /** Code the agent left alone: "you missed this". */
+  ORIGINAL: 'original',
+} as const;
+
+export type SelectionSide = (typeof SELECTION_SIDE)[keyof typeof SELECTION_SIDE];
+
+/**
+ * A selection-scoped edit. The content is carried verbatim because line numbers
+ * drift the moment the agent edits anything above them — the content is the anchor
+ * and the range is only a hint.
+ *
+ * Which side the selection came from changes the instruction, not just the context,
+ * which is why the side is part of the request rather than inferred later.
+ */
+export interface TargetedEditSelection {
+  path: string;
+  startLine: number;
+  endLine: number;
+  content: string;
+  side: SelectionSide;
+}
+
 export interface ContinueRunRequest {
   runId: string;
   /** The answer to the agent's question, or the follow-up on the whole patch. */
   message: string;
+  /** Present for a targeted edit; absent for a decision reply or whole-patch follow-up. */
+  selection?: TargetedEditSelection | null;
+}
+
+export interface WriteRunFileRequest {
+  runId: string;
+  path: string;
+  content: string;
 }
 
 /**

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { APP_ERROR_KIND } from '@shared/errors';
 import type { RunRevision } from '@shared/runs';
-import { formatDateTime, formatRelativeTime } from '@renderer/lib/format';
+import { formatDateTime, formatRelativeTime, readNowMs, toElapsedMs } from '@renderer/lib/format';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useRun } from '@renderer/stores/runStore';
@@ -93,25 +93,9 @@ const REVISION_START_INDEX = 0;
 const SHORT_REVISION_LENGTH = 7;
 const EMPTY_COUNT = 0;
 const NO_REVISIONS = 0;
-/** Clock skew can date a commit in the future; an elapsed time never goes negative. */
-const NO_ELAPSED_MS = 0;
 
 /** A stable identity, so an unfetched trail does not rebuild the list every render. */
 const EMPTY_REVISIONS: readonly RunRevision[] = [];
-
-function readNowMs(): number {
-  return Date.now();
-}
-
-/**
- * `Date.parse` returns NaN for anything it does not recognise, and `committedAt` comes
- * from git's own output, so an unparseable stamp degrades to a label rather than "NaN".
- */
-function toElapsedMs(timestamp: string, nowMs: number): number | null {
-  const parsedMs = Date.parse(timestamp);
-  if (Number.isNaN(parsedMs)) return null;
-  return Math.max(nowMs - parsedMs, NO_ELAPSED_MS);
-}
 
 function toShortRevision(revision: string): string {
   return revision.slice(REVISION_START_INDEX, SHORT_REVISION_LENGTH);
