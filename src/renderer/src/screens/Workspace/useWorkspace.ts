@@ -172,9 +172,11 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const isRunPaneOnBottom = runPanePlacement === RUN_PANE_PLACEMENT.BOTTOM;
 
-  // The detail pane is the one that flexes, so the others only carry a fixed size while
-  // something beside them can absorb what is left over.
-  const isCommentListFilling = !paneVisibility.commentDetail && !paneVisibility.runPane;
+  // The detail pane is the one that flexes, so with it hidden the list takes that role
+  // and the run pane keeps its persisted width. Leaving both of them fixed is the bug
+  // this replaced: nothing absorbed the leftover space, and the only divider left was
+  // the run pane's, so the comment list could not be resized at all.
+  const isCommentListFilling = !paneVisibility.commentDetail;
   const isRunPaneFilling = !paneVisibility.commentList && !paneVisibility.commentDetail;
 
   const visiblePaneCount = PANE_KEYS.filter((key) => paneVisibility[key]).length;
