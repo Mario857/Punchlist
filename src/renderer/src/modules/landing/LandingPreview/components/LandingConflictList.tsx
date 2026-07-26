@@ -22,9 +22,9 @@ const PATHS_CLASS = 'text-ink font-mono text-xs break-words';
 const ACTION_ROW_CLASS = 'flex items-center gap-2';
 
 /**
- * A blocking finding, not a warning: the merges really happened in the sandbox. Re-running
- * the comment's agent is what resolves one, so the only action offered here is assembling
- * again once that has happened.
+ * A blocking finding, not a warning: the merges really happened in the sandbox. Each
+ * conflict is resolved by re-running its own comment's agent against the integration
+ * state, which is offered per row; assembling again is what confirms the result.
  */
 export function LandingConflictList({ view }: Props) {
   const items = view.items.map((item) => (
@@ -35,6 +35,16 @@ export function LandingConflictList({ view }: Props) {
         <LandingCommentLink url={item.commentUrl} label={item.commentLinkLabel} />
       </div>
       <p className={PATHS_CLASS}>{item.pathsLabel}</p>
+      <div className={ACTION_ROW_CLASS}>
+        <Button
+          variant={BUTTON_VARIANT.SECONDARY}
+          size={BUTTON_SIZE.SM}
+          isLoading={item.isRerunPending}
+          onClick={item.onRerunClick}
+        >
+          {item.rerunLabel}
+        </Button>
+      </div>
     </li>
   ));
 

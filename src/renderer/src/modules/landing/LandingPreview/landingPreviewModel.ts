@@ -109,6 +109,9 @@ export interface LandingConflictItem {
   commentUrl: string | null;
   commentLinkLabel: string;
   pathsLabel: string;
+  rerunLabel: string;
+  isRerunPending: boolean;
+  onRerunClick: () => void;
 }
 
 export interface LandingConflictsView {
@@ -218,6 +221,8 @@ export const CONFLICTS_HEADING = 'Conflicts block this landing';
 export const CONFLICTS_EXPLANATION =
   'These squash-merges were really attempted in the sandbox, so each conflict below is a finding rather than a warning — and your repository is untouched. A conflict is resolved by re-running that comment’s agent against the updated integration state, not by hand-merging here: the agent that wrote the patch is the thing that can rewrite it against code that has moved. Confirming is not offered while any of these stands.';
 export const REASSEMBLE_LABEL = 'Assemble the preview again';
+export const RERUN_CONFLICT_LABEL_PREFIX = 'Re-run ';
+export const RERUN_CONFLICT_LABEL_SUFFIX = ' against the integration branch';
 export const CONFLICT_PATHS_LABEL = 'Conflicting files: ';
 export const CONFLICT_PATHS_SEPARATOR = ', ';
 

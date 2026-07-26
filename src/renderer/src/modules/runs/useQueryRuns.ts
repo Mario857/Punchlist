@@ -380,6 +380,34 @@ export function useExecuteRevertRun(): UseExecuteRevertRunResult {
   return { revertRun: mutate, isRevertRunPending: isPending, revertRunError: error };
 }
 
+interface UseExecuteRerunConflictedResult {
+  rerunConflicted: (runId: string) => void;
+  isRerunConflictedPending: boolean;
+  rerunConflictedError: unknown;
+}
+
+/**
+ * A conflicting patch is reconciled by its own agent against the integration state,
+ * so this starts a real run: progress arrives on the event stream like any other, and
+ * the landing preview has to be assembled again once it settles.
+ */
+export function useExecuteRerunConflicted(): UseExecuteRerunConflictedResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (runId: string) =>
+      unwrapIpcResult(await requireBridge().runs.rerunConflicted(runId)),
+    onSuccess: (rerun) => hydrate([rerun]),
+    onError: (mutationError) => logError(mutationError, 'useExecuteRerunConflicted'),
+  });
+
+  return {
+    rerunConflicted: mutate,
+    isRerunConflictedPending: isPending,
+    rerunConflictedError: error,
+  };
+}
+
 interface UseExecuteAcknowledgeGuardrailResult {
   acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest) => void;
   isAcknowledgeGuardrailPending: boolean;

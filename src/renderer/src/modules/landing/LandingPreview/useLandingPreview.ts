@@ -13,6 +13,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import { useQueryLandingPreview } from '@renderer/modules/landing/useQueryLandingPreview';
+import { useExecuteRerunConflicted } from '@renderer/modules/runs/useQueryRuns';
 import {
   ASSEMBLE_ERROR_FALLBACK,
   ASSEMBLING_LABEL,
@@ -46,6 +47,8 @@ import {
   NOTHING_TO_LAND_BLOCKER,
   NOTHING_TO_PREVIEW_LABEL,
   REASSEMBLE_LABEL,
+  RERUN_CONFLICT_LABEL_PREFIX,
+  RERUN_CONFLICT_LABEL_SUFFIX,
   REPLY_HEADING,
   RETRY_LABEL,
   TARGET_BRANCH_LABEL,
@@ -231,6 +234,8 @@ export function useLandingPreview({
     [acknowledgedGuardrailIds, guardrailFlags],
   );
 
+  const { rerunConflicted, isRerunConflictedPending } = useExecuteRerunConflicted();
+
   const conflictItems = useMemo<LandingConflictItem[]>(
     () =>
       conflicts.map((conflict) => {
@@ -241,9 +246,14 @@ export function useLandingPreview({
           commentUrl: summary.url,
           commentLinkLabel: COMMENT_LINK_LABEL,
           pathsLabel: buildConflictPathsLabel(conflict.paths),
+          // Names the comment, because a bare "Re-run" beside several conflicts does
+          // not say which one it would start.
+          rerunLabel: `${RERUN_CONFLICT_LABEL_PREFIX}${summary.label}${RERUN_CONFLICT_LABEL_SUFFIX}`,
+          isRerunPending: isRerunConflictedPending,
+          onRerunClick: () => rerunConflicted(conflict.runId),
         };
       }),
-    [commentsById, conflicts],
+    [commentsById, conflicts, isRerunConflictedPending, rerunConflicted],
   );
 
   const outstandingFlagCount = selectUnacknowledgedFlags(
