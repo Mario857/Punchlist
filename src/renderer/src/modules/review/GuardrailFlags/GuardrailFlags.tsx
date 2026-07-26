@@ -99,11 +99,14 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
       </p>
     );
 
+  const explanationLine =
+    explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={CARD_COLUMN_CLASS}>
       <div>
         <h2 className={HEADING_CLASS}>{heading}</h2>
-        <p className={EXPLANATION_CLASS}>{explanation}</p>
+        {explanationLine}
       </div>
       <p role="status" className={STATUS_CLASS}>
         {statusLabel}

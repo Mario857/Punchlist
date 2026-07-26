@@ -109,6 +109,12 @@ export const sessionStateSchema = z.object({
    * of the window in explanatory prose before the first comment is visible.
    */
   isRunControlsExpanded: z.boolean().default(false),
+  /**
+   * Whether the run pane spells out what each surface means. The copy earns its place
+   * the first few times and then competes with the patch for the same pixels, which is
+   * the wrong trade once you know what a guardrail flag is.
+   */
+  isRunPaneVerbose: z.boolean().default(false),
 });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;

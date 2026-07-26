@@ -1,3 +1,4 @@
+import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { StateBadge } from '@renderer/components/StateBadge';
 import { assertNever } from '@renderer/lib/assertNever';
@@ -19,6 +20,8 @@ export interface RunPaneProps {
 }
 
 const SECTION_LABEL = 'Run';
+const VERBOSITY_TITLE =
+  'Show or hide the paragraphs describing what each surface here means. The flags, verdicts and patch itself never hide — only the copy explaining them.';
 const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const EXPLANATION_CLASS = 'text-muted mt-1 text-xs leading-relaxed';
 const HEADLINE_CLASS = 'text-muted text-xs leading-relaxed';
@@ -38,7 +41,8 @@ const SECTION_CLASS = 'flex min-h-full flex-col gap-2 p-3';
  * and the `RunState` exhaustiveness check lives in one place.
  */
 export function RunPane({ commentId }: RunPaneProps) {
-  const { view, runState, metaLabel } = useRunPane(commentId);
+  const { view, runState, metaLabel, isVerbose, verbosityLabel, onToggleVerbosityClick } =
+    useRunPane(commentId);
 
   const stateBadge = runState === null ? null : <StateBadge state={runState} />;
   const meta = metaLabel === null ? null : <span className="text-muted text-xs">{metaLabel}</span>;
@@ -155,6 +159,16 @@ export function RunPane({ commentId }: RunPaneProps) {
       <header className="flex items-center gap-2">
         {stateBadge}
         {meta}
+        <Button
+          variant={BUTTON_VARIANT.GHOST}
+          size={BUTTON_SIZE.SM}
+          className="ml-auto"
+          isExpanded={isVerbose}
+          title={VERBOSITY_TITLE}
+          onClick={onToggleVerbosityClick}
+        >
+          {verbosityLabel}
+        </Button>
       </header>
       {content}
     </section>

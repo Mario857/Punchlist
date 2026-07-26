@@ -35,12 +35,30 @@ const WINDOW_STATE_SAVE_DEBOUNCE_MS = 400;
 
 const CENTRE_DIVISOR = 2;
 
+/**
+ * Electron's zoom level is logarithmic — a factor of 1.2 per step — so these bounds are
+ * roughly half size to double size. Persisted because a display's comfortable text size
+ * is a property of the desk you are sitting at, and re-zooming on every launch is the
+ * kind of small friction that makes an app feel unfinished.
+ */
+export const MINIMUM_ZOOM_LEVEL = -4;
+export const MAXIMUM_ZOOM_LEVEL = 4;
+export const ZOOM_LEVEL_STEP = 0.5;
+const DEFAULT_ZOOM_LEVEL = 0;
+
 const windowStateSchema = z.object({
   width: z.number().int().positive().default(DEFAULT_WINDOW_WIDTH),
   height: z.number().int().positive().default(DEFAULT_WINDOW_HEIGHT),
   /** Null until the window has been placed once; Electron centres it in the meantime. */
   x: z.number().int().nullable().default(null),
   y: z.number().int().nullable().default(null),
+  /** `.catch` so a level written by a build with different bounds degrades to unzoomed. */
+  zoomLevel: z
+    .number()
+    .min(MINIMUM_ZOOM_LEVEL)
+    .max(MAXIMUM_ZOOM_LEVEL)
+    .catch(DEFAULT_ZOOM_LEVEL)
+    .default(DEFAULT_ZOOM_LEVEL),
 });
 
 type PersistedWindowState = z.infer<typeof windowStateSchema>;
@@ -110,6 +128,22 @@ function writePersistedWindowState(next: PersistedWindowState): void {
     // Losing the window position is not worth taking down a window event handler for.
     console.warn(WINDOW_STATE_LOG_SCOPE, 'Window state could not be written.', error);
   }
+}
+
+/**
+ * Merged rather than overwritten: geometry and zoom are saved by different events, and
+ * a plain write from either would drop whatever the other had recorded.
+ */
+function updatePersistedWindowState(patch: Partial<PersistedWindowState>): void {
+  writePersistedWindowState({ ...readPersistedWindowState(), ...patch });
+}
+
+export function readPersistedZoomLevel(): number {
+  return readPersistedWindowState().zoomLevel;
+}
+
+export function persistZoomLevel(zoomLevel: number): void {
+  updatePersistedWindowState({ zoomLevel });
 }
 
 /** True when enough of the rect lands on a display that is currently connected. */
@@ -182,7 +216,7 @@ export function trackWindowState(window: BrowserWindow): void {
     // would otherwise persist the screen-filling rect as its restored size, and
     // un-maximizing after the next launch would have nothing to go back to.
     const bounds = window.getNormalBounds();
-    writePersistedWindowState({
+    updatePersistedWindowState({
       width: bounds.width,
       height: bounds.height,
       x: bounds.x,

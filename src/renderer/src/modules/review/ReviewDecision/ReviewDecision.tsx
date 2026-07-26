@@ -78,13 +78,16 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
       </p>
     );
 
+  const explanationLine =
+    explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={CARD_COLUMN_CLASS}>
       <h2 className={HEADING_CLASS}>{heading}</h2>
       <p role="status" className={STATUS_CLASS}>
         {statusLabel}
       </p>
-      <p className={EXPLANATION_CLASS}>{explanation}</p>
+      {explanationLine}
       <div className={ACTION_ROW_CLASS}>
         {approveButton}
         {rejectButton}

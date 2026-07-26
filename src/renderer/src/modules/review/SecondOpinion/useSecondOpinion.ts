@@ -14,6 +14,7 @@ import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { isSecondOpinionRequestable } from '@renderer/modules/review/SecondOpinion/secondOpinionScope';
 import { useExecuteRequestSecondOpinion } from '@renderer/modules/runs/useQueryRuns';
 import { useRun } from '@renderer/stores/runStore';
+import { useSessionStore } from '@renderer/stores/sessionStore';
 
 export interface UseSecondOpinionOptions {
   runId: string;
@@ -54,7 +55,8 @@ interface UseSecondOpinionResult {
    * Says what separates this card from the guardrail card above it: that one holds
    * approval until it is acknowledged, this one holds nothing at all.
    */
-  explanation: string;
+  /** Null when the pane is compact; the verdict and its concerns never hide. */
+  explanation: string | null;
   /** Null before anyone asked, which is the normal state rather than a failure. */
   verdict: SecondOpinionVerdictView | null;
   /** Non-null only on a disagreement, and it exists to say the disagreement is advice. */
@@ -198,6 +200,7 @@ function buildSourceLabel(opinion: SecondOpinionRecord): string {
  * verdict changes the copy on this card and nothing else in the app.
  */
 export function useSecondOpinion({ runId }: UseSecondOpinionOptions): UseSecondOpinionResult {
+  const isVerbose = useSessionStore((state) => state.isRunPaneVerbose);
   const run = useRun(runId);
   const { requestSecondOpinion, isRequestSecondOpinionPending, requestSecondOpinionError } =
     useExecuteRequestSecondOpinion();
@@ -229,7 +232,7 @@ export function useSecondOpinion({ runId }: UseSecondOpinionOptions): UseSecondO
 
   return {
     heading: HEADING,
-    explanation: EXPLANATION,
+    explanation: isVerbose ? EXPLANATION : null,
     verdict: isDefined(opinion) ? toVerdictView(opinion.verdict) : null,
     dissentNote: isDefined(opinion) && isDissentingVerdict(opinion.verdict) ? DISSENT_NOTE : null,
     concernsHeading: hasConcerns ? CONCERNS_HEADING : null,

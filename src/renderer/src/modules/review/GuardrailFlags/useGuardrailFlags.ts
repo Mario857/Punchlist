@@ -10,6 +10,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useRun } from '@renderer/stores/runStore';
 import { useExecuteAcknowledgeGuardrail } from '@renderer/modules/runs/useQueryRuns';
+import { useSessionStore } from '@renderer/stores/sessionStore';
 
 export interface UseGuardrailFlagsOptions {
   runId: string;
@@ -38,7 +39,8 @@ export interface GuardrailFlagItem {
 
 interface UseGuardrailFlagsResult {
   heading: string;
-  explanation: string;
+  /** Null once the copy has been read enough times; the flags themselves never hide. */
+  explanation: string | null;
   items: GuardrailFlagItem[];
   /** Says what is still outstanding, because that is what gates approval. */
   statusLabel: string;
@@ -150,6 +152,7 @@ function buildStatusLabel(outstandingCount: number): string {
  * accepted is the reason the check exists at all.
  */
 export function useGuardrailFlags({ runId }: UseGuardrailFlagsOptions): UseGuardrailFlagsResult {
+  const isVerbose = useSessionStore((state) => state.isRunPaneVerbose);
   const run = useRun(runId);
   const { acknowledgeGuardrail, isAcknowledgeGuardrailPending, acknowledgeGuardrailError } =
     useExecuteAcknowledgeGuardrail();
@@ -188,7 +191,7 @@ export function useGuardrailFlags({ runId }: UseGuardrailFlagsOptions): UseGuard
 
   return {
     heading: HEADING,
-    explanation: EXPLANATION,
+    explanation: isVerbose ? EXPLANATION : null,
     items,
     statusLabel: buildStatusLabel(outstandingCount),
     isAcknowledgePending: isAcknowledgeGuardrailPending,

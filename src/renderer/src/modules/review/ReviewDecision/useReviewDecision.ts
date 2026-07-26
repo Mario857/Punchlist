@@ -7,6 +7,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useExecuteApproveRuns, useExecuteRejectRuns } from '@renderer/modules/runs/useQueryRuns';
 import { useRun } from '@renderer/stores/runStore';
+import { useSessionStore } from '@renderer/stores/sessionStore';
 
 export interface UseReviewDecisionOptions {
   /**
@@ -22,9 +23,10 @@ interface UseReviewDecisionResult {
   statusLabel: string;
   /**
    * Says that approving lands nothing. The distinction is the product's central
-   * promise, so it is stated on the control rather than left to be inferred.
+   * promise, so it is stated on the control rather than left to be inferred — until
+   * the pane is put in its compact mode, where it has been read enough times.
    */
-  explanation: string;
+  explanation: string | null;
   /** Null wherever approval is not on offer, so an approved run is never asked twice. */
   approveLabel: string | null;
   isApproveDisabled: boolean;
@@ -205,6 +207,7 @@ function buildApproveBlockedMessage(outstandingCount: number): string {
  * holding it, because a control that fails on click teaches nothing.
  */
 export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseReviewDecisionResult {
+  const isVerbose = useSessionStore((state) => state.isRunPaneVerbose);
   const run = useRun(runId);
   const { approveRuns, isApproveRunsPending, approveRunsError } = useExecuteApproveRuns();
   const { rejectRuns, isRejectRunsPending, rejectRunsError } = useExecuteRejectRuns();
@@ -243,7 +246,7 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
   return {
     heading: copy.heading,
     statusLabel: copy.statusLabel,
-    explanation: copy.explanation,
+    explanation: isVerbose ? copy.explanation : null,
     approveLabel: copy.approveLabel,
     isApproveDisabled: isApproveBlocked,
     approveBlockedMessage:

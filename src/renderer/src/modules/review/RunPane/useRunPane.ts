@@ -4,6 +4,7 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { formatDuration } from '@renderer/lib/format';
 import { isDefined } from '@renderer/lib/guards';
 import { useRunForComment } from '@renderer/stores/runStore';
+import { useSessionStore } from '@renderer/stores/sessionStore';
 import { TIER_LABEL } from '@renderer/modules/comments/tierPresentation';
 
 export const RUN_PANE_VIEW_KIND = {
@@ -89,12 +90,18 @@ export type RunPaneView =
 
 interface UseRunPaneResult {
   view: RunPaneView;
+  /** Names the state the button moves to, so it reads as an action rather than a status. */
+  verbosityLabel: string;
+  isVerbose: boolean;
+  onToggleVerbosityClick: () => void;
   /** Null before a run exists, which is what suppresses the header badge. */
   runState: RunState | null;
   /** Null before a run exists, rather than an empty line reading "--". */
   metaLabel: string | null;
 }
 
+const SHOW_EXPLANATIONS_LABEL = 'Explain';
+const HIDE_EXPLANATIONS_LABEL = 'Less';
 const NO_COMMENT_LABEL = 'Select a comment to see how its run is going.';
 const NO_RUN_LABEL = 'No run yet for this comment. Select it in the tree and start one.';
 
@@ -341,6 +348,14 @@ function toMetaLabel(run: RunRecord): string {
  */
 export function useRunPane(commentId: string | null): UseRunPaneResult {
   const run = useRunForComment(commentId);
+  const isVerbose = useSessionStore((state) => state.isRunPaneVerbose);
+  const setIsRunPaneVerbose = useSessionStore((state) => state.setIsRunPaneVerbose);
+
+  const verbosity = {
+    isVerbose,
+    verbosityLabel: isVerbose ? HIDE_EXPLANATIONS_LABEL : SHOW_EXPLANATIONS_LABEL,
+    onToggleVerbosityClick: () => setIsRunPaneVerbose(!isVerbose),
+  };
 
   if (!isDefined(run)) {
     return {
@@ -350,8 +365,9 @@ export function useRunPane(commentId: string | null): UseRunPaneResult {
       },
       runState: null,
       metaLabel: null,
+      ...verbosity,
     };
   }
 
-  return { view: toView(run), runState: run.state, metaLabel: toMetaLabel(run) };
+  return { view: toView(run), runState: run.state, metaLabel: toMetaLabel(run), ...verbosity };
 }

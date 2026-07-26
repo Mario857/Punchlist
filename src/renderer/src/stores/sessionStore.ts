@@ -42,6 +42,7 @@ interface SessionStore extends SessionState {
   setPaneSizes: (patch: Partial<PaneSizes>) => void;
   setIsRunControlsExpanded: (isExpanded: boolean) => void;
   setRunPanePlacement: (placement: RunPanePlacement) => void;
+  setIsRunPaneVerbose: (isVerbose: boolean) => void;
   setTierOverride: (commentId: string, tier: ModelTier) => void;
   /** Drops the override so the comment falls back to the heuristic's answer. */
   clearTierOverride: (commentId: string) => void;
@@ -90,6 +91,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setIsRunControlsExpanded: (isRunControlsExpanded) => set({ isRunControlsExpanded }),
 
   setRunPanePlacement: (runPanePlacement) => set({ runPanePlacement }),
+
+  setIsRunPaneVerbose: (isRunPaneVerbose) => set({ isRunPaneVerbose }),
 
   markPrViewed: (ref) =>
     set((state) => ({
@@ -145,6 +148,7 @@ export function selectPersistableSession(state: SessionStore): SessionState {
     targetBranchByPr: state.targetBranchByPr,
     paneSizes: state.paneSizes,
     runPanePlacement: state.runPanePlacement,
+    isRunPaneVerbose: state.isRunPaneVerbose,
     isRunControlsExpanded: state.isRunControlsExpanded,
   };
 }

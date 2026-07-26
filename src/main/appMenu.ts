@@ -1,6 +1,58 @@
-import { Menu, type MenuItemConstructorOptions } from 'electron';
+import { BrowserWindow, Menu, type MenuItemConstructorOptions } from 'electron';
+import {
+  MAXIMUM_ZOOM_LEVEL,
+  MINIMUM_ZOOM_LEVEL,
+  ZOOM_LEVEL_STEP,
+  persistZoomLevel,
+  readPersistedZoomLevel,
+} from './windowState';
 
 const MACOS_PLATFORM = 'darwin';
+
+const RESET_ZOOM_LEVEL = 0;
+
+function clampZoomLevel(level: number): number {
+  return Math.min(Math.max(level, MINIMUM_ZOOM_LEVEL), MAXIMUM_ZOOM_LEVEL);
+}
+
+/**
+ * The zoom items are written out rather than taken from the `viewMenu` role, because
+ * the role's versions change the web contents and forget: the level is gone on the next
+ * launch. Zoom is how you make a dense diff readable on a particular monitor, so it has
+ * to survive a restart to be worth anything.
+ */
+function applyZoomLevel(level: number): void {
+  const window = BrowserWindow.getFocusedWindow();
+  if (window === null) return;
+  const clamped = clampZoomLevel(level);
+  window.webContents.setZoomLevel(clamped);
+  persistZoomLevel(clamped);
+}
+
+function buildZoomItems(): MenuItemConstructorOptions[] {
+  return [
+    {
+      label: 'Zoom In',
+      accelerator: 'CmdOrCtrl+Plus',
+      click: () => applyZoomLevel(readPersistedZoomLevel() + ZOOM_LEVEL_STEP),
+    },
+    {
+      label: 'Zoom Out',
+      accelerator: 'CmdOrCtrl+-',
+      click: () => applyZoomLevel(readPersistedZoomLevel() - ZOOM_LEVEL_STEP),
+    },
+    {
+      label: 'Actual Size',
+      accelerator: 'CmdOrCtrl+0',
+      click: () => applyZoomLevel(RESET_ZOOM_LEVEL),
+    },
+  ];
+}
+
+/** Applied once the contents exist; a zoom level set before that does not stick. */
+export function applyPersistedZoomLevel(window: BrowserWindow): void {
+  window.webContents.setZoomLevel(clampZoomLevel(readPersistedZoomLevel()));
+}
 
 /**
  * The Edit menu is not chrome. On macOS, Cmd+C/V/X/A and Cmd+Z are delivered
@@ -29,8 +81,18 @@ export function installApplicationMenu(): void {
     ...fileMenuSection,
     // Undo/Redo, Cut/Copy/Paste, Select All.
     { role: 'editMenu' },
-    // Reload, Toggle Developer Tools, the zoom levels, and full screen.
-    { role: 'viewMenu' },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        ...buildZoomItems(),
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
     // Minimize, Zoom, Close.
     { role: 'windowMenu' },
   ];

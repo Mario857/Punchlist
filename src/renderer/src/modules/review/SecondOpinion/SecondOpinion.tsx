@@ -147,6 +147,8 @@ export function SecondOpinion({ runId }: SecondOpinionProps) {
       </p>
     );
 
+  const explanationLine = explanation === null ? null : <p className={META_CLASS}>{explanation}</p>;
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM}>
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
@@ -160,7 +162,7 @@ export function SecondOpinion({ runId }: SecondOpinionProps) {
         {concerns}
         {noConcerns}
         {dissent}
-        <p className={META_CLASS}>{explanation}</p>
+        {explanationLine}
         {source}
         {absence}
         {requestButton}

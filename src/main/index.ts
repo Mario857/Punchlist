@@ -1,6 +1,6 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'node:path';
-import { installApplicationMenu } from './appMenu';
+import { applyPersistedZoomLevel, installApplicationMenu } from './appMenu';
 import { handleHeadMoved, handleNewComments } from './automation';
 import { registerIpcHandlers } from './ipc';
 import { applyProcessContainment } from './sandbox';
@@ -40,6 +40,7 @@ function createWindow(): void {
   trackWindowState(appWindow);
 
   appWindow.on('ready-to-show', () => {
+    applyPersistedZoomLevel(appWindow);
     appWindow.show();
   });
 
