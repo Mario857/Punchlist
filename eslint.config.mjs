@@ -143,7 +143,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/main/**/*.ts', 'src/preload/**/*.ts', '*.config.{ts,mts,mjs}'],
+    files: [
+      'src/main/**/*.ts',
+      'src/preload/**/*.ts',
+      '*.config.{ts,mts,mjs}',
+      // Build-time scripts run on Node too; the icon generator is one.
+      'build/**/*.mjs',
+    ],
     languageOptions: {
       globals: globals.node,
     },

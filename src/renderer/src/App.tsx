@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ErrorBoundary } from '@renderer/components/ErrorBoundary/ErrorBoundary';
 import { Spinner, SPINNER_SIZE } from '@renderer/components/Spinner';
 import { assertNever } from '@renderer/lib/assertNever';
 import { Audit } from '@renderer/screens/Audit/Audit';
@@ -43,17 +44,21 @@ export default function App() {
     }
   })();
 
+  // Outermost, so a throw from any screen, module or provider below still lands on
+  // something with a way back rather than blanking the window.
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="font-body text-ink flex h-full min-h-0 flex-col">
-        <AppNav
-          screen={screen}
-          onOpenWorkspace={onOpenWorkspace}
-          onOpenAudit={onOpenAudit}
-          onOpenSettings={onOpenSettings}
-        />
-        {content}
-      </div>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <div className="font-body text-ink flex h-full min-h-0 flex-col">
+          <AppNav
+            screen={screen}
+            onOpenWorkspace={onOpenWorkspace}
+            onOpenAudit={onOpenAudit}
+            onOpenSettings={onOpenSettings}
+          />
+          {content}
+        </div>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
