@@ -22,12 +22,7 @@ import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runSt
 import { useSessionStore } from '@renderer/stores/sessionStore';
 import { useElementSize } from '@renderer/hooks/useElementSize';
 import { clamp } from '@renderer/lib/numbers';
-import {
-  CENTER_PANE_MIN_WIDTH,
-  LEFT_PANE_WIDTH,
-  RIGHT_PANE_WIDTH,
-  type PaneVisibility,
-} from '@shared/settings';
+import { LEFT_PANE_WIDTH, REVIEW_PANE_MIN_WIDTH, type PaneVisibility } from '@shared/settings';
 
 /** Nothing is reserved for a pane that is not on screen. */
 const NO_RESERVED_SIZE = 0;
@@ -52,12 +47,11 @@ export interface PaneToggleItem {
 }
 
 /** Declared once so the toggles, the count and the layout agree on the order. */
-const PANE_KEYS: readonly PaneKey[] = ['commentList', 'commentDetail', 'runPane'];
+const PANE_KEYS: readonly PaneKey[] = ['commentList', 'reviewPane'];
 
 const PANE_LABEL: Record<PaneKey, string> = {
   commentList: 'Comments',
-  commentDetail: 'Detail',
-  runPane: 'Run',
+  reviewPane: 'Review',
 };
 
 const LAST_VISIBLE_PANE_COUNT = 1;
@@ -99,28 +93,22 @@ interface UseWorkspaceResult {
   diffPaneRef: Ref<HTMLDivElement>;
   /** A persisted pixel size cannot be a utility class, so it arrives as a style. */
   leftPaneStyle: CSSProperties;
-  runPaneStyle: CSSProperties;
   layoutRef: RefCallback<HTMLDivElement>;
   leftPaneWidth: number;
-  rightPaneWidth: number;
   /**
-   * Bounded by the window rather than by a constant, so maximising one pane can never
-   * make its neighbour unshrinkable.
+   * Bounded by the window rather than by a constant, so widening the list can never
+   * leave the review pane too narrow to render a patch in.
    */
   leftPaneMaxWidth: number;
-  rightPaneMaxWidth: number;
   onLeftPaneWidthChange: (width: number) => void;
-  onRightPaneWidthChange: (width: number) => void;
   paneToggleItems: PaneToggleItem[];
   isCommentListVisible: boolean;
-  isCommentDetailVisible: boolean;
-  isRunPaneVisible: boolean;
+  isReviewPaneVisible: boolean;
   /**
-   * True while a pane has nothing beside it to take the leftover space, which is when
-   * a persisted pixel size would leave the rest of the window blank.
+   * True while the list has nothing beside it to take the leftover space, which is when
+   * its persisted width would leave the rest of the window blank.
    */
   isCommentListFilling: boolean;
-  isRunPaneFilling: boolean;
   targetBranch: string;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
@@ -194,12 +182,9 @@ export function useWorkspace(): UseWorkspaceResult {
     runId: selectedRun?.id ?? null,
   });
 
-  // The detail pane is the one that flexes, so with it hidden the list takes that role
-  // and the run pane keeps its persisted width. Leaving both of them fixed is the bug
-  // this replaced: nothing absorbed the leftover space, and the only divider left was
-  // the run pane's, so the comment list could not be resized at all.
-  const isCommentListFilling = !paneVisibility.commentDetail;
-  const isRunPaneFilling = !paneVisibility.commentList && !paneVisibility.commentDetail;
+  // The review pane is the one that flexes, so the list only carries a fixed width while
+  // the review pane is there to absorb what is left over.
+  const isCommentListFilling = !paneVisibility.reviewPane;
 
   const visiblePaneCount = PANE_KEYS.filter((key) => paneVisibility[key]).length;
   const isLastVisiblePane = visiblePaneCount === LAST_VISIBLE_PANE_COUNT;
@@ -215,24 +200,11 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const { ref: layoutRef, width: layoutWidth } = useElementSize<HTMLDivElement>();
 
-  const detailReservedWidth = paneVisibility.commentDetail
-    ? CENTER_PANE_MIN_WIDTH
-    : NO_RESERVED_SIZE;
-
   const isLayoutMeasured = layoutWidth > UNMEASURED_LAYOUT_SIZE;
 
   const leftPaneMaxWidth = resolveMaxSize(
     LEFT_PANE_WIDTH,
-    layoutWidth -
-      detailReservedWidth -
-      (paneVisibility.runPane ? RIGHT_PANE_WIDTH.MIN : NO_RESERVED_SIZE),
-    isLayoutMeasured,
-  );
-  const rightPaneMaxWidth = resolveMaxSize(
-    RIGHT_PANE_WIDTH,
-    layoutWidth -
-      detailReservedWidth -
-      (paneVisibility.commentList ? LEFT_PANE_WIDTH.MIN : NO_RESERVED_SIZE),
+    layoutWidth - (paneVisibility.reviewPane ? REVIEW_PANE_MIN_WIDTH : NO_RESERVED_SIZE),
     isLayoutMeasured,
   );
 
@@ -241,23 +213,14 @@ export function useWorkspace(): UseWorkspaceResult {
   // stored value is left alone: making the window narrow for a minute should not lose
   // the layout you had.
   const leftPaneWidth = clamp(paneSizes.left, LEFT_PANE_WIDTH.MIN, leftPaneMaxWidth);
-  const rightPaneWidth = clamp(paneSizes.right, RIGHT_PANE_WIDTH.MIN, rightPaneMaxWidth);
 
   const leftPaneStyle = useMemo(
     () => (isCommentListFilling ? EMPTY_STYLE : { width: leftPaneWidth }),
     [isCommentListFilling, leftPaneWidth],
   );
-  const runPaneStyle = useMemo(
-    () => (isRunPaneFilling ? EMPTY_STYLE : { width: rightPaneWidth }),
-    [isRunPaneFilling, rightPaneWidth],
-  );
 
   const onLeftPaneWidthChange = useCallback(
     (left: number) => setPaneSizes({ left }),
-    [setPaneSizes],
-  );
-  const onRightPaneWidthChange = useCallback(
-    (right: number) => setPaneSizes({ right }),
     [setPaneSizes],
   );
 
@@ -303,20 +266,14 @@ export function useWorkspace(): UseWorkspaceResult {
     commentTreeRef,
     diffPaneRef,
     leftPaneStyle,
-    runPaneStyle,
     layoutRef,
     leftPaneWidth,
-    rightPaneWidth,
     leftPaneMaxWidth,
-    rightPaneMaxWidth,
     onLeftPaneWidthChange,
-    onRightPaneWidthChange,
     paneToggleItems,
     isCommentListVisible: paneVisibility.commentList,
-    isCommentDetailVisible: paneVisibility.commentDetail,
-    isRunPaneVisible: paneVisibility.runPane,
+    isReviewPaneVisible: paneVisibility.reviewPane,
     isCommentListFilling,
-    isRunPaneFilling,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,

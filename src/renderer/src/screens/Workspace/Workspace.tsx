@@ -9,22 +9,25 @@ import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
 import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
 import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
-import { LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
+import { LEFT_PANE_WIDTH } from '@shared/settings';
 import { PaneDivider } from './components/PaneDivider/PaneDivider';
 import { PANE_EDGE } from './components/PaneDivider/usePaneDivider';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
-// The dividers carry the border now, so the panes no longer draw their own.
+// The divider carries the border now, so the panes no longer draw their own.
 const COLUMNS_CLASS = 'flex min-h-0 min-w-0 flex-1';
 const LEFT_PANE_CLASS = 'flex shrink-0 flex-col overflow-hidden';
-const CENTER_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
-const RUN_PANE_CLASS = 'shrink-0 overflow-y-auto';
-/** A pane with nothing beside it takes the space instead of its persisted size. */
-const FILLING_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
+/** The list takes the space instead of its persisted width when nothing is beside it. */
 const FILLING_LIST_CLASS = 'flex min-w-0 flex-1 flex-col overflow-hidden';
+/**
+ * One scrolling column holding the comment and the work done on it. They were two panes
+ * and are one because they are one thing: the comment states what has to change and the
+ * patch is the answer, so reading the answer without the question in view was the whole
+ * difficulty. The comment leads, the resolution follows.
+ */
+const REVIEW_PANE_CLASS = 'flex min-w-0 flex-1 flex-col overflow-y-auto';
 const LEFT_DIVIDER_LABEL = 'Resize the comment list';
-const RIGHT_DIVIDER_LABEL = 'Resize the run pane';
 /** Focusable by the `e` shortcut, but never a stop in the normal tab order. */
 const PANE_FOCUS_TAB_INDEX = -1;
 const COMMENTS_ERROR_FALLBACK = 'Could not load comments for this pull request.';
@@ -43,20 +46,14 @@ export function Workspace() {
     commentTreeRef,
     diffPaneRef,
     leftPaneStyle,
-    runPaneStyle,
     layoutRef,
     leftPaneWidth,
-    rightPaneWidth,
     leftPaneMaxWidth,
-    rightPaneMaxWidth,
     onLeftPaneWidthChange,
-    onRightPaneWidthChange,
     paneToggleItems,
     isCommentListVisible,
-    isCommentDetailVisible,
-    isRunPaneVisible,
+    isReviewPaneVisible,
     isCommentListFilling,
-    isRunPaneFilling,
     targetBranch,
     isLandingOpen,
     onTargetBranchChange,
@@ -129,16 +126,11 @@ export function Workspace() {
         </div>
       );
     }
-    // Extracted so both placements render the same pane rather than two that can drift.
-    const runPane = !isRunPaneVisible ? null : (
+    const reviewPane = !isReviewPaneVisible ? null : (
       /* tabIndex makes the pane a focus target for the `e` shortcut, without making it
          a tab stop in the normal order. */
-      <div
-        className={isRunPaneFilling ? FILLING_PANE_CLASS : RUN_PANE_CLASS}
-        style={runPaneStyle}
-        ref={diffPaneRef}
-        tabIndex={PANE_FOCUS_TAB_INDEX}
-      >
+      <div className={REVIEW_PANE_CLASS} ref={diffPaneRef} tabIndex={PANE_FOCUS_TAB_INDEX}>
+        <CommentDetail comment={selectedComment} />
         <RunPane commentId={selectedCommentId} />
       </div>
     );
@@ -153,8 +145,8 @@ export function Workspace() {
     );
 
     // A divider only exists between two panes, so hiding either takes it with them.
-    const listDivider =
-      isCommentListVisible && isCommentDetailVisible ? (
+    const divider =
+      isCommentListVisible && isReviewPaneVisible ? (
         <PaneDivider
           label={LEFT_DIVIDER_LABEL}
           edge={PANE_EDGE.LEADING}
@@ -165,40 +157,11 @@ export function Workspace() {
         />
       ) : null;
 
-    const commentDetail = !isCommentDetailVisible ? null : (
-      <div className={CENTER_PANE_CLASS}>
-        <CommentDetail comment={selectedComment} />
-      </div>
-    );
-
-    const hasCommentColumns = isCommentListVisible || isCommentDetailVisible;
-    const commentColumns = !hasCommentColumns ? null : (
-      <div className={COLUMNS_CLASS}>
-        {commentList}
-        {listDivider}
-        {commentDetail}
-      </div>
-    );
-
-    // The run divider needs a pane on each side of it too.
-    const hasRunDivider = hasCommentColumns && isRunPaneVisible;
-
-    const rightDivider = !hasRunDivider ? null : (
-      <PaneDivider
-        label={RIGHT_DIVIDER_LABEL}
-        edge={PANE_EDGE.TRAILING}
-        size={rightPaneWidth}
-        minSize={RIGHT_PANE_WIDTH.MIN}
-        maxSize={rightPaneMaxWidth}
-        onSizeChange={onRightPaneWidthChange}
-      />
-    );
-
     return (
       <div ref={layoutRef} className={COLUMNS_CLASS}>
-        {commentColumns}
-        {rightDivider}
-        {runPane}
+        {commentList}
+        {divider}
+        {reviewPane}
       </div>
     );
   })();

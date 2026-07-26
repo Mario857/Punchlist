@@ -1,6 +1,6 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
-import { FileIcon } from '@renderer/components/icons/FileIcon';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { assertNever } from '@renderer/lib/assertNever';
 import { DiffHunk } from '@renderer/modules/review/CommentDetail/components/DiffHunk';
 import {
@@ -12,7 +12,9 @@ interface Props {
   view: CommentDetailKindView;
 }
 
-const ANCHOR_ICON_SIZE = 12;
+const ANCHOR_SECTION_ID = 'comment-anchor';
+const ANCHOR_HEADING = 'Anchored code';
+const ANCHOR_SUMMARY_SEPARATOR = ' ';
 
 export function CommentKindDetail({ view }: Props) {
   const content = (() => {
@@ -29,19 +31,26 @@ export function CommentKindDetail({ view }: Props) {
           </Badge>
         ) : null;
 
+        // Folded by default: it is the code as it was when the comment was left, and
+        // the candidate patch below shows the same file as it stands now.
+        const badges =
+          resolvedBadge === null && outdatedBadge === null ? undefined : (
+            <span className="flex shrink-0 items-center gap-2">
+              {resolvedBadge}
+              {outdatedBadge}
+            </span>
+          );
+
         return (
-          <Card padding={CARD_PADDING.SM} tone={CARD_TONE.RAISED}>
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <FileIcon size={ANCHOR_ICON_SIZE} className="text-muted shrink-0" />
-                <span className="text-ink min-w-0 truncate font-mono text-xs">{view.path}</span>
-                <span className="text-muted text-xs tabular-nums">{view.lineLabel}</span>
-                {resolvedBadge}
-                {outdatedBadge}
-              </div>
-              <DiffHunk diffHunk={view.diffHunk} />
-            </div>
-          </Card>
+          <CollapsibleCard
+            sectionId={ANCHOR_SECTION_ID}
+            heading={ANCHOR_HEADING}
+            summary={`${view.path}${ANCHOR_SUMMARY_SEPARATOR}${view.lineLabel}`}
+            headerAccessory={badges}
+            isDefaultOpen={false}
+          >
+            <DiffHunk diffHunk={view.diffHunk} />
+          </CollapsibleCard>
         );
       }
       case COMMENT_DETAIL_KIND_VIEW.UNANCHORED:

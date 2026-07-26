@@ -29,11 +29,12 @@ const EMPTY_STATE_CLASS = 'text-muted grid flex-1 place-items-center p-6 text-ce
 const ERROR_MESSAGE_CLASS = 'text-danger mt-2 font-mono text-xs break-words';
 const COLUMN_CLASS = 'flex min-h-0 flex-1 flex-col gap-2';
 /**
- * `min-h-full`, not `h-full`: the diff view stacks cards around an editor with a
- * height floor, and a section pinned to the pane's height would clip them instead of
- * letting the pane scroll.
+ * `flex-1` with no `min-h-0`: it shares a scrolling column with the comment above it, so
+ * it grows to fill whatever the comment leaves and then past that as its own content
+ * demands. Allowing it to shrink below its content is what collapsed the diff to a few
+ * pixels before.
  */
-const SECTION_CLASS = 'flex min-h-full flex-col gap-2 p-3';
+const SECTION_CLASS = 'flex flex-1 flex-col gap-2 p-3';
 
 /**
  * The state-dependent right pane. The branch is a named `const` over a discriminated

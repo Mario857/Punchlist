@@ -43,15 +43,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = appSettingsSchema.parse({});
  * needs is a judgement about the monitor in front of you: the same width that is
  * generous on a laptop leaves a side-by-side patch unreadable on a wide display.
  */
-export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 320, MAX: 560 } as const;
-export const RIGHT_PANE_WIDTH = { MIN: 360, DEFAULT: 560, MAX: 1200 } as const;
+export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 340, MAX: 560 } as const;
 /**
- * The detail pane has no persisted size — it takes what is left — so this is what a drag
- * on a neighbouring divider must leave it. Without it the `MAX` values above are the
- * real limit, which means the pane beside a maximised one cannot be shrunk past whatever
- * the window happens to make left over.
+ * The review pane has no persisted size — it takes what the comment list leaves — so
+ * this is what a drag on the divider must leave it. Without it the `MAX` above is the
+ * real limit, and the list could be dragged until the patch had nowhere to render.
  */
-export const CENTER_PANE_MIN_WIDTH = 320;
+export const REVIEW_PANE_MIN_WIDTH = 420;
 
 /**
  * `.catch` rather than a bare default: a width persisted by an older build, or one
@@ -60,24 +58,18 @@ export const CENTER_PANE_MIN_WIDTH = 320;
  */
 const paneSizesSchema = z.object({
   left: z.number().min(LEFT_PANE_WIDTH.MIN).max(LEFT_PANE_WIDTH.MAX).catch(LEFT_PANE_WIDTH.DEFAULT),
-  right: z
-    .number()
-    .min(RIGHT_PANE_WIDTH.MIN)
-    .max(RIGHT_PANE_WIDTH.MAX)
-    .catch(RIGHT_PANE_WIDTH.DEFAULT),
 });
 
 export type PaneSizes = z.infer<typeof paneSizesSchema>;
 
 /**
- * Which of the three panes are on screen. Hiding one is how you get a single thing to
- * look at — the comment tree while triaging, or the patch alone while reading it. The
- * last visible pane cannot be hidden, since an empty workspace is not a focus mode.
+ * Which of the two panes are on screen. Hiding one is how you get a single thing to look
+ * at — the tree while triaging, or the comment and its patch alone while resolving one.
+ * The last visible pane cannot be hidden, since an empty workspace is not a focus mode.
  */
 const paneVisibilitySchema = z.object({
   commentList: z.boolean().default(true),
-  commentDetail: z.boolean().default(true),
-  runPane: z.boolean().default(true),
+  reviewPane: z.boolean().default(true),
 });
 
 export type PaneVisibility = z.infer<typeof paneVisibilitySchema>;

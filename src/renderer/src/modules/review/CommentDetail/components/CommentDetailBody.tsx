@@ -1,4 +1,5 @@
 import { Badge } from '@renderer/components/Badge';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { BotIcon } from '@renderer/components/icons/BotIcon';
 import { ExternalLinkIcon } from '@renderer/components/icons/ExternalLinkIcon';
 import { FOCUS_RING, INTERACTIVE_TRANSITION } from '@renderer/components/interactiveClassNames';
@@ -13,7 +14,16 @@ interface Props {
 
 const BOT_ICON_SIZE = 11;
 const EXTERNAL_LINK_ICON_SIZE = 12;
+const REPLIES_SECTION_ID = 'comment-replies';
+const REPLIES_HEADING = 'Replies';
+const META_SEPARATOR = '·';
 
+/**
+ * The comment reads as the heading of the work rather than as a pane of its own: one
+ * identity line, then what was actually asked. Everything that is reference material —
+ * the code the comment was left on, the thread that followed — folds away, because the
+ * patch below is answering the question and the question is what has to stay in view.
+ */
 export function CommentDetailBody({ detail }: Props) {
   const botBadge = detail.isBotAuthor ? (
     <Badge isMuted icon={<BotIcon size={BOT_ICON_SIZE} />} title="Authored by a bot">
@@ -21,9 +31,16 @@ export function CommentDetailBody({ detail }: Props) {
     </Badge>
   ) : null;
 
-  const repliesBlock = detail.hasReplies ? (
-    <CommentReplies items={detail.replyItems} countLabel={detail.replyCountLabel} />
-  ) : null;
+  const repliesBlock = !detail.hasReplies ? null : (
+    <CollapsibleCard
+      sectionId={REPLIES_SECTION_ID}
+      heading={REPLIES_HEADING}
+      summary={detail.replyCountLabel}
+      isDefaultOpen={false}
+    >
+      <CommentReplies items={detail.replyItems} countLabel={detail.replyCountLabel} />
+    </CollapsibleCard>
+  );
 
   const bodyClassName = joinClassNames(
     'text-sm leading-relaxed break-words whitespace-pre-wrap',
@@ -31,32 +48,31 @@ export function CommentDetailBody({ detail }: Props) {
   );
 
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-ink text-sm font-semibold">{detail.authorLogin}</span>
-          {botBadge}
-          {/* A plain anchor: main routes every new-window request to the system browser. */}
-          <a
-            href={detail.url}
-            target="_blank"
-            rel="noreferrer"
-            className={joinClassNames(
-              'text-muted hover:text-ink ml-auto inline-flex items-center gap-1 rounded text-xs',
-              FOCUS_RING,
-              INTERACTIVE_TRANSITION,
-            )}
-          >
-            View on GitHub
-            <ExternalLinkIcon size={EXTERNAL_LINK_ICON_SIZE} />
-          </a>
-        </div>
-        <p className="text-muted/80 text-xs tabular-nums">{detail.createdAtLabel}</p>
-      </header>
-
-      <CommentKindDetail view={detail.kindView} />
+    <div className="flex shrink-0 flex-col gap-2 p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-ink shrink-0 text-sm font-semibold">{detail.authorLogin}</span>
+        {botBadge}
+        <span className="text-muted/60 text-xs">{META_SEPARATOR}</span>
+        <span className="text-muted/80 truncate text-xs tabular-nums">{detail.createdAtLabel}</span>
+        {/* A plain anchor: main routes every new-window request to the system browser. */}
+        <a
+          href={detail.url}
+          target="_blank"
+          rel="noreferrer"
+          className={joinClassNames(
+            'text-muted hover:text-ink ml-auto inline-flex shrink-0 items-center gap-1 rounded text-xs',
+            FOCUS_RING,
+            INTERACTIVE_TRANSITION,
+          )}
+        >
+          View on GitHub
+          <ExternalLinkIcon size={EXTERNAL_LINK_ICON_SIZE} />
+        </a>
+      </div>
 
       <p className={bodyClassName}>{detail.bodyText}</p>
+
+      <CommentKindDetail view={detail.kindView} />
 
       {repliesBlock}
     </div>
