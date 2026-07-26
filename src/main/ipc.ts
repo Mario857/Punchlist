@@ -7,6 +7,7 @@ import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
+import { assembleLanding } from './landing';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
@@ -37,6 +38,9 @@ import {
 import { getGhAuthStatus } from './ghCli';
 import { fetchPrComments } from './github';
 import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettings } from './store';
+
+/** An empty branch name would resolve to whatever git happened to be on. */
+const MIN_BRANCH_NAME_LENGTH = 1;
 
 /** An empty follow-up would resume the agent with nothing to act on. */
 const MIN_CONTINUATION_MESSAGE_LENGTH = 1;
@@ -74,6 +78,11 @@ const writeRunFilePayloadSchema = z.object({
   path: z.string(),
   // Deliberately unconstrained: emptying a file is a legal hand edit.
   content: z.string(),
+});
+
+const assembleLandingPayloadSchema = z.object({
+  prRef: prRefSchema,
+  targetBranch: z.string().min(MIN_BRANCH_NAME_LENGTH),
 });
 
 /** Bulk approve and reject are the same operation applied to many, so one schema. */
@@ -213,6 +222,10 @@ export function registerIpcHandlers(): void {
   // restart; the run path takes the cached catalog.
   registerHandler(IPC_CHANNEL.MODELS_LIST, noPayloadSchema, () =>
     listModelCatalog({ shouldRefresh: true }),
+  );
+
+  registerHandler(IPC_CHANNEL.LANDING_ASSEMBLE, assembleLandingPayloadSchema, (request) =>
+    assembleLanding(request),
   );
 
   registerHandler(IPC_CHANNEL.AUDIT_LIST, noPayloadSchema, () => listAuditEntries());
