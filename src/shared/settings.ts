@@ -49,6 +49,15 @@ export const RIGHT_PANE_WIDTH = { MIN: 360, DEFAULT: 560, MAX: 1200 } as const;
 export const BOTTOM_PANE_HEIGHT = { MIN: 220, DEFAULT: 440, MAX: 1200 } as const;
 
 /**
+ * The detail pane and the comment columns have no persisted size — they take what is
+ * left — so these are what a drag on a neighbouring divider must leave them. Without
+ * them the `MAX` above is the real limit, which means the pane beside a maximised one
+ * cannot be shrunk past whatever the window happens to make left over.
+ */
+export const CENTER_PANE_MIN_WIDTH = 320;
+export const COLUMNS_MIN_HEIGHT = 200;
+
+/**
  * Where the run pane lives. A patch is wide before it is tall, so the bottom placement
  * gives it the window's full width — but the side placement keeps the comment and its
  * resolution in view together, which is the better shape for reading one thread. Both

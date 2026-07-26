@@ -45,9 +45,13 @@ export function Workspace() {
     diffPaneRef,
     leftPaneStyle,
     runPaneStyle,
+    layoutRef,
     leftPaneWidth,
     rightPaneWidth,
     bottomPaneHeight,
+    leftPaneMaxWidth,
+    rightPaneMaxWidth,
+    bottomPaneMaxHeight,
     onLeftPaneWidthChange,
     onRightPaneWidthChange,
     onBottomPaneHeightChange,
@@ -164,7 +168,7 @@ export function Workspace() {
           edge={PANE_EDGE.LEADING}
           size={leftPaneWidth}
           minSize={LEFT_PANE_WIDTH.MIN}
-          maxSize={LEFT_PANE_WIDTH.MAX}
+          maxSize={leftPaneMaxWidth}
           onSizeChange={onLeftPaneWidthChange}
         />
       ) : null;
@@ -197,13 +201,13 @@ export function Workspace() {
           edge={PANE_EDGE.TRAILING}
           size={bottomPaneHeight}
           minSize={BOTTOM_PANE_HEIGHT.MIN}
-          maxSize={BOTTOM_PANE_HEIGHT.MAX}
+          maxSize={bottomPaneMaxHeight}
           onSizeChange={onBottomPaneHeightChange}
         />
       );
 
       return (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div ref={layoutRef} className="flex min-h-0 flex-1 flex-col">
           {commentColumns}
           {bottomDivider}
           {runPane}
@@ -218,13 +222,13 @@ export function Workspace() {
         edge={PANE_EDGE.TRAILING}
         size={rightPaneWidth}
         minSize={RIGHT_PANE_WIDTH.MIN}
-        maxSize={RIGHT_PANE_WIDTH.MAX}
+        maxSize={rightPaneMaxWidth}
         onSizeChange={onRightPaneWidthChange}
       />
     );
 
     return (
-      <div className={COLUMNS_CLASS}>
+      <div ref={layoutRef} className={COLUMNS_CLASS}>
         {commentColumns}
         {rightDivider}
         {runPane}
