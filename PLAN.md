@@ -72,16 +72,16 @@
 ### Phase 4 — Revise
 
 - [x] `decision-protocol` — Surface the question + options and send the reply through agent.send to continue. **Detection landed early, in phase 2**: the phase 2 prompt already instructs the agent to halt and write `.airlock/decision.json`, so without a watcher a halted run would simply hang until its timeout. `src/main/decision.ts` therefore ships with the run engine, and what remains here is the reply UI and the continuation path
-- [ ] `auto-mode` — Per-session auto mode toggle, off on every app start; pre-selects the recommended comment set, takes the heuristic tier silently, and auto-answers blocking questions with the agent's top option; never approves diffs, never crosses the landing gate or into the paid lane; capped auto-answers per run before parking for a human
-- [ ] `auto-mode-visibility` — Record auto-decisions per run (what was chosen, what the alternatives were) and render them beside the diff in review; show the toggle state and a count of deferred decisions awaiting review
-- [ ] `hand-edit-diff` — Editable modified side of Monaco DiffEditor, debounced write-back to the worktree file, re-diff and commit as a revision
-- [ ] `targeted-edits` — InlinePrompt.tsx selection-scoped revision via agent.send on the same agent: prompt carries path, line range, and selected content verbatim (content is the anchor since line numbers drift), framed differently for modified-side (change this) vs original-side (you missed this) selections; defaults to the free mechanical tier, sends serialized per run, result scope-checked by guardrails, commits as a revision
+- [x] `auto-mode` — Per-session auto mode toggle, off on every app start; pre-selects the recommended comment set, takes the heuristic tier silently, and auto-answers blocking questions with the agent's top option; never approves diffs, never crosses the landing gate or into the paid lane; capped auto-answers per run before parking for a human
+- [x] `auto-mode-visibility` — Record auto-decisions per run (what was chosen, what the alternatives were) and render them beside the diff in review; show the toggle state and a count of deferred decisions awaiting review
+- [x] `hand-edit-diff` — Editable modified side of Monaco DiffEditor, debounced write-back to the worktree file, re-diff and commit as a revision
+- [x] `targeted-edits` — InlinePrompt.tsx selection-scoped revision via agent.send on the same agent: prompt carries path, line range, and selected content verbatim (content is the anchor since line numbers drift), framed differently for modified-side (change this) vs original-side (you missed this) selections; defaults to the free mechanical tier, sends serialized per run, result scope-checked by guardrails, commits as a revision
 - [x] `revising-state` — Add revising run state so the right pane keeps the existing diff dimmed with inline agent progress instead of swapping to a transcript; also expose a whole-patch follow-up prompt in ready state, unifying decision reply / follow-up / targeted edit onto one agent.send path
-- [ ] `revision-history` — One commit per revision in the worktree as an audit trail, with revert-to-revision; squashed at apply time
+- [x] `revision-history` — One commit per revision in the worktree as an audit trail, with revert-to-revision; squashed at apply time
 - [x] `guardrails` — Build src/main/guardrails.ts running on every patch that reaches ready and again on the combined landing diff: configurable protected-path list (lock files, generated output, .github/workflows, .env*, vendored trees, .cursor/rules), credential-shaped secret scan, and tier-versus-diff-size plus out-of-anchor-path mismatch; flags block approval until acknowledged and the acknowledgement is audited
-- [ ] `review-shortcuts` — useReviewShortcuts hook for keyboard-driven review (j/k over visible tree rows skipping collapsed subtrees, left/right collapse-expand, a approve, r reject, e focus diff, ]/[ hunk nav, Cmd+K inline prompt on selection matching Cursor's binding, d dismiss, ? help); every shortcut has a visible button equivalent and landing confirmation stays a click
+- [x] `review-shortcuts` — useReviewShortcuts hook for keyboard-driven review (j/k over visible tree rows skipping collapsed subtrees, left/right collapse-expand, a approve, r reject, e focus diff, ]/[ hunk nav, Cmd+K inline prompt on selection matching Cursor's binding, d dismiss, ? help); every shortcut has a visible button equivalent and landing confirmation stays a click
 
-#### Phase 4 progress: three of nine items done
+#### As built: five notes
 
 `decision-protocol` and `revising-state` landed together, because they are one mechanism: `runs:continue` resumes the run's existing agent, and the run's state decides whether that means answering a question (`needsDecision` → `running`) or revising a patch (`ready` → `revising`). Doing the decision reply without the follow-up would have built the same path twice.
 
@@ -97,7 +97,14 @@ Two consequences worth knowing before the remaining items are picked up:
 
 The combined-landing-diff pass is also phase 5 by definition; `inspectCandidatePatch` was deliberately written without a per-run assumption so it can run against that diff unchanged.
 
-Still open: `auto-mode`, `auto-mode-visibility`, `hand-edit-diff`, `targeted-edits`, `revision-history`, `review-shortcuts`.
+The rest of the phase landed together. Four further notes:
+
+- **Only the first agent turn had a decision watcher.** An agent that halted again while answering — common, since an answer often exposes the next fork — left its decision file unread and the run settled as `ready` over an unfinished patch. Fixed: a fresh halt wins over the settled outcome on a continuation exactly as it does on the first turn.
+- **`Cmd+K`, `[` and `]` belong to the editor, not the window.** The shortcut hook documents them in its map but supplies no handler, and it ignores a binding it cannot handle, so the keys reach Monaco untouched. Registering per inner editor is also what makes a selection's side known rather than guessed from focus.
+- **`a` and `r` are documented but unbound**, carrying no key at all rather than a key with no handler. Approve and reject arrive with the review gate; a binding that swallowed the keypress to do nothing would be worse than none.
+- **The auto-answer cap counter is the recorded decisions themselves.** It survives a restart and a retry of the same run, where a process counter would silently reset and let the drift resume.
+
+Two known gaps carried into phase 5: there is still no visible Dismiss control for the `d` shortcut, and `approved` accepts a continuation in main but is not offered one in the UI until the approve action exists.
 
 ### Phase 5 — Land, gated
 
