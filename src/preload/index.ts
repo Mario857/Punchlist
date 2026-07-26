@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { PrComment } from '@shared/comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discovery';
 import type { IpcResult } from '@shared/errors';
-import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
+import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type PunchlistApi } from '@shared/ipcContract';
 import type { PrStatus } from '@shared/automation';
 import type { AuditEntry } from '@shared/audit';
 import type {
@@ -41,7 +41,7 @@ import type { AppSettings, SessionState } from '@shared/settings';
  * to draw. Every channel used here is registered in src/main/ipc.ts, and there is
  * no other way across.
  */
-const api: AirlockApi = {
+const api: PunchlistApi = {
   platform: process.platform,
   versions: {
     electron: process.versions.electron,
@@ -85,6 +85,9 @@ const api: AirlockApi = {
   },
   cursorKey: {
     isSet: (): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC_CHANNEL.CURSOR_KEY_STATUS),
+    set: (key: string): Promise<IpcResult<boolean>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.CURSOR_KEY_SET, key),
+    clear: (): Promise<IpcResult<boolean>> => ipcRenderer.invoke(IPC_CHANNEL.CURSOR_KEY_CLEAR),
   },
   runs: {
     list: (ref: PrRef): Promise<IpcResult<RunRecord[]>> =>

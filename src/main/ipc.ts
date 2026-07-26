@@ -57,15 +57,19 @@ import {
 import { getGhAuthStatus } from './ghCli';
 import { fetchPrComments, fetchPrStatus } from './github';
 import {
+  clearCursorApiKey,
   getConventionRules,
   getSession,
   getSettings,
   isCursorApiKeySet,
+  setCursorApiKey,
   updateSession,
   updateSettings,
 } from './store';
 
 const CLONE_CANCELLED_MESSAGE = 'No folder was chosen, so nothing was cloned.';
+
+const MIN_CURSOR_KEY_LENGTH = 1;
 
 /** An empty branch name would resolve to whatever git happened to be on. */
 const MIN_BRANCH_NAME_LENGTH = 1;
@@ -159,6 +163,9 @@ const exportConventionsPayloadSchema = z.object({
   repoKey: z.string(),
   isConfirmedByUser: z.boolean(),
 });
+
+/** Trimmed and non-empty; a blank key would store nothing and report success. */
+const cursorKeyPayloadSchema = z.string().trim().min(MIN_CURSOR_KEY_LENGTH);
 
 const revertRunPayloadSchema = z.object({
   runId: z.string(),
@@ -273,6 +280,18 @@ export function registerIpcHandlers(): void {
 
   // Whether a key is stored, never its value. The secret stays in main.
   registerHandler(IPC_CHANNEL.CURSOR_KEY_STATUS, noPayloadSchema, () => isCursorApiKeySet());
+  // The one place a secret crosses the boundary, and it crosses one way. The key is
+  // encrypted in main and there is no channel that returns it, so storing it is the
+  // last time the renderer can see it. The handler returns only whether one is set —
+  // never the value, and never an echo of what was just sent.
+  registerHandler(IPC_CHANNEL.CURSOR_KEY_SET, cursorKeyPayloadSchema, (key) => {
+    setCursorApiKey(key);
+    return isCursorApiKeySet();
+  });
+  registerHandler(IPC_CHANNEL.CURSOR_KEY_CLEAR, noPayloadSchema, () => {
+    clearCursorApiKey();
+    return isCursorApiKeySet();
+  });
 
   registerHandler(IPC_CHANNEL.RUNS_LIST, prRefSchema, (ref) => listRunsForPr(ref));
   registerHandler(IPC_CHANNEL.RUNS_START, startRunsPayloadSchema, ({ ref, requests }) =>

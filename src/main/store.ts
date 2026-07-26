@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app, safeStorage } from 'electron';
 import { z } from 'zod';
@@ -28,7 +28,7 @@ import {
  * The encrypted key lives in its own file so the state file can be opened and read
  * by hand without ciphertext in the middle of it.
  */
-const STATE_FILE_NAME = 'airlock-state.json';
+const STATE_FILE_NAME = 'punchlist-state.json';
 const CURSOR_API_KEY_FILE_NAME = 'cursor-api-key.enc';
 const TEMP_FILE_SUFFIX = '.tmp';
 const FILE_ENCODING = 'utf8';
@@ -261,6 +261,16 @@ export function getCursorApiKey(): string | null {
     console.warn(STORE_LOG_SCOPE, 'Stored Cursor API key could not be decrypted.', error);
     return null;
   }
+}
+
+/**
+ * Removes the stored key. The file goes rather than being blanked, so "no key" is a
+ * missing file rather than a ciphertext of nothing that a later read has to interpret.
+ */
+export function clearCursorApiKey(): void {
+  const filePath = resolveCursorApiKeyFilePath();
+  if (existsSync(filePath)) rmSync(filePath);
+  cachedCursorApiKeyCiphertext = null;
 }
 
 export function setCursorApiKey(key: string): void {

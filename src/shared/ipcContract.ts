@@ -59,6 +59,8 @@ export const IPC_CHANNEL = {
   SESSION_GET: 'session:get',
   SESSION_UPDATE: 'session:update',
   CURSOR_KEY_STATUS: 'cursorKey:status',
+  CURSOR_KEY_SET: 'cursorKey:set',
+  CURSOR_KEY_CLEAR: 'cursorKey:clear',
   RUNS_LIST: 'runs:list',
   RUNS_START: 'runs:start',
   RUNS_CANCEL: 'runs:cancel',
@@ -105,7 +107,7 @@ export type IpcEventChannel = (typeof IPC_EVENT_CHANNEL)[keyof typeof IPC_EVENT_
 
 export type IpcChannel = (typeof IPC_CHANNEL)[keyof typeof IPC_CHANNEL];
 
-export interface AirlockVersions {
+export interface PunchlistVersions {
   electron: string;
   chrome: string;
   node: string;
@@ -163,6 +165,13 @@ export interface CursorKeyApi {
    * safeStorage in main and used in main; it does not cross this boundary.
    */
   isSet(): Promise<IpcResult<boolean>>;
+  /**
+   * Write-only, and the single point where the value crosses the boundary at all.
+   * It goes renderer → main once, is encrypted with safeStorage, and never comes
+   * back: there is deliberately no getter, so the UI cannot read what it stored.
+   */
+  set(key: string): Promise<IpcResult<boolean>>;
+  clear(): Promise<IpcResult<boolean>>;
 }
 
 export interface RunsApi {
@@ -295,9 +304,9 @@ export interface SandboxApi {
   cleanupTerminal(): Promise<IpcResult<SandboxUsage>>;
 }
 
-export interface AirlockApi {
+export interface PunchlistApi {
   platform: string;
-  versions: AirlockVersions;
+  versions: PunchlistVersions;
   gh: GhApi;
   settings: SettingsApi;
   repos: ReposApi;

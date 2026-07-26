@@ -1,6 +1,7 @@
 import { SettingsIcon } from '@renderer/components/icons/SettingsIcon';
 import { AutomationSettings } from '@renderer/modules/settings/AutomationSettings/AutomationSettings';
 import { GeneralSettings } from '@renderer/modules/settings/GeneralSettings/GeneralSettings';
+import { CursorKeyCard } from '@renderer/modules/settings/CursorKeyCard/CursorKeyCard';
 import { GhAuthStatusCard } from '@renderer/modules/settings/GhAuthStatusCard/GhAuthStatusCard';
 import { RepoRegistry } from '@renderer/modules/settings/RepoRegistry/RepoRegistry';
 import { TierModelMapping } from '@renderer/modules/settings/TierModelMapping/TierModelMapping';
@@ -23,6 +24,7 @@ export function Settings() {
           </div>
         </header>
         <GhAuthStatusCard />
+        <CursorKeyCard />
         <RepoRegistry />
         <GeneralSettings />
         <TierModelMapping />

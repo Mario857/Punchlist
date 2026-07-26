@@ -80,7 +80,7 @@ This is the rule category with no equivalent in a web app, and the easiest to ge
 
 - **Node APIs never appear in the renderer.** No `fs`, `child_process`, `path`, or `process` beyond what preload explicitly exposes. `contextIsolation: true` and `nodeIntegration: false` are never relaxed.
 - **All main↔renderer traffic goes through `src/main/ipc.ts`.** It is the single place a channel is defined. Do not call `ipcRenderer.invoke` with an ad-hoc string from a component.
-- **Secrets never cross IPC.** `CURSOR_API_KEY` is read from `safeStorage` in main and used in main. The renderer may learn _whether_ a key is set, never its value.
+- **Secrets cross IPC once, in one direction.** `CURSOR_API_KEY` is written renderer → main exactly once, by the settings field, and is then encrypted with `safeStorage` and used only in main. There is deliberately **no channel that returns it**: the renderer may learn _whether_ a key is set, never its value. A getter would be the bug this rule exists to prevent.
 - **Preload exposes a typed object, not `ipcRenderer`.** Handing the renderer a general-purpose invoke function defeats the boundary.
 - **`src/shared/` is the only code both processes import**, so it must stay dependency-free and Node-free.
 
