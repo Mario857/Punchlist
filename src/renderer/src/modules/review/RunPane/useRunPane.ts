@@ -46,6 +46,13 @@ export type RunPaneView =
        * already has the run, and an applied patch is no longer a candidate.
        */
       isFollowUpAvailable: boolean;
+      /**
+       * The trail is offered where rewinding it still means something: not while the
+       * agent holds the run, and not once the patch has landed, since the revisions are
+       * squashed away at that point and resetting the worktree would change nothing on
+       * the branch.
+       */
+      isRevisionHistoryAvailable: boolean;
     }
   | { kind: typeof RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED; heading: string; explanation: string }
   | {
@@ -203,6 +210,7 @@ function toView(run: RunRecord): RunPaneView {
         hasGuardrailFlags,
         revisionProgressLabel: toRevisionProgressLabel(run),
         isFollowUpAvailable: false,
+        isRevisionHistoryAvailable: false,
       };
     case RUN_STATE.READY:
       return {
@@ -211,8 +219,19 @@ function toView(run: RunRecord): RunPaneView {
         hasGuardrailFlags,
         revisionProgressLabel: null,
         isFollowUpAvailable: true,
+        isRevisionHistoryAvailable: true,
       };
+    // Approval is not the point of no return — landing is — so an approved patch can
+    // still be rewound, which main handles by putting the run back to ready.
     case RUN_STATE.APPROVED:
+      return {
+        kind: RUN_PANE_VIEW_KIND.DIFF,
+        runId: run.id,
+        hasGuardrailFlags,
+        revisionProgressLabel: null,
+        isFollowUpAvailable: false,
+        isRevisionHistoryAvailable: true,
+      };
     case RUN_STATE.APPLIED:
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,
@@ -220,6 +239,7 @@ function toView(run: RunRecord): RunPaneView {
         hasGuardrailFlags,
         revisionProgressLabel: null,
         isFollowUpAvailable: false,
+        isRevisionHistoryAvailable: false,
       };
     case RUN_STATE.NO_ACTION_NEEDED:
       return {

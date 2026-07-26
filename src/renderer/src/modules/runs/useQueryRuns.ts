@@ -5,12 +5,14 @@ import type {
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
+  RevertRunRequest,
   RunRecord,
+  RunRevision,
   SandboxUsage,
   StartRunRequest,
 } from '@shared/runs';
 import { logError } from '@renderer/lib/logError';
-import { createQueryKey } from '@renderer/lib/queryKeys';
+import { createQueryKey, queryKeys } from '@renderer/lib/queryKeys';
 import { requireBridge, unwrapIpcResult } from '@renderer/lib/unwrapIpcResult';
 import { useRunStore } from '@renderer/stores/runStore';
 
@@ -94,6 +96,29 @@ export function useQueryCandidatePatch(
     isCandidatePatchLoading: isLoading,
     candidatePatchError: error,
   };
+}
+
+interface UseQueryRunRevisionsResult {
+  runRevisions: RunRevision[] | undefined;
+  isRunRevisionsLoading: boolean;
+  runRevisionsError: unknown;
+}
+
+/**
+ * The worktree's commit trail, newest first. Keyed by revision count for the same
+ * reason the patch is: a revision commit is what changed the trail, so the counter is
+ * what says the fetched list is stale.
+ */
+export function useQueryRunRevisions(
+  runId: string,
+  revisionCount: number,
+): UseQueryRunRevisionsResult {
+  const { data, isLoading, error } = useQuery({
+    queryKey: queryKeys.runRevisions(runId, revisionCount),
+    queryFn: async () => unwrapIpcResult(await requireBridge().runs.listRevisions(runId)),
+  });
+
+  return { runRevisions: data, isRunRevisionsLoading: isLoading, runRevisionsError: error };
 }
 
 interface UseQuerySandboxUsageResult {
@@ -211,6 +236,45 @@ export function useExecuteContinueRun(): UseExecuteContinueRunResult {
   });
 
   return { continueRun: mutate, isContinueRunPending: isPending, continueRunError: error };
+}
+
+interface UseExecuteRevertRunResult {
+  revertRun: (request: RevertRunRequest) => void;
+  isRevertRunPending: boolean;
+  /** A WORKTREE_DIRTY error here is the request for confirmation, not a failure. */
+  revertRunError: unknown;
+}
+
+/**
+ * Rewinds the worktree to one of its own revisions, discarding every later one. The
+ * error is surfaced rather than swallowed because main refuses a reset that would
+ * discard hand-edits, and that refusal is what drives the confirmation step.
+ *
+ * Both reads have to be invalidated by hand: the revision counter only ever counts
+ * forward, so a revert leaves it untouched while changing both the trail and the patch
+ * it keys. The returned record is authoritative and the streamed transition arrives
+ * with it, so there is nothing optimistic to patch.
+ */
+export function useExecuteRevertRun(): UseExecuteRevertRunResult {
+  const queryClient = useQueryClient();
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (request: RevertRunRequest) =>
+      unwrapIpcResult(await requireBridge().runs.revert(request)),
+    onSuccess: (reverted) => {
+      hydrate([reverted]);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.runRevisions(reverted.id, reverted.revisionCount),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: runsQueryKeys.candidatePatch(reverted.id, reverted.revisionCount),
+      });
+    },
+    onError: (mutationError) => logError(mutationError, 'useExecuteRevertRun'),
+  });
+
+  return { revertRun: mutate, isRevertRunPending: isPending, revertRunError: error };
 }
 
 interface UseExecuteAcknowledgeGuardrailResult {

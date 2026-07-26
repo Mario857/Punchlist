@@ -6,6 +6,7 @@ import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/Decision
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
 import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUpPrompt';
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
+import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -59,6 +60,12 @@ export function RunPane({ commentId }: RunPaneProps) {
           <GuardrailFlags key={view.runId} runId={view.runId} />
         ) : null;
 
+        // Under the patch and the prompt: the trail undoes a step you have already read
+        // rather than being something to read first.
+        const revisionHistory = view.isRevisionHistoryAvailable ? (
+          <RevisionHistory key={view.runId} runId={view.runId} />
+        ) : null;
+
         return (
           <div className={COLUMN_CLASS}>
             {guardrailFlags}
@@ -68,6 +75,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               revisionProgressLabel={view.revisionProgressLabel}
             />
             {followUpPrompt}
+            {revisionHistory}
           </div>
         );
       }

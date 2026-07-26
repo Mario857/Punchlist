@@ -19,6 +19,7 @@ const QUERY_DOMAIN = {
   SESSION: 'session',
   MODELS: 'models',
   CURSOR_KEY: 'cursorKey',
+  RUN_REVISIONS: 'runRevisions',
 } as const;
 
 const LIST_SCOPE = 'list';
@@ -38,6 +39,14 @@ export const queryKeys = {
   prComments: (repoKey: string, prNumber: number) =>
     createQueryKey(QUERY_DOMAIN.PR_COMMENTS, repoKey, prNumber),
   session: () => createQueryKey(QUERY_DOMAIN.SESSION),
+  /**
+   * Keyed by revision count as well as run: a hand edit, a targeted edit and a
+   * post-decision continuation each add a commit, so a bumped counter is exactly when
+   * the trail on disk stopped matching the one already fetched. A revert rewinds the
+   * trail without moving that counter, which is why it invalidates this key by hand.
+   */
+  runRevisions: (runId: string, revisionCount: number) =>
+    createQueryKey(QUERY_DOMAIN.RUN_REVISIONS, runId, revisionCount),
   modelCatalog: () => createQueryKey(QUERY_DOMAIN.MODELS, CATALOG_SCOPE),
   cursorKeyStatus: () => createQueryKey(QUERY_DOMAIN.CURSOR_KEY, STATUS_SCOPE),
 } as const;
