@@ -784,7 +784,7 @@ async function reviewRunPatch(runId: string): Promise<RunRecord> {
       // nothing, and a prompt is a request. A reviewer that edited anything is itself a
       // finding, so it is recorded and surfaced rather than reverted — undoing it quietly
       // would hide that an explicit instruction was ignored, which is worth knowing about
-      // regardless of what the verdict says. `.airlock/` is excluded from the diff, so
+      // regardless of what the verdict says. `.punchlist/` is excluded from the diff, so
       // writing the verdict file never counts as a modification.
       const after = await readCandidatePatch(requireRun(runId));
       const didModifyPatch = !isSameCandidatePatch(before, after);

@@ -3,7 +3,7 @@ import { ConventionList } from '@renderer/modules/conventions/ConventionList/Con
 
 /**
  * Its own screen rather than a card inside Settings: the distilled corpus is the reusable
- * product of everything Airlock has read, not a preference. The list comes first and the
+ * product of everything Punchlist has read, not a preference. The list comes first and the
  * export gate last, because confirming rules is what makes an export worth doing.
  */
 export function Conventions() {

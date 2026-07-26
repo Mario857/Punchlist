@@ -30,7 +30,7 @@ export function AppNav({
         'bg-surface/40',
       )}
     >
-      <span className="font-display text-ink mr-2 text-base tracking-tight">Airlock</span>
+      <span className="font-display text-ink mr-2 text-base tracking-tight">Punchlist</span>
       <Button variant={toVariant(SCREEN.WORKSPACE)} size={BUTTON_SIZE.SM} onClick={onOpenWorkspace}>
         Workspace
       </Button>

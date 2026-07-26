@@ -42,7 +42,7 @@ const NO_SCOPES_LABEL = 'none reported';
  * and states its own.
  */
 const UNAUTHENTICATED_MESSAGE =
-  'The gh CLI answered, but no account is signed in, so Airlock cannot read a single pull request.';
+  'The gh CLI answered, but no account is signed in, so Punchlist cannot read a single pull request.';
 
 interface GhAuthErrorPresentation {
   statusLabel: string;
@@ -89,7 +89,7 @@ function describeErrorKind(kind: AppErrorKind): GhAuthErrorPresentation {
     case APP_ERROR_KIND.GH_MALFORMED_OUTPUT:
       return {
         statusLabel: STATUS_LABEL.UNREADABLE,
-        title: 'gh returned output Airlock could not parse',
+        title: 'gh returned output Punchlist could not parse',
         tone: BADGE_TONE.DANGER,
         fallbackRemediation: null,
       };

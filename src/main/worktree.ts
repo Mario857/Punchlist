@@ -24,13 +24,13 @@ const PR_DIRECTORY_PREFIX = 'pr-';
 
 /** git spells refnames and pathspecs with forward slashes on every platform. */
 const GIT_PATH_SEPARATOR = '/';
-const BRANCH_NAME_PREFIX = 'airlock';
+const BRANCH_NAME_PREFIX = 'punchlist';
 const SCRATCH_BRANCH_PREFIX = `${BRANCH_NAME_PREFIX}${GIT_PATH_SEPARATOR}`;
 const BRANCH_REF_PREFIX = 'refs/heads/';
 
 const GIT_DIRECTORY_NAME = '.git';
-const AIRLOCK_DIRECTORY_NAME = '.airlock';
-const EXCLUDE_ENTRY = `${AIRLOCK_DIRECTORY_NAME}${GIT_PATH_SEPARATOR}`;
+const PUNCHLIST_DIRECTORY_NAME = '.punchlist';
+const EXCLUDE_ENTRY = `${PUNCHLIST_DIRECTORY_NAME}${GIT_PATH_SEPARATOR}`;
 const GIT_COMMON_DIR_ARGS = ['--git-common-dir'] as const;
 const GIT_INFO_DIRECTORY_NAME = 'info';
 const GIT_EXCLUDE_FILE_NAME = 'exclude';
@@ -58,7 +58,7 @@ const REVISION_PATH_SEPARATOR = ':';
  * right home: it is already enabled for containment, never appears in `git status`,
  * and `git worktree remove` deletes it with the worktree.
  */
-const BASE_REVISION_CONFIG_KEY = 'airlock.baseRevision';
+const BASE_REVISION_CONFIG_KEY = 'punchlist.baseRevision';
 
 const FILE_ENCODING = 'utf8';
 const EMPTY_FILE_CONTENT = '';
@@ -232,7 +232,7 @@ async function resolveRemoteName(git: SimpleGit, repoKey: string): Promise<strin
  * idempotent entry keeps the agent's protocol directory out of `git status` and out of
  * every candidate patch — without touching the user's tracked `.gitignore`.
  */
-async function ensureAirlockExcluded(git: SimpleGit, repoPath: string): Promise<void> {
+async function ensurePunchlistExcluded(git: SimpleGit, repoPath: string): Promise<void> {
   const commonDir = (await git.revparse([...GIT_COMMON_DIR_ARGS])).trim();
   const excludePath = join(
     resolvePath(repoPath, commonDir),
@@ -280,7 +280,7 @@ export async function createRunWorktree(request: CreateRunWorktreeRequest): Prom
 
   await containWorktree({ repoPath, worktreePath, identity });
   await setWorktreeConfig(worktreePath, BASE_REVISION_CONFIG_KEY, baseRevision);
-  await ensureAirlockExcluded(git, repoPath);
+  await ensurePunchlistExcluded(git, repoPath);
 
   return { worktreePath, branchName, baseRevision };
 }
@@ -288,7 +288,7 @@ export async function createRunWorktree(request: CreateRunWorktreeRequest): Prom
 async function readChangedPaths(git: SimpleGit, baseRevision: string): Promise<string[]> {
   // A single revision compares it to the working tree, so uncommitted hand-edits are
   // part of the candidate patch. Untracked files are a separate question, and
-  // --exclude-standard is what keeps .airlock/ out of the answer.
+  // --exclude-standard is what keeps .punchlist/ out of the answer.
   const changed = await git.raw([...DIFF_NAME_ONLY_ARGS, baseRevision, PATHSPEC_TERMINATOR]);
   const untracked = await git.raw([...UNTRACKED_FILES_ARGS]);
   const paths = new Set([...splitNulSeparated(changed), ...splitNulSeparated(untracked)]);
@@ -500,7 +500,7 @@ async function pruneRegistrations(repoPath: string): Promise<void> {
  * Teardown is three operations, not one: `git worktree remove` deletes the directory
  * and its registration but leaves the scratch branch behind, and a registration whose
  * directory vanished out of band is only swept by `prune`. Doing step 1 alone
- * accumulates an `airlock/<pr>/<commentId>` branch per comment forever.
+ * accumulates a `punchlist/<pr>/<commentId>` branch per comment forever.
  */
 async function removeWorktree(
   repoPath: string,
@@ -591,7 +591,7 @@ export async function recreateRunWorktree(
   // patch against a commit the worktree is no longer based on — and reset it back onto
   // that commit on the next escalation.
   await setWorktreeConfig(run.worktreePath, BASE_REVISION_CONFIG_KEY, baseRevision);
-  await ensureAirlockExcluded(git, run.repoPath);
+  await ensurePunchlistExcluded(git, run.repoPath);
 
   return { worktreePath: run.worktreePath, branchName: run.branchName, baseRevision };
 }
@@ -628,7 +628,7 @@ function parseWorktreeList(output: string): WorktreeRegistration[] {
 }
 
 /**
- * Only registrations inside the sandbox root on an `airlock/` branch: the user's own
+ * Only registrations inside the sandbox root on a `punchlist/` branch: the user's own
  * worktrees are never candidates for anything in this file.
  */
 async function readSandboxRegistrations(repoPath: string): Promise<WorktreeRegistration[]> {

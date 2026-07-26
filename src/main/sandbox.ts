@@ -10,7 +10,7 @@ import { APP_ERROR_KIND, AppError } from '@shared/errors';
  * rather than a guarantee. An unresolvable URL scheme makes the attempt fail inside
  * git itself.
  */
-const INVALID_PUSH_URL = 'airlock-sandbox://push-disabled';
+const INVALID_PUSH_URL = 'punchlist-sandbox://push-disabled';
 
 const WORKTREE_CONFIG_EXTENSION_KEY = 'extensions.worktreeConfig';
 const WORKTREE_CONFIG_EXTENSION_VALUE = 'true';
@@ -249,7 +249,7 @@ export type SandboxExitAction = (typeof SANDBOX_EXIT_ACTION)[keyof typeof SANDBO
  * written as an object literal anywhere else in the app, so the only way to hold one
  * is to have gone through the factory below.
  */
-const SANDBOX_CONFIRMATION_BRAND: unique symbol = Symbol('airlock.sandboxConfirmation');
+const SANDBOX_CONFIRMATION_BRAND: unique symbol = Symbol('punchlist.sandboxConfirmation');
 
 export interface SandboxConfirmation {
   readonly [SANDBOX_CONFIRMATION_BRAND]: true;

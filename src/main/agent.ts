@@ -21,7 +21,7 @@ import { getCursorApiKey, getRunById, upsertRun } from './store';
 const AGENT_LOG_SCOPE = '[agent]';
 
 /** Surfaced as the agent's title in `Agent.list()`, so a stray agent is identifiable. */
-const AGENT_NAME = 'Airlock';
+const AGENT_NAME = 'Punchlist';
 
 /** Plan mode produces a plan and no edits, which is not what a run is for. */
 const AGENT_MODE_AGENT = 'agent';
@@ -243,7 +243,7 @@ async function createOrResumeAgent(
 
   if (start.mode === AGENT_START_MODE.RESUME) {
     // Inline MCP servers are never persisted with the agent, so anything handed to
-    // Agent.create has to be handed to Agent.resume again. Airlock passes none today;
+    // Agent.create has to be handed to Agent.resume again. Punchlist passes none today;
     // adding one means adding it at both call sites.
     return Agent.resume(start.agentId, options);
   }

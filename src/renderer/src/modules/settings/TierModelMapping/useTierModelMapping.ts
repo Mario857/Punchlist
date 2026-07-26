@@ -83,7 +83,7 @@ const POOL_SPENDING_SUMMARY_SUFFIX = ' tiers spend your pool';
 
 const CURSOR_KEY_MISSING_TITLE = 'No Cursor API key is stored yet';
 const CURSOR_KEY_MISSING_MESSAGE =
-  'The catalog is read through the Cursor SDK, which needs a key. Airlock keeps CURSOR_API_KEY in the OS keychain and uses it inside the main process, so its value never reaches this screen. Until one is stored every tier resolves to its free-lane default at run time — which is the zero-cost behaviour these controls start from anyway.';
+  'The catalog is read through the Cursor SDK, which needs a key. Punchlist keeps CURSOR_API_KEY in the OS keychain and uses it inside the main process, so its value never reaches this screen. Until one is stored every tier resolves to its free-lane default at run time — which is the zero-cost behaviour these controls start from anyway.';
 
 export interface TierModelOption {
   value: string;

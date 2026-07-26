@@ -93,7 +93,7 @@ export function GeneralSettings() {
             <p className="text-ink text-sm font-medium">Worktree retention</p>
             <p className={SETTING_DESCRIPTION_CLASS}>
               Keeps a worktree on disk once its run reaches a terminal state so you can inspect
-              exactly what the agent did. A debug aid: leave it off and Airlock tears them down.
+              exactly what the agent did. A debug aid: leave it off and Punchlist tears them down.
             </p>
           </div>
           <Toggle

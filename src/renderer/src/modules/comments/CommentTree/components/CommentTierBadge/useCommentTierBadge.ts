@@ -28,7 +28,7 @@ const PINNED_LABEL_SUFFIX = ' · pinned';
 
 const SUGGESTED_TITLE_PREFIX = 'Suggested tier: ';
 const PINNED_TITLE_PREFIX = 'Tier pinned to ';
-const SUGGESTED_TITLE_INFIX = '. Airlock suggested ';
+const SUGGESTED_TITLE_INFIX = '. Punchlist suggested ';
 const SIGNALS_TITLE_INFIX = ' — ';
 const NEXT_TITLE_PREFIX = '. Click to use ';
 const NEXT_TITLE_SUFFIX = ' instead.';

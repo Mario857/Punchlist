@@ -27,7 +27,7 @@ function createWindow(): void {
     minWidth: MINIMUM_WINDOW_WIDTH,
     minHeight: MINIMUM_WINDOW_HEIGHT,
     show: false,
-    title: 'Airlock',
+    title: 'Punchlist',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -144,8 +144,8 @@ function bootstrap(): void {
 registerProcessErrorHandlers();
 
 /**
- * State is one JSON file and one set of git worktrees. Two Airlock processes would
- * both write `airlock-state.json` — last writer wins, silently — and both would
+ * State is one JSON file and one set of git worktrees. Two Punchlist processes would
+ * both write `punchlist-state.json` — last writer wins, silently — and both would
  * believe they own the same sandbox directories. That is corruption rather than a
  * rough edge, so the lock is taken before anything that reads or writes either:
  * the loser quits without loading the store or creating a window.

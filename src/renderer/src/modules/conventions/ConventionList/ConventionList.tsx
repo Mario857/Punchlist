@@ -27,7 +27,7 @@ const GROUP_RULES_CLASS = 'flex flex-col gap-2';
 
 /**
  * The distilled corpus, grouped by category. Nothing on this surface writes to a
- * repository: confirming and rejecting are decisions recorded in Airlock, and the
+ * repository: confirming and rejecting are decisions recorded in Punchlist, and the
  * gated write lives in the export card below it.
  */
 export function ConventionList() {

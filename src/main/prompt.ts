@@ -21,11 +21,11 @@ import {
  * never appears in a candidate diff. Named here because decision.ts reads the same two
  * files in phase 3 — one authoritative source for the paths, not two string literals.
  */
-export const AIRLOCK_SCRATCH_DIR = '.airlock';
-export const DECISION_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/decision.json`;
-export const SUMMARY_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/summary.json`;
+export const PUNCHLIST_SCRATCH_DIR = '.punchlist';
+export const DECISION_FILE_PATH = `${PUNCHLIST_SCRATCH_DIR}/decision.json`;
+export const SUMMARY_FILE_PATH = `${PUNCHLIST_SCRATCH_DIR}/summary.json`;
 /** The reviewing agent's verdict. run.ts reads it back from the same one path. */
-export const OPINION_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/opinion.json`;
+export const OPINION_FILE_PATH = `${PUNCHLIST_SCRATCH_DIR}/opinion.json`;
 
 /** git's own convention: a longer subject wraps badly in `git log --oneline`. */
 export const COMMIT_SUBJECT_MAX_LENGTH = 72;
@@ -72,7 +72,7 @@ If the comment is too vague to locate confidently, do not guess at a target. Use
 
 const HALT_AND_ASK_SECTION = `Halt-and-ask protocol.
 
-When you hit a genuine fork you cannot settle from the code — two defensible designs, an unmade decision about behaviour, real ambiguity about which of several call sites was meant — do not guess. Write \`${DECISION_FILE_PATH}\` (create the \`${AIRLOCK_SCRATCH_DIR}\` directory if it does not exist) and stop working:
+When you hit a genuine fork you cannot settle from the code — two defensible designs, an unmade decision about behaviour, real ambiguity about which of several call sites was meant — do not guess. Write \`${DECISION_FILE_PATH}\` (create the \`${PUNCHLIST_SCRATCH_DIR}\` directory if it does not exist) and stop working:
 
 ${JSON_FENCE_OPEN}
 {
@@ -106,7 +106,7 @@ This is the draft commit message for your change. You know what you changed; a t
 
 If you concluded that no code change was warranted, do not write this file — explain in your final message instead.
 
-The \`${AIRLOCK_SCRATCH_DIR}\` directory is scratch space for these two files only. Never put source changes there.`;
+The \`${PUNCHLIST_SCRATCH_DIR}\` directory is scratch space for these two files only. Never put source changes there.`;
 
 /**
  * Defense in depth, not the primary control: the real containment is the invalid
@@ -305,7 +305,7 @@ const VERDICT_CHOICE_LINES = Object.entries(OPINION_VERDICT_LABEL)
   .map(([verdict, label]) => `${REPLY_BULLET}\`${verdict}\` — ${label}`)
   .join(REPLY_SEPARATOR);
 
-const REVIEWER_VERDICT_SECTION = `When you have finished reading, write \`${OPINION_FILE_PATH}\` (create the \`${AIRLOCK_SCRATCH_DIR}\` directory if it does not exist):
+const REVIEWER_VERDICT_SECTION = `When you have finished reading, write \`${OPINION_FILE_PATH}\` (create the \`${PUNCHLIST_SCRATCH_DIR}\` directory if it does not exist):
 
 ${JSON_FENCE_OPEN}
 {

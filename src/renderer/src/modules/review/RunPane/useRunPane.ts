@@ -113,7 +113,7 @@ const FAILURE_FALLBACK_EXPLANATION =
 
 const AGENT_ERROR_HEADING = 'The agent ran and failed';
 const AGENT_ERROR_EXPLANATION =
-  'It started, did work, and returned an error. The reason is in the transcript rather than in Airlock.';
+  'It started, did work, and returned an error. The reason is in the transcript rather than in Punchlist.';
 
 const START_FAILED_HEADING = 'The agent never started';
 const START_FAILED_EXPLANATION =

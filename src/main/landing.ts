@@ -64,7 +64,7 @@ const LANDING_LOG_SCOPE = '[landing]';
 
 /**
  * The integration worktree lives under the same sandbox root as the run worktrees and
- * on an `airlock/` branch, which is what makes startup reconciliation sweep it: it
+ * on a `punchlist/` branch, which is what makes startup reconciliation sweep it: it
  * carries no run record, so it is an orphan by construction and an interrupted assembly
  * cannot leave one behind forever. `worktree.ts` keeps these private, so they are
  * restated here rather than widening its surface for a single caller.
@@ -75,7 +75,7 @@ const LANDING_DIRECTORY_NAME = 'landing';
 
 /** git spells refnames with forward slashes on every platform. */
 const GIT_PATH_SEPARATOR = '/';
-const BRANCH_NAME_PREFIX = 'airlock';
+const BRANCH_NAME_PREFIX = 'punchlist';
 const INTEGRATION_BRANCH_SUFFIX = '-landing';
 
 /** Mirrors `worktree.ts`: a refname may not contain spaces or `~^:?*[`, and dots rule out `..`. */
@@ -135,7 +135,7 @@ const PR_URL_INFIX = '/pull/';
  * does not apply", so the combined diff is inspected as one. This value is local to a
  * guardrail pass: it is never persisted, rendered, or mistaken for a real remark.
  */
-const COMBINED_DIFF_AUTHOR_LOGIN = 'airlock';
+const COMBINED_DIFF_AUTHOR_LOGIN = 'punchlist';
 
 /**
  * Widest wins. The combined diff legitimately contains every approved run's work, so
@@ -246,9 +246,9 @@ function toSafeNameSegment(value: string): string {
 }
 
 /**
- * A real branch name derived from the PR — `airlock/pr-42-landing` — because this is
+ * A real branch name derived from the PR — `punchlist/pr-42-landing` — because this is
  * what gets pushed as its own branch and read by a human in a branch list. One segment
- * under `airlock/`, so it cannot collide with the `airlock/<pr>/<commentId>` namespace
+ * under `punchlist/`, so it cannot collide with the `punchlist/<pr>/<commentId>` namespace
  * the run branches occupy.
  */
 function buildIntegrationBranchName(prRef: PrRef): string {
@@ -632,7 +632,7 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
 /**
  * Exactly what confirming would do, assembled by performing the merges rather than
  * predicting them. Everything here happens inside the sandbox — a throwaway worktree
- * and an `airlock/` branch — so it needs no confirmation and touches nothing outside
+ * and a `punchlist/` branch — so it needs no confirmation and touches nothing outside
  * it. The reply text defaults to none: a landing posts no comment unless one is typed.
  */
 export async function assembleLanding(request: AssembleLandingRequest): Promise<LandingPreview> {

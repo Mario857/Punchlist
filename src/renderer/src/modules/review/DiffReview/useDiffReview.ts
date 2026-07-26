@@ -188,11 +188,11 @@ const INLINE_PROMPT_KEYBINDING = monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyK;
 const NEXT_HUNK_KEYBINDING = monaco.KeyCode.BracketRight;
 const PREVIOUS_HUNK_KEYBINDING = monaco.KeyCode.BracketLeft;
 
-const INLINE_PROMPT_ACTION_ID = 'airlock.reviseSelection';
+const INLINE_PROMPT_ACTION_ID = 'punchlist.reviseSelection';
 const INLINE_PROMPT_ACTION_LABEL = 'Revise the selected lines with the agent';
-const NEXT_HUNK_ACTION_ID = 'airlock.nextHunk';
+const NEXT_HUNK_ACTION_ID = 'punchlist.nextHunk';
 const NEXT_HUNK_ACTION_LABEL = 'Go to the next changed hunk';
-const PREVIOUS_HUNK_ACTION_ID = 'airlock.previousHunk';
+const PREVIOUS_HUNK_ACTION_ID = 'punchlist.previousHunk';
 const PREVIOUS_HUNK_ACTION_LABEL = 'Go to the previous changed hunk';
 
 /**

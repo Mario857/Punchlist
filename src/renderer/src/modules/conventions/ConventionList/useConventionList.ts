@@ -62,7 +62,7 @@ interface UseConventionListResult {
 
 const HEADING = 'Learned conventions';
 const EXPLANATION =
-  'Every review comment Airlock ingested is a statement about how your code is supposed to look. These are the durable rules distilled out of that corpus, ready to hand to a future coding agent as project context instead of being re-learned on every task.';
+  'Every review comment Punchlist ingested is a statement about how your code is supposed to look. These are the durable rules distilled out of that corpus, ready to hand to a future coding agent as project context instead of being re-learned on every task.';
 const REJECTION_NOTICE =
   'Rejecting is remembered, not deleted. A rejected rule stays on file precisely so distillation never proposes it again, and the comments behind it are untouched — you can return it to a candidate at any time.';
 

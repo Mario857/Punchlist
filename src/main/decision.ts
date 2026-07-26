@@ -11,12 +11,12 @@ import {
 const DECISION_LOG_SCOPE = '[decision]';
 
 /**
- * The agent's scratch directory inside its worktree. `.airlock/` is already added to
+ * The agent's scratch directory inside its worktree. `.punchlist/` is already added to
  * the repository's shared .git/info/exclude by the worktree layer — one entry covers
  * every worktree through the common git dir — so nothing written here can show up in a
  * candidate diff. That exclusion is not re-done here.
  */
-const AIRLOCK_DIRECTORY_NAME = '.airlock';
+const PUNCHLIST_DIRECTORY_NAME = '.punchlist';
 const DECISION_FILE_NAME = 'decision.json';
 const SUMMARY_FILE_NAME = 'summary.json';
 
@@ -82,14 +82,14 @@ function isMissingFileError(error: unknown): boolean {
   return parsed.success && parsed.data.code === SYSTEM_ERROR_ENOENT;
 }
 
-function resolveAirlockFilePath(worktreePath: string, fileName: string): string {
-  return join(worktreePath, AIRLOCK_DIRECTORY_NAME, fileName);
+function resolvePunchlistFilePath(worktreePath: string, fileName: string): string {
+  return join(worktreePath, PUNCHLIST_DIRECTORY_NAME, fileName);
 }
 
 /** Null covers both "not written yet" and "unreadable right now"; the poll retries. */
-async function readAirlockFile(worktreePath: string, fileName: string): Promise<string | null> {
+async function readPunchlistFile(worktreePath: string, fileName: string): Promise<string | null> {
   try {
-    return await readFile(resolveAirlockFilePath(worktreePath, fileName), FILE_ENCODING);
+    return await readFile(resolvePunchlistFilePath(worktreePath, fileName), FILE_ENCODING);
   } catch (error: unknown) {
     if (!isMissingFileError(error)) {
       // The path is logged, never the contents: an agent-written file can quote
@@ -120,7 +120,7 @@ function summarizeIssues(issues: readonly z.core.$ZodIssue[]): string {
  * nothing here throws.
  */
 export async function readAgentDecision(worktreePath: string): Promise<DecisionReadResult> {
-  const raw = await readAirlockFile(worktreePath, DECISION_FILE_NAME);
+  const raw = await readPunchlistFile(worktreePath, DECISION_FILE_NAME);
   if (raw === null) return { status: DECISION_STATUS.ABSENT };
 
   const parsed = agentDecisionSchema.safeParse(decodeJson(raw));
@@ -150,7 +150,7 @@ export function hasChoosableOptions(decision: AgentDecision): boolean {
  * never blocked on it, because the commit message has a template fallback.
  */
 export async function readAgentSummary(worktreePath: string): Promise<AgentSummary | null> {
-  const raw = await readAirlockFile(worktreePath, SUMMARY_FILE_NAME);
+  const raw = await readPunchlistFile(worktreePath, SUMMARY_FILE_NAME);
   if (raw === null) return null;
 
   const parsed = agentSummarySchema.safeParse(decodeJson(raw));
@@ -166,9 +166,9 @@ export async function readAgentSummary(worktreePath: string): Promise<AgentSumma
   return parsed.data;
 }
 
-async function removeAirlockFile(worktreePath: string, fileName: string): Promise<void> {
+async function removePunchlistFile(worktreePath: string, fileName: string): Promise<void> {
   try {
-    await rm(resolveAirlockFilePath(worktreePath, fileName), { force: true });
+    await rm(resolvePunchlistFilePath(worktreePath, fileName), { force: true });
   } catch (error: unknown) {
     console.warn(DECISION_LOG_SCOPE, `${fileName} could not be removed.`, error);
   }
@@ -176,7 +176,7 @@ async function removeAirlockFile(worktreePath: string, fileName: string): Promis
 
 /** A consumed decision must not re-trigger, so answering it deletes the file. */
 export async function clearAgentDecision(worktreePath: string): Promise<void> {
-  await removeAirlockFile(worktreePath, DECISION_FILE_NAME);
+  await removePunchlistFile(worktreePath, DECISION_FILE_NAME);
 }
 
 /**
@@ -184,11 +184,11 @@ export async function clearAgentDecision(worktreePath: string): Promise<void> {
  * summary if the agent finishes without rewriting the file.
  */
 export async function clearAgentSummary(worktreePath: string): Promise<void> {
-  await removeAirlockFile(worktreePath, SUMMARY_FILE_NAME);
+  await removePunchlistFile(worktreePath, SUMMARY_FILE_NAME);
 }
 
 /**
- * Polls for `.airlock/decision.json` and stops itself the moment it has a verdict, so
+ * Polls for `.punchlist/decision.json` and stops itself the moment it has a verdict, so
  * a watcher can never outlive the run that started it. The caller stops it too on any
  * other ending — a result, a cancellation, a timeout.
  */

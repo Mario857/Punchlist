@@ -99,9 +99,9 @@ interface UseConventionExportResult {
 
 const HEADING = 'Export to a repository';
 const EXPLANATION =
-  'Exporting writes the confirmed rules into your real repository, which puts it outside the airlock. So it works like a landing: the exact content of both files is rendered by main and shown here first, and nothing is written until you confirm.';
+  'Exporting writes the confirmed rules into your real repository, which puts it outside the punchlist. So it works like a landing: the exact content of both files is rendered by main and shown here first, and nothing is written until you confirm.';
 const GUARDRAIL_NOTICE =
-  '.cursor/rules/** is on the protected-path list Airlock enforces against agents resolving your comments, so an agent can never rewrite the guardrails it runs under. This write is the deliberate exception: it is initiated by you from the app rather than by an agent, and it is recorded in the audit log as exactly that rather than quietly bypassing the check.';
+  '.cursor/rules/** is on the protected-path list Punchlist enforces against agents resolving your comments, so an agent can never rewrite the guardrails it runs under. This write is the deliberate exception: it is initiated by you from the app rather than by an agent, and it is recorded in the audit log as exactly that rather than quietly bypassing the check.';
 
 const REPO_SELECT_ID = 'convention-export-repo';
 const REPO_SELECT_LABEL = 'Repository to export to';
@@ -122,7 +122,7 @@ const REPO_FILE_EXPLANATION =
 const GLOBAL_FILE_ID = 'globalFile';
 const GLOBAL_FILE_HEADING = 'User-level rules file';
 const GLOBAL_FILE_EXPLANATION =
-  'Where the global rules go — a standalone file you reference yourself. Airlock never edits your own CLAUDE.md in place: that file is yours.';
+  'Where the global rules go — a standalone file you reference yourself. Punchlist never edits your own CLAUDE.md in place: that file is yours.';
 const EMPTY_FILE_LABEL = 'This file would be written empty, because no confirmed rule targets it.';
 
 const RULE_COUNT_PREFIX = 'Confirmed rules to write: ';

@@ -4,7 +4,7 @@ import { app, screen, type BrowserWindow, type Rectangle } from 'electron';
 import { z } from 'zod';
 
 /**
- * Geometry lives in its own file rather than a section of `airlock-state.json`:
+ * Geometry lives in its own file rather than a section of `punchlist-state.json`:
  * it is rewritten on every resize and move, and sharing the state file would mean
  * serialising every run record and transcript on each drag of the window frame.
  *
@@ -13,7 +13,7 @@ import { z } from 'zod';
  * partial file widens instead of needing migration code, and written through a
  * temp file so a crash mid-write cannot leave a truncated one behind.
  */
-const WINDOW_STATE_FILE_NAME = 'airlock-window-state.json';
+const WINDOW_STATE_FILE_NAME = 'punchlist-window-state.json';
 const TEMP_FILE_SUFFIX = '.tmp';
 const FILE_ENCODING = 'utf8';
 const JSON_INDENT_SPACES = 2;

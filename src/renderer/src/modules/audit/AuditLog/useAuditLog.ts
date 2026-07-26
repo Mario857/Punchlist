@@ -45,7 +45,7 @@ interface UseAuditLogResult {
 
 const HEADING = 'Audit log';
 const EXPLANATION =
-  'Everything Airlock did outside the sandbox — every branch published, push, resolved thread and posted reply — together with the acknowledgements that authorised them. It is append-only: an entry is never edited or removed, and an undo is itself a new entry.';
+  'Everything Punchlist did outside the sandbox — every branch published, push, resolved thread and posted reply — together with the acknowledgements that authorised them. It is append-only: an entry is never edited or removed, and an undo is itself a new entry.';
 
 const LOADING_LABEL = 'Reading the audit log…';
 const EMPTY_LABEL =

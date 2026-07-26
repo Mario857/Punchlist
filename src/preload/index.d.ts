@@ -1,8 +1,8 @@
-import type { AirlockApi } from '@shared/ipcContract';
+import type { PunchlistApi } from '@shared/ipcContract';
 
 declare global {
   interface Window {
-    electronAPI: AirlockApi;
+    electronAPI: PunchlistApi;
   }
 }
 

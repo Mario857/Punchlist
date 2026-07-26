@@ -15,7 +15,7 @@ const runTriggerSchema = z.enum(RUN_TRIGGER);
 const failureReasonSchema = z.enum(FAILURE_REASON);
 
 /**
- * `.airlock/decision.json`, written by a halted agent. This is the least
+ * `.punchlist/decision.json`, written by a halted agent. This is the least
  * trustworthy input in the system — an LLM wrote it — so a malformed file must
  * degrade to a clean "the agent halted incorrectly" state rather than crash main.
  *
@@ -28,7 +28,7 @@ export const agentDecisionSchema = z.object({
   context: z.string().nullable().default(null),
 });
 
-/** `.airlock/summary.json`: the agent's draft commit message. */
+/** `.punchlist/summary.json`: the agent's draft commit message. */
 export const agentSummarySchema = z.object({
   subject: z.string(),
   details: z.string().nullable().default(null),

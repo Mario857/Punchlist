@@ -26,7 +26,7 @@ const AUTOMATION_LOG_SCOPE = '[automation]';
 const AUTO_RUN_WINDOW_MS = 3_600_000;
 
 /**
- * A head that has just moved is either the author pushing new commits or Airlock's own
+ * A head that has just moved is either the author pushing new commits or Punchlist's own
  * landing push arriving back from GitHub. Both mean the comments in this poll were written
  * against code that no longer exists, so automation sits out until the branch settles —
  * the same reason it pauses during a landing, one poll cycle later. Two default poll
@@ -39,7 +39,7 @@ const NO_ALLOWLISTED_AUTHORS = 0;
 const REQUEST_LIST_START = 0;
 const SINGLE_RUN = 1;
 
-const AUTO_RUNS_FINISHED_TITLE = 'Airlock';
+const AUTO_RUNS_FINISHED_TITLE = 'Punchlist';
 const BATCH_FAILED_MESSAGE = 'An auto-triggered batch did not start.';
 const POOL_SPENDING_SKIPPED_MESSAGE =
   'Skipped auto-triggered comments whose tier resolves to a pool-spending model.';

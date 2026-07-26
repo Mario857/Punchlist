@@ -1,5 +1,5 @@
-appId: dev.airlock.app
-productName: Airlock
+appId: dev.punchlist.app
+productName: Punchlist
 # electron-vite emits here; packaging the sources again would double the bundle.
 directories:
   output: release

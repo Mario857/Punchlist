@@ -18,10 +18,10 @@ import type { PrRef } from '@shared/discovery';
  * - **A torn or older line stays isolated.** One malformed entry in an array makes the
  *   whole array fail to parse; one malformed line loses one line.
  *
- * It is separate from `airlock-state.json` for the same reason the encrypted key is:
+ * It is separate from `punchlist-state.json` for the same reason the encrypted key is:
  * a log you may want to hand to someone, or keep after clearing app state.
  */
-const AUDIT_FILE_NAME = 'airlock-audit.jsonl';
+const AUDIT_FILE_NAME = 'punchlist-audit.jsonl';
 const FILE_ENCODING = 'utf8';
 const LINE_SEPARATOR = '\n';
 
@@ -59,7 +59,7 @@ const EMPTY_LENGTH = 0;
 export interface AppendAuditEntryInput {
   action: AuditAction;
   prRef?: PrRef | null;
-  /** One short line naming the action, e.g. `Resolved 3 threads on airlock/pr-42`. */
+  /** One short line naming the action, e.g. `Resolved 3 threads on punchlist/pr-42`. */
   summary: string;
   runIds?: readonly string[];
   /** Thread node ids, which is what unresolving them again needs. */

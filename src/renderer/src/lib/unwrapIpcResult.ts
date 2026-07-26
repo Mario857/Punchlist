@@ -38,7 +38,7 @@ export function requireBridge(): Window['electronAPI'] {
     throw new IpcError({
       kind: APP_ERROR_KIND.UNKNOWN,
       message: 'The preload bridge is unavailable, so the app cannot reach the main process.',
-      remediation: 'Restart Airlock. If it persists, rebuild with `bun run build`.',
+      remediation: 'Restart Punchlist. If it persists, rebuild with `bun run build`.',
     });
   }
   return bridge;

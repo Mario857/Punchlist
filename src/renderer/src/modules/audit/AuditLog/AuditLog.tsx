@@ -34,7 +34,7 @@ const LANDING_ID_CLASS = 'text-muted font-mono text-xs';
 const LANDING_COUNT_CLASS = 'text-muted/80 text-xs tabular-nums';
 
 /**
- * The history of what Airlock did to your repository. Entries of one landing are framed
+ * The history of what Punchlist did to your repository. Entries of one landing are framed
  * together because a push, the threads it resolved and the replies it posted are one
  * act — reading them as unrelated rows loses the only question this view answers.
  */

@@ -88,7 +88,7 @@ export function GhAuthStatusCard() {
         <div className="min-w-0">
           <h2 className="text-ink text-sm font-semibold">GitHub CLI</h2>
           <p className="text-muted mt-1 text-xs leading-relaxed">
-            Airlock reads every pull request through the gh CLI and stores no GitHub token of its
+            Punchlist reads every pull request through the gh CLI and stores no GitHub token of its
             own, so nothing works until gh is installed and signed in.
           </p>
         </div>

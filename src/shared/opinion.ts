@@ -19,7 +19,7 @@ export const OPINION_VERDICT = {
 export type OpinionVerdict = (typeof OPINION_VERDICT)[keyof typeof OPINION_VERDICT];
 
 /**
- * `.airlock/opinion.json`, written by the reviewing agent. Untrusted like every
+ * `.punchlist/opinion.json`, written by the reviewing agent. Untrusted like every
  * other agent-written file: a malformed one degrades to "no opinion available"
  * rather than crashing anything.
  */

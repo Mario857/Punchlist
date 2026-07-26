@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { RUN_TIMEOUT_MS } from '@main/agent';
 import { appendAuditEntry } from '@main/audit';
 import { resolveLocalRepoPath } from '@main/discovery';
-import { AIRLOCK_SCRATCH_DIR } from '@main/prompt';
+import { PUNCHLIST_SCRATCH_DIR } from '@main/prompt';
 import { resolveTierModel, toModelSelection } from '@main/router';
 import {
   assertSandboxConfirmation,
@@ -56,10 +56,10 @@ const CONVENTIONS_DIRECTORY_NAME = 'conventions';
 
 const PROPOSALS_FILE_NAME = 'conventions.json';
 /** Written into the agent's own scratch directory, like every other agent artefact. */
-const PROPOSALS_FILE_PATH = `${AIRLOCK_SCRATCH_DIR}/${PROPOSALS_FILE_NAME}`;
+const PROPOSALS_FILE_PATH = `${PUNCHLIST_SCRATCH_DIR}/${PROPOSALS_FILE_NAME}`;
 
 /** Surfaced as the agent's title in `Agent.list()`, so a stray distiller is identifiable. */
-const DISTILLATION_AGENT_NAME = 'Airlock conventions';
+const DISTILLATION_AGENT_NAME = 'Punchlist conventions';
 /** Plan mode produces a plan and no file, and the proposals file is the entire output. */
 const AGENT_MODE_AGENT = 'agent';
 
@@ -219,7 +219,7 @@ const CATEGORY_SECTION = `\`category\` is exactly one of these, and nothing else
 
 ${CATEGORY_CHOICE_LINES}`;
 
-const PROPOSALS_OUTPUT_SECTION = `Write your proposals to \`${PROPOSALS_FILE_PATH}\` (the \`${AIRLOCK_SCRATCH_DIR}\` directory already exists):
+const PROPOSALS_OUTPUT_SECTION = `Write your proposals to \`${PROPOSALS_FILE_PATH}\` (the \`${PUNCHLIST_SCRATCH_DIR}\` directory already exists):
 
 ${JSON_FENCE_OPEN}
 {
@@ -347,7 +347,7 @@ function resolveWorkingDirectory(): string {
 }
 
 function resolveProposalsFilePath(workingDirectory: string): string {
-  return join(workingDirectory, AIRLOCK_SCRATCH_DIR, PROPOSALS_FILE_NAME);
+  return join(workingDirectory, PUNCHLIST_SCRATCH_DIR, PROPOSALS_FILE_NAME);
 }
 
 async function disposeAgent(agent: SDKAgent): Promise<void> {
@@ -740,13 +740,13 @@ const RATIONALE_INDENT = '  ';
 const REPO_FILE_TITLE = 'Learned conventions';
 const GLOBAL_FILE_TITLE = 'Learned conventions (global)';
 
-const REPO_FILE_PREAMBLE = `Distilled by Airlock from review comments left on this repository's pull requests, and confirmed by hand before being written here. Each rule was said often enough in review to be a convention rather than a one-off.
+const REPO_FILE_PREAMBLE = `Distilled by Punchlist from review comments left on this repository's pull requests, and confirmed by hand before being written here. Each rule was said often enough in review to be a convention rather than a one-off.
 
-Edit or delete anything that no longer holds. Airlock rewrites this file only when you export again.`;
+Edit or delete anything that no longer holds. Punchlist rewrites this file only when you export again.`;
 
-const GLOBAL_FILE_PREAMBLE = `Distilled by Airlock from review comments across your repositories, and confirmed by hand before being written here. These held in more than one repository, which is what promoted them out of any single one.
+const GLOBAL_FILE_PREAMBLE = `Distilled by Punchlist from review comments across your repositories, and confirmed by hand before being written here. These held in more than one repository, which is what promoted them out of any single one.
 
-Reference this file from your own agent instructions if you want it applied — Airlock writes this file and never edits the instruction files you wrote yourself.`;
+Reference this file from your own agent instructions if you want it applied — Punchlist writes this file and never edits the instruction files you wrote yourself.`;
 
 /**
  * Rule and rationale only. Source URLs are left out: they need repository access to read
@@ -855,7 +855,7 @@ export function previewConventionExport(repoKey: string): ConventionExportPrevie
 
 /**
  * Writes the confirmed rules into the user's real repository, which puts it outside the
- * airlock: it takes a `SandboxConfirmation` at the type level, and it is audited.
+ * punchlist: it takes a `SandboxConfirmation` at the type level, and it is audited.
  *
  * `.cursor/rules/**` is on the guardrails' protected-path list and this writes there on
  * purpose. That entry exists to stop an *agent resolving a comment* from rewriting its own

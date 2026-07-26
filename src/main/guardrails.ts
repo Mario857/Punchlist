@@ -11,8 +11,8 @@ import type { CandidatePatch, CandidatePatchFile } from '@shared/runs';
  * `prompt.ts` already tells the agent not to touch these, but a prompt instruction is
  * a request. This is the enforcement, and it mirrors the "Do NOT Touch" list in
  * `core-principles.mdc` — keep the two consistent, without conflating their scope:
- * that list governs agents working on Airlock, this one governs agents working on the
- * user's repos through Airlock.
+ * that list governs agents working on Punchlist, this one governs agents working on the
+ * user's repos through Punchlist.
  *
  * Exported as a named constant so a settings-configurable list can replace the default
  * later without a second source of truth appearing.

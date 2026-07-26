@@ -6,7 +6,7 @@ import {
 } from '@shared/errors';
 import { isDefined } from './guards';
 
-const LOG_PREFIX = '[airlock]';
+const LOG_PREFIX = '[punchlist]';
 
 interface ErrorDetails {
   kind: AppErrorKind | null;

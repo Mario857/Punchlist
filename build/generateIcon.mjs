@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * produce a single asset would cost more than the fifty lines of geometry below.
  *
  * The mark is the architecture: a hatch split down the middle by a seam, because an
- * airlock is a chamber with two doors that are never open at once. It has to survive
+ * punchlist is a chamber with two doors that are never open at once. It has to survive
  * being 16 pixels wide in a dock, so it is one ring and one seam and nothing else.
  * The stroke and the seam are both deliberately heavy: at the first attempt the seam
  * was under a pixel at that size and the mark read as a plain circle, which is the
@@ -22,9 +22,18 @@ const CANVAS_SIZE = 1024;
 const SUPERSAMPLE = 4;
 
 const CORNER_RADIUS_RATIO = 0.2237; // macOS squircle-adjacent, measured off the grid
-const RING_RADIUS_RATIO = 0.275;
-const RING_STROKE_RATIO = 0.125;
-const SEAM_HALF_WIDTH_RATIO = 0.068;
+/** Two ruled lines and a check: a list, with its first item signed off. */
+const CHECK_STROKE_RATIO = 0.105;
+const CHECK_POINTS = [
+  { x: 0.2, y: 0.345 },
+  { x: 0.318, y: 0.462 },
+  { x: 0.553, y: 0.226 },
+];
+
+const LINE_STROKE_RATIO = 0.086;
+const LINE_START_X_RATIO = 0.2;
+const LINE_END_X_RATIO = 0.8;
+const LINE_Y_RATIOS = [0.63, 0.79];
 
 const BACKGROUND_TOP = { red: 0x1c, green: 0x2a, blue: 0x3c };
 const BACKGROUND_BOTTOM = { red: 0x0d, green: 0x12, blue: 0x18 };
@@ -55,21 +64,44 @@ function roundedRectDistance(x, y, halfSize, radius) {
   return Math.hypot(outsideX, outsideY) + Math.min(Math.max(dx, dy), 0) - radius;
 }
 
+/** Distance from a point to a line segment, which is what gives the check its stroke. */
+function segmentDistance(x, y, from, to) {
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+  const projected = ((x - from.x) * deltaX + (y - from.y) * deltaY) / lengthSquared;
+  const clamped = Math.min(1, Math.max(0, projected));
+  return Math.hypot(x - (from.x + clamped * deltaX), y - (from.y + clamped * deltaY));
+}
+
 function isInsideMark(x, y, geometry) {
-  const { centre, ringRadius, ringHalfStroke, seamHalfWidth } = geometry;
-  const distanceToRing = Math.abs(Math.hypot(x - centre, y - centre) - ringRadius);
-  if (distanceToRing > ringHalfStroke) return false;
-  // The seam is what makes it a hatch rather than a plain circle: two facing doors.
-  return Math.abs(x - centre) > seamHalfWidth;
+  const { checkPoints, checkHalfStroke, lines, lineHalfStroke } = geometry;
+
+  for (let index = 0; index + 1 < checkPoints.length; index += 1) {
+    if (segmentDistance(x, y, checkPoints[index], checkPoints[index + 1]) <= checkHalfStroke) {
+      return true;
+    }
+  }
+
+  for (const line of lines) {
+    if (segmentDistance(x, y, line.from, line.to) <= lineHalfStroke) return true;
+  }
+  return false;
 }
 
 function renderPixels() {
   const halfSize = CANVAS_SIZE / 2;
   const geometry = {
-    centre: halfSize,
-    ringRadius: CANVAS_SIZE * RING_RADIUS_RATIO,
-    ringHalfStroke: (CANVAS_SIZE * RING_STROKE_RATIO) / 2,
-    seamHalfWidth: CANVAS_SIZE * SEAM_HALF_WIDTH_RATIO,
+    checkPoints: CHECK_POINTS.map((point) => ({
+      x: CANVAS_SIZE * point.x,
+      y: CANVAS_SIZE * point.y,
+    })),
+    checkHalfStroke: (CANVAS_SIZE * CHECK_STROKE_RATIO) / 2,
+    lines: LINE_Y_RATIOS.map((yRatio) => ({
+      from: { x: CANVAS_SIZE * LINE_START_X_RATIO, y: CANVAS_SIZE * yRatio },
+      to: { x: CANVAS_SIZE * LINE_END_X_RATIO, y: CANVAS_SIZE * yRatio },
+    })),
+    lineHalfStroke: (CANVAS_SIZE * LINE_STROKE_RATIO) / 2,
   };
   const cornerRadius = CANVAS_SIZE * CORNER_RADIUS_RATIO;
   const pixels = Buffer.alloc(CANVAS_SIZE * CANVAS_SIZE * CHANNELS);
