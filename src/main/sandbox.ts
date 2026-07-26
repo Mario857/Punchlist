@@ -170,6 +170,67 @@ export async function buildAgentEnvironment(): Promise<Record<string, string>> {
   return inherited;
 }
 
+/**
+ * The credentials main needs for its own `gh` calls, captured before containment
+ * removes them from the process. Undefined means the variable was not set, which is
+ * different from being set to an empty value and must be preserved as such.
+ */
+const capturedGhEnvironment = new Map<string, string | undefined>();
+
+let isProcessContained = false;
+
+/**
+ * Containment has to be applied to the whole main process, not handed to the agent
+ * as an env object, because `@cursor/sdk` has no env override for local agents:
+ * `LocalAgentOptions` exposes cwd, settingSources, sandboxOptions and customTools,
+ * and `env` appears only on `McpServerConfig` and the cloud options. The agent CLI
+ * therefore inherits main's environment, and a per-child env we cannot pass is not
+ * containment.
+ *
+ * Inverting the default is the stronger position anyway: every subprocess is
+ * contained unless it explicitly opts out, so a future child we forget about is
+ * contained by omission rather than exposed by it. `ghCli` is the single opt-out,
+ * via `buildMainGhEnvironment`.
+ *
+ * Called once, before anything can spawn a subprocess.
+ */
+export function applyProcessContainment(): void {
+  if (isProcessContained) return;
+
+  for (const key of [...CLEARED_TOKEN_ENVIRONMENT_KEYS, GH_CONFIG_DIR_ENVIRONMENT_KEY]) {
+    capturedGhEnvironment.set(key, process.env[key]);
+  }
+
+  // Deleted rather than emptied: an empty GIT_AUTHOR_NAME would still override the
+  // worktree-scoped identity config, just with a useless value.
+  for (const key of SCRUBBED_ENVIRONMENT_KEYS) {
+    delete process.env[key];
+  }
+  for (const key of CLEARED_TOKEN_ENVIRONMENT_KEYS) {
+    process.env[key] = CLEARED_ENVIRONMENT_VALUE;
+  }
+  process.env[GH_CONFIG_DIR_ENVIRONMENT_KEY] = resolveAgentGhConfigDirectory();
+
+  isProcessContained = true;
+}
+
+/**
+ * Main's own `gh` environment: the contained process env with the real credentials
+ * restored for this one subprocess. Restoring an originally-unset variable would
+ * make `gh` read an empty config dir, so those keys are removed instead.
+ */
+export function buildMainGhEnvironment(): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = { ...process.env };
+  for (const [key, value] of capturedGhEnvironment) {
+    if (value === undefined) {
+      delete environment[key];
+      continue;
+    }
+    environment[key] = value;
+  }
+  return environment;
+}
+
 /** The operations that reach the real repo or GitHub, and therefore need a gate. */
 export const SANDBOX_EXIT_ACTION = {
   COMMIT_INTEGRATION_BRANCH: 'commitIntegrationBranch',

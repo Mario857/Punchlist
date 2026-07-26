@@ -1,6 +1,7 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'node:path';
 import { registerIpcHandlers } from './ipc';
+import { applyProcessContainment } from './sandbox';
 import { loadStore } from './store';
 
 function createWindow(): void {
@@ -36,6 +37,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Before anything can spawn a subprocess: agents inherit this process's
+  // environment, so containment has to be in place first.
+  applyProcessContainment();
   // The store resolves userData paths, so it cannot load before the app is ready.
   loadStore();
   registerIpcHandlers();

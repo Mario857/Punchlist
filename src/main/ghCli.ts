@@ -5,9 +5,20 @@ import { z } from 'zod';
 // GhAuthStatus crosses IPC to the settings screen, so it lives in src/shared/
 // rather than here — one authoritative definition for both processes.
 import type { GhAuthStatus } from '@shared/discovery';
+import { buildMainGhEnvironment } from '@main/sandbox';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Every `gh` call here opts out of the process-wide containment applied in
+ * sandbox.ts. Containment is the default for the whole main process because the
+ * Cursor SDK has no env override for local agents, so main's own credentials have
+ * to be restored explicitly for exactly these subprocesses.
+ */
+function ghExecOptions(): { maxBuffer: number; env: NodeJS.ProcessEnv } {
+  return { maxBuffer: GH_MAX_BUFFER_BYTES, env: buildMainGhEnvironment() };
+}
 
 /**
  * A macOS app launched from Finder or the dock gets a minimal PATH rather than the
@@ -200,9 +211,7 @@ async function isExecutableFile(path: string): Promise<boolean> {
 async function resolveFromLoginShell(): Promise<string | null> {
   const shell = process.env.SHELL ?? DEFAULT_LOGIN_SHELL;
   try {
-    const { stdout } = await execFileAsync(shell, [...LOGIN_SHELL_QUERY_ARGS], {
-      maxBuffer: GH_MAX_BUFFER_BYTES,
-    });
+    const { stdout } = await execFileAsync(shell, [...LOGIN_SHELL_QUERY_ARGS], ghExecOptions());
     const [firstLine] = stdout.trim().split('\n');
     const candidate = firstLine.trim();
     if (candidate.length === 0) return null;
@@ -239,7 +248,7 @@ export async function resolveGhBinary(): Promise<string> {
 export async function runGh(args: readonly string[]): Promise<string> {
   const binary = await resolveGhBinary();
   try {
-    const { stdout } = await execFileAsync(binary, args, { maxBuffer: GH_MAX_BUFFER_BYTES });
+    const { stdout } = await execFileAsync(binary, args, ghExecOptions());
     return stdout;
   } catch (error: unknown) {
     throw toGhAppError(error, args);
@@ -306,9 +315,11 @@ export async function getGhAuthStatus(): Promise<GhAuthStatus> {
   const binary = await resolveGhBinary();
 
   try {
-    const { stdout, stderr } = await execFileAsync(binary, [...GH_AUTH_STATUS_ARGS], {
-      maxBuffer: GH_MAX_BUFFER_BYTES,
-    });
+    const { stdout, stderr } = await execFileAsync(
+      binary,
+      [...GH_AUTH_STATUS_ARGS],
+      ghExecOptions(),
+    );
     return parseGhAuthStatus(`${stdout}\n${stderr}`);
   } catch (error: unknown) {
     // `gh auth status` exits non-zero when no host is logged in, which is the
