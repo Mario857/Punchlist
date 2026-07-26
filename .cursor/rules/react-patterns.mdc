@@ -1,0 +1,184 @@
+---
+description: Airlock React 19 renderer patterns — colocated use<ComponentName> hooks, no logic or conditionals in JSX, exhaustive RunState switches, icons, file organization, accessibility
+globs: src/renderer/**/*.tsx,src/renderer/**/*.ts
+alwaysApply: false
+---
+
+# React Patterns
+
+React 19 in a plain SPA inside a `BrowserWindow`. There is no router-based framework here: no App Router, no Server Components, no `next/*` imports, no route builders. Renderer layer definitions are in [AGENTS.md](../../AGENTS.md); this file is how components are written.
+
+## Separate Logic From Presentation
+
+> A component file describes **what the UI looks like**. All of **how it behaves** lives in a colocated `use<ComponentName>` hook.
+
+- The component takes `props`, calls its hook once, destructures, and renders.
+- The hook owns state, data fetching, handlers, derived values, and effects, and returns a flat object of ready-to-render values and callbacks.
+- Handlers live in the hook (`onApproveClick`, `onSelectionPrompt`, `onDismissRun`), never inline in JSX.
+- Colocate the pair:
+
+  ```
+  modules/review/DiffReview/
+  ├── DiffReview.tsx        # presentational: props in, JSX out
+  ├── useDiffReview.ts      # state, handlers, derived values, debounced write-back
+  └── components/           # child components, same pattern
+  ```
+
+- Don't over-apply: a tiny purely-presentational component (`StateBadge`) needs no hook — adding one is pure indirection.
+
+```tsx
+// ✅
+export function DiffReview({ run }: DiffReviewProps) {
+  const { editorValue, changedFiles, isRevising, onEditorChange, onApproveClick } =
+    useDiffReview(run);
+  // …JSX only
+}
+
+// ❌ fetching, debouncing and diffing inside the component body
+export function DiffReview({ run }: DiffReviewProps) {
+  const { data } = useQuery(/* … */);
+  useEffect(() => {
+    const id = setTimeout(() => writeBack(value), 300);
+    return () => clearTimeout(id);
+  }, [value]);
+}
+```
+
+## No Logic in JSX
+
+No state reads, comparisons, computations, `.filter`/`.reduce`, or string building inside returned markup. Compute in the hook, name the result, render the name.
+
+```tsx
+// ❌
+<span>{formatDuration(Date.now() - run.startedAt)}</span>
+<p>{runs.filter((r) => r.state === RUN_STATE.READY).length} ready</p>
+
+// ✅ elapsedLabel and readyCount come from the hook
+<span>{elapsedLabel}</span>
+<p>{readyCount} ready</p>
+```
+
+## No Conditional Rendering in JSX
+
+No inline ternaries and no `&&` in returned markup. Assign to a named `const` first.
+
+```tsx
+// ✅
+const content = isReady ? <DiffReview run={run} /> : <TranscriptStream run={run} />;
+const guardrailFlags = hasFlags ? <GuardrailFlags flags={flags} /> : null;
+return (
+  <div>
+    {guardrailFlags}
+    {content}
+  </div>
+);
+
+// ❌
+return <div>{hasFlags && <GuardrailFlags flags={flags} />}{isReady ? <DiffReview /> : <Transcript />}</div>;
+```
+
+This rule has unusual bite here: the Workspace right-hand pane branches on `RunState`. That branch is a named `const` computed in a hook — never a ternary chain in JSX.
+
+## IIFE Over Nested Ternaries
+
+When a value depends on several conditions, use an IIFE with early returns.
+
+```tsx
+const emptyStateLabel = (() => {                            // ✅
+  if (!selectedComment) return 'Select a comment to begin';
+  if (isPrCommentsLoading) return 'Loading comments…';
+  return 'No run yet — press a to start one';
+})();
+```
+
+## `switch` + `assertNever` Over Discriminated Unions
+
+When exhausting `RunState` or `PrComment['kind']`, use `switch` with `assertNever` in the default so a new variant becomes a compile error rather than a blank pane.
+
+```tsx
+// ✅ in usePaneContent.ts
+const pane = (() => {
+  switch (run.state) {
+    case RUN_STATE.QUEUED:
+    case RUN_STATE.RUNNING:
+      return <TranscriptStream run={run} />;
+    case RUN_STATE.NEEDS_DECISION:
+      return <DecisionPrompt run={run} />;
+    case RUN_STATE.REVISING:
+    case RUN_STATE.READY:
+    case RUN_STATE.APPROVED:
+    case RUN_STATE.APPLIED:
+      return <DiffReview run={run} />;
+    case RUN_STATE.NO_ACTION_NEEDED:
+    case RUN_STATE.FAILED:
+      return <RunOutcome run={run} />;
+    default:
+      return assertNever(run.state);
+  }
+})();
+
+// ❌ a new state silently renders nothing
+const pane = run.state === RUN_STATE.READY ? <DiffReview /> : <TranscriptStream />;
+```
+
+## Component API
+
+- **No `forwardRef`.** React 19 passes `ref` as a regular prop — declare it in the props interface.
+- Named exports, one component per file, `function` declarations. No `React.FC`, no default exports.
+- Explicit props interfaces (see `typescript-standards.mdc`). Never derive props with `typeof`.
+- Variation on shared components goes through `variant` / `size` props, never per-instance `className` overrides.
+- No `useEffect` for anything derivable during render; effects are for subscriptions (IPC event streams) and imperative Monaco wiring.
+
+```tsx
+// ✅ React 19
+interface Props {
+  ref?: React.Ref<HTMLButtonElement>;
+  variant: ButtonVariant;
+}
+
+// ❌
+const Button = forwardRef<HTMLButtonElement, Props>((props, ref) => { /* … */ });
+```
+
+## No Inline SVG
+
+Every SVG becomes a component in `src/renderer/src/components/icons/`. Icons take `className` for sizing and colour and never hard-code a fill colour.
+
+```tsx
+import { CheckIcon } from '@renderer/components/icons/CheckIcon';  // ✅
+<svg viewBox="0 0 24 24"><path d="…" /></svg>                      // ❌
+```
+
+## No Barrel Exports
+
+No `index.ts` re-exporting siblings. Import directly from the defining file — barrels defeat tree-shaking, hide cycles, and make the module boundary lint zones unenforceable.
+
+`src/main/ipc.ts` and `src/shared/comments.ts` are **not** barrels; they define contracts and models rather than re-exporting neighbours.
+
+## File Organization
+
+Renderer layout is `src/renderer/src/{screens,modules,components,hooks,stores,lib}`:
+
+- `screens/` — pages (`Workspace`, `Settings`), each owning its page-focused components and its own orchestration.
+- `modules/` — cross-page feature blocks (`discovery`, `comments`, `review`, `runs`, `landing`, `audit`, `settings`), each owning its components, their colocated hooks, its data hooks, and module-local types.
+- `components/` — proven shared primitives, plus `icons/`. `hooks/` — cross-module hooks only. `stores/` — Zustand, one domain per store. `lib/` — `queryKeys`, `classNames`, `formatDuration`, `assertNever`, …
+
+Four boundary rules; the first two are ESLint errors, not review nitpicks:
+
+1. **Pages never import pages.** `Workspace` cannot reach into `Settings` or vice versa. A page-focused component a second page wants has stopped being page-focused — move it into `modules/`.
+2. **Modules may compose each other, but import cycles are a lint error.** `landing` reusing the diff viewer and guardrail flags is the point of the module layer; two modules importing each other is one undeletable blob.
+3. **Modules never import from `screens/`.** Direction is strictly downward: screens → modules → `components/`/`hooks/`/`stores/`/`lib/`.
+4. **Born scoped, promoted on the second consumer.** Start in the most local layer that works. Promote page → module when a second page needs it, module → `components/` when it proves to be a generic primitive (`TreeRow` and `StateBadge` qualify because the comment tree and the diff's file tree both render them). Never promote speculatively.
+
+Cross-page data flows through props or shared state, never a page import: the selected comment is lifted to `Workspace`; run state is read from `stores/runStore`.
+
+## Accessibility
+
+- Every interactive element has an accessible label (visible text or `aria-label`) and a **visible focus ring**. Never `outline-none` without a replacement.
+- **Every keyboard shortcut has a visible button equivalent.** `j`/`k`, `a`, `r`, `e`, `]`/`[`, `d`, `Cmd+K` are accelerators, never the only path — and `?` shows the map.
+- Landing stays a deliberate two-step: a shortcut may open the preview, confirmation is a click. The gate must not become muscle memory.
+- Use real semantics: `button` for actions, `role="tree"`/`treeitem` with `aria-expanded` on the comment tree, `aria-live` for streamed run-state changes.
+- Never convey state by colour alone — `StateBadge` carries text.
+- Keep transitions consistent across interactive elements; respect `prefers-reduced-motion`.
+
+User-facing strings are hard-coded English. There is no i18n layer in this project and no translation keys.

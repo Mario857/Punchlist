@@ -1,0 +1,161 @@
+---
+description: Airlock TypeScript style — typed consts over enums, interfaces with the z.infer exception, no any/as at IPC and subprocess boundaries, discriminated unions, naming
+alwaysApply: true
+---
+
+# TypeScript Standards
+
+Applies to both processes and `src/shared/`. Strict mode is on and stays on. Boundary *architecture* is in [AGENTS.md](../../AGENTS.md); this file is the type-level style contract.
+
+## Typed Consts, Never `enum`
+
+`as const` objects with a derived union type. `RUN_STATE` is the canonical example and every other enumeration follows it.
+
+```ts
+// ✅
+export const RUN_STATE = {
+  QUEUED: 'queued',
+  RUNNING: 'running',
+  NEEDS_DECISION: 'needsDecision',
+  READY: 'ready',
+  REVISING: 'revising',
+  NO_ACTION_NEEDED: 'noActionNeeded',
+  FAILED: 'failed',
+  APPROVED: 'approved',
+  APPLIED: 'applied',
+} as const;
+
+export type RunState = (typeof RUN_STATE)[keyof typeof RUN_STATE];
+
+// ❌
+enum RunState { Queued, Running /* … */ }
+```
+
+Same shape for `MODEL_TIER`, `COMMENT_KIND`, `GH_ERROR_KIND`. Never compare against the raw string — `state === RUN_STATE.READY`, not `state === 'ready'`.
+
+## Interfaces for Object Shapes, With One Exception
+
+- **`interface`** for object shapes.
+- **`type`** only for unions, intersections, and mapped types.
+- **`z.infer` output is a documented exception.** It produces a `type` alias and that is correct. **Never hand-write a parallel `interface` next to a schema** — the schema is the single source of truth and the two would drift.
+
+```ts
+// ✅ schema is the source; the type is derived
+export const prCommentSchema = z.discriminatedUnion('kind', [
+  inlineThreadSchema,
+  reviewBodySchema,
+  issueCommentSchema,
+]);
+export type PrComment = z.infer<typeof prCommentSchema>;
+
+// ❌ a second source of truth that will drift on the next schema edit
+export interface PrComment { kind: 'inlineThread' | 'reviewBody'; /* … */ }
+```
+
+`PrComment` is a discriminated union, so `type` is right for it on both counts anyway. Plain props and options objects still use `interface`.
+
+## No `any`, No `as` Hacks
+
+Never silence the compiler. Fix the cause.
+
+The two places casting feels easiest and is most dangerous:
+
+- **IPC payloads.** Preload exposes a typed object, so the renderer already has real types — a cast there means the contract in `src/main/ipc.ts` is wrong. Fix the contract.
+- **`gh` subprocess stdout and agent-written files.** Untyped input. Parse with Zod; a cast just relabels an unvalidated value.
+
+```ts
+// ❌ every one of these is a bug waiting for a deleted GitHub account
+const threads = JSON.parse(stdout) as ReviewThread[];
+const payload = event.data as RunEvent;
+const agent = sdkResult as any;
+
+// ✅
+const threads = reviewThreadsSchema.parse(JSON.parse(stdout));
+```
+
+- `unknown` for anything unvalidated, then narrow with a schema, a type guard, or `invariant`.
+- `as const` is fine (it narrows). `as unknown as X` is never fine.
+- No non-null `!`. Narrow with `isDefined` or `invariant`, which fails loudly with a message.
+- No `@ts-expect-error` / `@ts-ignore` without an adjacent comment naming the upstream issue.
+- Catch clauses receive `unknown` — narrow before reading `.message`, and route through `logError`.
+
+```ts
+// ✅
+try {
+  await landing.execute(confirmation);
+} catch (error: unknown) {
+  logError(error, { scope: 'landing.execute', runId });
+}
+```
+
+## Discriminated Unions Over Optional-Field Soup
+
+Make illegal states fail to typecheck.
+
+```ts
+// ❌ four optional fields, sixteen states, twelve of them illegal
+interface Comment {
+  kind: string;
+  path?: string;
+  line?: number;
+  isResolved?: boolean;
+}
+
+// ✅ "only inline threads have an anchor" is a compiler guarantee
+type PrComment =
+  | { kind: 'inlineThread'; anchor: CommentAnchor; isResolved: boolean; /* … */ }
+  | { kind: 'reviewBody'; /* … */ }
+  | { kind: 'issueComment'; /* … */ };
+```
+
+Same for run outcomes (`{ kind: 'ready'; diff } | { kind: 'failed'; reason: FailureReason }` — a timeout is distinct from an agent error) and typed `gh` failures. Exhaust them with `switch` + `assertNever` so a new variant is a compile error, never a silent fallthrough.
+
+## Explicit Props Interfaces
+
+Declare props explicitly. **Never derive them inline with `typeof`.**
+
+```ts
+// ✅ exported: verbose descriptive name
+export interface LandingPreviewProps {
+  runs: RunRecord[];
+  onConfirm: (confirmation: LandingConfirmation) => void;
+}
+
+// ✅ file-local: simple name
+interface Props {
+  comment: PrComment;
+}
+
+// ❌
+function StateBadge(props: typeof defaultBadgeProps) {}
+```
+
+## Trust Boundary as a Type
+
+Gated operations take a confirmation argument at the type level. A function that *can* push, commit to the integration branch, resolve a thread, or post a reply without being handed one is a bug, not a policy violation.
+
+```ts
+// ✅ unconstructable without going through the gate
+export async function executeLanding(
+  plan: LandingPlan,
+  confirmation: LandingConfirmation,
+): Promise<LandingRecord>;
+
+// ❌ a boolean is not a constraint — `true` is always in scope
+export async function executeLanding(plan: LandingPlan, confirmed: boolean);
+```
+
+## Naming
+
+- **camelCase** variables/functions, **UPPER_SNAKE_CASE** constants, **PascalCase** components and types.
+- **Booleans read as predicates:** `is` / `has` / `should` — `isPrCommentsLoading`, `hasUnlandedWork`, `shouldTearDownWorktree`.
+- **Files:** `camelCase.ts` for modules, `PascalCase.tsx` for components.
+- No abbreviations that are not already in the codebase. `worktree`, `prComment`, `runId` — not `wt`, `cmt`, `rid`.
+- Exported interfaces get verbose descriptive names; file-local ones are just `Props` / `Options`.
+
+## Module & Type Hygiene
+
+- Prefer static `import`. No `import()` and no `typeof import('…')` in type annotations — define an explicit interface instead. The one carve-out is an ESM-only dependency consumed from the CJS main process; comment why at the call site.
+- Prefer the `@renderer/*` and `@shared/*` path aliases over `../../../` chains.
+- `src/shared/` stays Node-free and dependency-free beyond Zod — both processes import it.
+- No deprecated APIs. For Electron specifically: no `remote`, no `nodeIntegration`, no synchronous IPC.

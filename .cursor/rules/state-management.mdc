@@ -1,0 +1,128 @@
+---
+description: Airlock renderer state — TanStack Query over the IPC bridge for request/response data, Zustand for streamed run and queue state, useState for genuinely local, never server data in a global store
+globs: src/renderer/**/*.ts,src/renderer/**/*.tsx
+alwaysApply: false
+---
+
+# State Management
+
+One source of truth per kind of state. **Never mix patterns for the same data.** The choice is decided by *how the data arrives*, not by how convenient the store is. Channel and preload architecture lives in [AGENTS.md](../../AGENTS.md).
+
+## The Split
+
+| Kind of state | Tool | Why |
+|---|---|---|
+| PR comments, PR metadata, discovery results, `gh` auth status, worktree disk usage | **TanStack Query** | Request/response over IPC — caching, staleness, refetch-on-demand |
+| Run and queue state, transcript chunks, state transitions | **Zustand** (`stores/runStore.ts`) | Push-based streamed IPC events; a request/response cache is the wrong shape |
+| Filter toggles, expanded rows, draft prompt text before it is sent | **`useState`** | Genuinely local to one component subtree |
+
+## TanStack Query Over IPC
+
+The transport is IPC, not HTTP. Query does not care — **the `queryFn` calls the preload bridge instead of `fetch`.**
+
+```ts
+// ✅ modules/comments/useQueryPrComments.ts
+export function useQueryPrComments(prId: string | null) {
+  const { data: prComments, isLoading: isPrCommentsLoading, error } = useQuery({
+    queryKey: queryKeys.prComments(prId),
+    queryFn: () => {
+      invariant(prId, 'prComments query ran without a selected PR');
+      return window.electronAPI.fetchPrComments(prId);
+    },
+    enabled: isDefined(prId),
+  });
+
+  return { prComments, isPrCommentsLoading, prCommentsError: error };
+}
+
+// ❌ there is no HTTP server in this app
+queryFn: () => fetch(`/api/comments/${prId}`).then((r) => r.json());
+
+// ❌ ad-hoc channel string from a component — channels are defined in src/main/ipc.ts
+queryFn: () => window.ipcRenderer.invoke('comments:fetch', prId);
+```
+
+Rules:
+
+- **Always wrap fetching and mutation in a custom hook.** Never call `useQuery` / `useMutation` inline in a component.
+- **Naming:** `useQuery<Name>` for reads, `useExecute<Name>` for writes — `useQueryPrComments`, `useQueryPrDiscovery`, `useExecuteLanding`, `useExecuteRunCancel`.
+- **Loading flags match their data variable:** `data: prComments` → `isPrCommentsLoading`. Not `isLoading`, not `loading`.
+- **Use the query-key factory** in `lib/queryKeys.ts`. Never an ad-hoc array literal.
+- The hook lives in the module that owns the domain — `useQueryPrComments` in `modules/comments/`, not in `hooks/`.
+- Refetch, don't re-plumb: re-polling a PR is `invalidateQueries` on the comments key, which is exactly what hand-rolled IPC state would not give you.
+
+```ts
+// ✅ lib/queryKeys.ts — one authoritative source for keys
+export const queryKeys = {
+  prComments: (prId: string | null) => createQueryKey('prComments', prId),
+  prDiscovery: () => createQueryKey('prDiscovery'),
+  ghAuthStatus: () => createQueryKey('ghAuthStatus'),
+} as const;
+
+// ❌
+useQuery({ queryKey: ['comments', prId, 'v2'], /* … */ });
+```
+
+### Errors are typed, and the kind must survive
+
+`ghCli` errors are already discriminated by kind (missing binary, unauthenticated, rate limited, network, no repo access). Preserve that kind across IPC and into the hook's return value.
+
+- Handle disabled / loading / error states explicitly. Never silently swallow an error, never render an empty list where a failure occurred.
+- Route all error logging through `logError` with a context object.
+- Collapsing kinds into a generic `Error` makes "gh is not installed" indistinguishable from "your token expired" — which is precisely the distinction the Settings screen must render with different remediation.
+
+## Zustand for Streamed Run State
+
+Run and queue state arrives as a stream of IPC events — transcript chunks, state transitions, revision commits. That is push, so it goes in a store, not a cache. It is **local process state, not server data**, so it does not violate the rule below.
+
+```ts
+// ✅ stores/runStore.ts — one domain, actions colocated with the slice they mutate
+interface RunStoreState {
+  runsById: Record<string, RunRecord>;
+  activeRunIds: string[];
+  applyRunEvent: (event: RunEvent) => void;
+  appendTranscriptChunk: (runId: string, chunk: string) => void;
+}
+```
+
+- **One domain per store.** `runStore` for runs/queue; a separate store for anything genuinely unrelated. No single app-wide store.
+- Subscribe with a **selector**, so a transcript chunk does not re-render the comment tree.
+
+  ```ts
+  const runState = useRunStore((s) => s.runsById[runId]?.state);   // ✅
+  const { runsById } = useRunStore();                              // ❌ re-renders on every chunk
+  ```
+
+- Store the streamed truth only. Derive counts, labels, and groupings in the consuming hook — never persist a second copy that can drift.
+- Event application is one reducer-shaped action (`applyRunEvent`) driven by the IPC subscription, not scattered `setState` calls across components.
+- The IPC subscription is set up once (App-level effect) and cleaned up on unmount — never one listener per component.
+
+## `useState` for Genuinely Local
+
+Filter-bar toggles, the inline-prompt draft, hover and focus state. Lift it only when a second consumer genuinely needs it, and lift to the smallest common owner — the `Workspace` screen lifts the selected comment because tree, detail, and review panes all need it. Comment filtering happens client-side over the full fetched set, so filter state stays local rather than becoming a query parameter.
+
+## Never Put Server Data in a Global Client Store
+
+```ts
+// ❌ now there are two truths and no invalidation story
+useCommentStore.setState({ prComments: await window.electronAPI.fetchPrComments(prId) });
+
+// ❌ copying query output into a store on mount
+useEffect(() => setComments(prComments), [prComments]);
+
+// ✅ read it where you need it — the cache is already global
+const { prComments } = useQueryPrComments(prId);
+```
+
+The same rule in the other direction: **never mirror streamed run state into TanStack Query.** No `setQueryData` from an IPC event listener to fake a cache entry.
+
+## Mutations and the Gate
+
+- Writes are `useExecute<Name>` hooks wrapping `useMutation`, with the `mutationFn` calling the preload bridge.
+- On success, invalidate the affected query keys rather than hand-patching cache entries.
+- **No optimistic updates across the landing gate.** Approving, pushing, resolving a thread, and posting a reply are confirmed operations whose result is authoritative — never show them as done before main reports them done. Optimistic UI is acceptable only for local, reversible state such as tree expansion.
+- Mutation state follows the same naming discipline: `isLandingExecuting`, `landingError`.
+
+## Persistence
+
+Durable state (last selected PR, per-PR tree expansion, run records, `agentId`) is owned by the main process JSON store and reaches the renderer through IPC — that makes it Query data on read and a mutation on write. Do not add a second persistence layer in the renderer: no `localStorage`, no Zustand `persist` middleware.

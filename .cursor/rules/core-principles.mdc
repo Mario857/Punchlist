@@ -1,0 +1,128 @@
+---
+description: Airlock working style — pattern-following, magic numbers, simplicity, comments, security, Zod parse boundaries, and the verification gate
+alwaysApply: true
+---
+
+# Core Principles
+
+Project-wide rules for every file in both processes. The stack, directory structure, and the full process/trust boundary sections live in [AGENTS.md](../../AGENTS.md) — this file is the working-discipline layer on top of them.
+
+## Change Discipline
+
+- **Follow existing patterns.** Find the nearest existing example (`src/main/*` for a Node module, a `modules/<feature>/` folder for renderer work) and match its structure before inventing one.
+- **Minimal impact.** Touch only what the task requires. No drive-by renames, no reformatting churn in a functional change.
+- **Smallest diff that solves the problem.** If a change starts spreading across layers, stop and re-scope.
+- **Don't over-document.** No JSDoc on code you didn't write or change.
+
+## No Magic Numbers
+
+Never inline a numeric or string literal that carries meaning. Promote it to an `UPPER_SNAKE_CASE` const in the domain-scoped file that owns it (`queue.ts`, `worktree.ts`, `watcher.ts`, `agent.ts`).
+
+These five are the ones that will feel harmless to inline. They are not:
+
+| Value | Constant | Owner |
+|-------|----------|-------|
+| Concurrency cap | `MAX_CONCURRENT_RUNS` | `src/main/queue.ts` |
+| Diff write-back debounce | `DIFF_DEBOUNCE_MS` | `modules/review/` |
+| Watcher poll interval | `WATCHER_POLL_INTERVAL_MS` | `src/main/watcher.ts` |
+| Per-run max duration | `RUN_TIMEOUT_MS` | `src/main/queue.ts` |
+| Auto-answer cap per run | `MAX_AUTO_ANSWERS_PER_RUN` | `src/main/automation.ts` |
+
+```ts
+// ❌
+if (activeRuns.length >= 4) return;
+await withTimeout(run.result(), 600_000);
+
+// ✅
+if (activeRuns.length >= MAX_CONCURRENT_RUNS) return;
+await withTimeout(run.result(), RUN_TIMEOUT_MS);
+```
+
+String literals count too: run states come from `RUN_STATE`, protected paths from the guardrail default list, channel names from `src/main/ipc.ts`.
+
+## Prefer Simplicity
+
+- Choose the simplest thing that works. Read the code back and ask what could be deleted.
+- **No abstraction for a second implementation that does not exist.** This is why there is no provider layer for GitLab, no interface over the Cursor SDK, and no adapter over `gh`. When a second one appears, abstract then.
+- No config option, feature flag, or generic parameter that has exactly one caller.
+- No wrapper that only forwards arguments.
+
+## Standardization & Deduplication
+
+- Every piece of knowledge has one authoritative source. A run state lives in `RUN_STATE`, a query key in the key factory, the protected-path list in `guardrails.ts`.
+- Reuse the shared utilities before writing a local variant: `assertNever`, `isDefined`, `invariant`, `withTimeout`, `clamp`, `formatDuration`, `formatBytes`, `safeDiv`, `logError`, `normalizeRemoteUrl`, `joinClassNames`/`mergeClassNames`. Full table in AGENTS.md.
+- Two near-identical blocks in the same layer means the abstraction already exists implicitly — name it.
+- Don't hand-roll formatting. Durations and byte sizes go through `formatDuration` / `formatBytes`, which already decide nullish behaviour (`'--'`) once. Native `number` is the correct numeric type throughout — no arbitrary-precision library.
+
+## Comments Explain Why
+
+Comment the non-obvious behaviour of git, Electron, and the Cursor SDK. Never restate what the code says.
+
+```ts
+// ✅ explains a surprise
+// git worktree remove leaves the scratch branch behind, so teardown is three ops not one
+await git.raw(['branch', '-D', branchName]);
+
+// ✅ explains containment, which reads like a bug otherwise
+// an invalid pushurl is the sandbox: the agent has shell access and could otherwise push
+await git.addConfig('remote.origin.pushurl', INVALID_PUSH_URL, false, 'worktree');
+
+// ❌ restates the line
+// delete the branch
+await git.raw(['branch', '-D', branchName]);
+```
+
+When refactoring or moving code, **preserve existing comments**. If restructuring makes one no longer fit, adapt it — never silently drop it.
+
+## Do NOT Touch
+
+- Vendored / third-party directories — never hand-edit
+- `*.generated.*` files — edit the source
+- `bun.lock` — changes only via `bun`
+- Build output: `out/`, `dist/`, `node_modules/`, `*.tsbuildinfo`
+- `.cursor/rules/**` — a run resolving a PR comment never rewrites its own rules
+
+This list is mirrored by `src/main/guardrails.ts`, which enforces the equivalent protected paths on agents working on *user* repos through Airlock. Keep the two consistent; do not conflate their scope.
+
+## Security
+
+- Never commit or log `.env` contents, private keys, or API secrets.
+- `CURSOR_API_KEY` is read from `safeStorage` in main and used in main. The renderer may learn *whether* a key is set, never its value.
+- **Agent transcripts are sensitive.** They are persisted to the JSON store and rendered in the UI, and a transcript can quote repository contents. Never write one to a log file or include one in an error report.
+- **The audit log records actions, not payloads.** Which threads were resolved, which branch was pushed, which guardrail flag was acknowledged — never token values, never diff contents.
+- Validate every external input at its boundary (below). Guardrail secret scanning is a cheap safety net, not a guarantee — it does not replace not logging secrets.
+
+## Zod Parse Boundaries
+
+Zod is required at exactly three places, all untrusted. Everywhere else, trust the types — no defensive `?.` on internally-produced values.
+
+1. **`gh` subprocess stdout** — untyped by definition; `author` is null on deleted accounts.
+2. **The persisted JSON store** — may have been written by an older version of the app.
+3. **`.airlock/decision.json` and `.airlock/summary.json`** — written by an LLM, the least trustworthy input in the system.
+
+Malformed agent output must degrade to a clean state ("agent halted incorrectly", template commit message), never crash the main process.
+
+```ts
+// ✅ parse, then trust
+const parsed = decisionSchema.safeParse(JSON.parse(raw));
+if (!parsed.success) return { kind: 'malformedDecision' };
+
+// ❌ cast at the boundary — this is exactly what the schema is for
+const decision = JSON.parse(raw) as AgentDecision;
+```
+
+Derive the type with `z.infer`; never hand-write a parallel type next to a schema.
+
+## Verification Gate
+
+After making edits, always run all three:
+
+```bash
+bun run typecheck && bun run lint && bun run build
+```
+
+`build` is not optional — it is the only thing that catches main/preload bundling and externalization failures, which are invisible to `typecheck`.
+
+> **There are no unit tests in this project.** Never run `bun test`, `bun run test`, or any test command — they do not exist. Verification is typecheck + lint + build.
+
+Use `bun` for every command. Never `npm`, `yarn`, or `pnpm`.
