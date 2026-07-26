@@ -1,13 +1,12 @@
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
 
 export interface ReviewDecisionProps {
   runId: string;
 }
 
-const CARD_COLUMN_CLASS = 'flex flex-col gap-2';
-const HEADING_CLASS = 'text-ink text-sm font-semibold';
+const SECTION_ID = 'review-decision';
 const STATUS_CLASS = 'text-ink text-xs leading-relaxed';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const HINT_CLASS = 'text-muted text-xs leading-relaxed';
@@ -23,6 +22,8 @@ const ACTION_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 export function ReviewDecision({ runId }: ReviewDecisionProps) {
   const {
     heading,
+    summary,
+    isDefaultOpen,
     statusLabel,
     explanation,
     approveLabel,
@@ -82,8 +83,12 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
     explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
 
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={CARD_COLUMN_CLASS}>
-      <h2 className={HEADING_CLASS}>{heading}</h2>
+    <CollapsibleCard
+      sectionId={SECTION_ID}
+      heading={heading}
+      summary={summary}
+      isDefaultOpen={isDefaultOpen}
+    >
       <p role="status" className={STATUS_CLASS}>
         {statusLabel}
       </p>
@@ -95,6 +100,6 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
       {approveBlocked}
       {reopen}
       {error}
-    </Card>
+    </CollapsibleCard>
   );
 }

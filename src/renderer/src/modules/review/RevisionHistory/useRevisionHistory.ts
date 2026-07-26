@@ -39,6 +39,9 @@ export interface RevisionHistoryItem {
 interface UseRevisionHistoryResult {
   heading: string;
   explanation: string;
+  /** Stands in for the body while the section is closed. */
+  summary: string;
+  isDefaultOpen: boolean;
   items: RevisionHistoryItem[];
   /** Non-null while there is nothing to list, which is not an error. */
   statusLabel: string | null;
@@ -52,6 +55,7 @@ interface UseRevisionHistoryResult {
   onKeepEditsClick: () => void;
 }
 
+const EMPTY_SUMMARY = 'No revisions yet';
 const HEADING = 'Revision trail';
 const EXPLANATION =
   'Every change after the agent’s first result is its own commit in this comment’s worktree. They are squashed into a single commit when the patch lands, so this list is here to undo a step — not to be read as history.';
@@ -217,6 +221,10 @@ export function useRevisionHistory({ runId }: UseRevisionHistoryOptions): UseRev
 
   return {
     heading: HEADING,
+    summary: statusLabel ?? EMPTY_SUMMARY,
+    // The trail is for undoing a step you have decided was wrong, which is rare enough
+    // that it should not occupy the pane until then.
+    isDefaultOpen: false,
     explanation: EXPLANATION,
     items,
     statusLabel,

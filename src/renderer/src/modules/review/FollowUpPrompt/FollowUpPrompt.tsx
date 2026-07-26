@@ -1,5 +1,5 @@
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import {
   DISABLED_STATE,
   FOCUS_RING,
@@ -12,6 +12,7 @@ export interface FollowUpPromptProps {
   runId: string;
 }
 
+const SECTION_ID = 'follow-up-prompt';
 const SECTION_LABEL = 'Follow-up prompt';
 
 const PROMPT_FIELD_CLASS = joinClassNames(
@@ -24,7 +25,6 @@ const PROMPT_FIELD_CLASS = joinClassNames(
 );
 
 const COLUMN_CLASS = 'flex flex-col gap-1.5';
-const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const LABEL_CLASS = 'text-muted text-xs font-medium tracking-wide uppercase';
 const META_CLASS = 'text-muted text-xs leading-relaxed';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
@@ -38,6 +38,8 @@ const ACTION_ROW_CLASS = 'flex items-center gap-2';
 export function FollowUpPrompt({ runId }: FollowUpPromptProps) {
   const {
     heading,
+    summary,
+    isDefaultOpen,
     explanation,
     promptFieldId,
     promptLabel,
@@ -75,9 +77,13 @@ export function FollowUpPrompt({ runId }: FollowUpPromptProps) {
     );
 
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM}>
+    <CollapsibleCard
+      sectionId={SECTION_ID}
+      heading={heading}
+      summary={summary}
+      isDefaultOpen={isDefaultOpen}
+    >
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
-        <h3 className={HEADING_CLASS}>{heading}</h3>
         <p className={META_CLASS}>{explanation}</p>
         <label htmlFor={promptFieldId} className={LABEL_CLASS}>
           {promptLabel}
@@ -106,6 +112,6 @@ export function FollowUpPrompt({ runId }: FollowUpPromptProps) {
           </Button>
         </div>
       </section>
-    </Card>
+    </CollapsibleCard>
   );
 }

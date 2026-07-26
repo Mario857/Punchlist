@@ -35,6 +35,9 @@ interface UseAutoDecisionsResult {
   explanation: string;
   /** Says the run is still yours to change, because that is what makes deferral honest. */
   reversibilityNote: string;
+  /** Stands in for the body while the section is closed. */
+  summary: string;
+  isDefaultOpen: boolean;
   countLabel: string;
   items: AutoDecisionItem[];
 }
@@ -107,6 +110,10 @@ export function useAutoDecisions({ runId }: UseAutoDecisionsOptions): UseAutoDec
   return {
     hasAutoDecisions: items.length > NO_AUTO_DECISIONS,
     heading: HEADING,
+    summary: countLabel,
+    // A decision taken without you is worth knowing about, but the count in the closed
+    // header says it — the transcript of each one does not need to be open to say it.
+    isDefaultOpen: false,
     explanation: EXPLANATION,
     reversibilityNote: REVERSIBILITY_NOTE,
     countLabel,

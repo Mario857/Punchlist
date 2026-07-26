@@ -115,6 +115,12 @@ export const sessionStateSchema = z.object({
    * the wrong trade once you know what a guardrail flag is.
    */
   isRunPaneVerbose: z.boolean().default(false),
+  /**
+   * Which collapsible sections have been opened or closed by hand, keyed by section id.
+   * Only sections that have actually been toggled appear, so one never touched follows
+   * its own default rather than being frozen at whatever the default was that day.
+   */
+  sectionOpenById: z.record(z.string(), z.boolean()).default({}),
 });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;

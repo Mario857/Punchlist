@@ -1,17 +1,17 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { useAutoDecisions } from '@renderer/modules/review/AutoDecisions/useAutoDecisions';
 
 export interface AutoDecisionsProps {
   runId: string;
 }
 
+const SECTION_ID = 'auto-decisions';
 const SECTION_LABEL = 'Auto-answered decisions';
 const LIST_LABEL = 'Decisions auto mode took on this run';
 const AUTO_ANSWERED_BADGE_LABEL = 'Auto';
 
 const COLUMN_CLASS = 'flex flex-col gap-1.5';
-const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const META_CLASS = 'text-muted text-xs leading-relaxed';
 /** Accent rather than warning: a deferred decision is a thing to read, not a fault. */
 const COUNT_CLASS = 'text-accent text-xs leading-relaxed';
@@ -30,8 +30,16 @@ const ALTERNATIVES_LIST_CLASS = 'text-muted flex flex-col gap-0.5 text-xs leadin
  * back. Renders nothing when the run has none, so an empty card never claims otherwise.
  */
 export function AutoDecisions({ runId }: AutoDecisionsProps) {
-  const { hasAutoDecisions, heading, explanation, reversibilityNote, countLabel, items } =
-    useAutoDecisions({ runId });
+  const {
+    hasAutoDecisions,
+    heading,
+    summary,
+    isDefaultOpen,
+    explanation,
+    reversibilityNote,
+    countLabel,
+    items,
+  } = useAutoDecisions({ runId });
 
   if (!hasAutoDecisions) return null;
 
@@ -62,9 +70,13 @@ export function AutoDecisions({ runId }: AutoDecisionsProps) {
   });
 
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM}>
+    <CollapsibleCard
+      sectionId={SECTION_ID}
+      heading={heading}
+      summary={summary}
+      isDefaultOpen={isDefaultOpen}
+    >
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
-        <h3 className={HEADING_CLASS}>{heading}</h3>
         <p className={META_CLASS}>{explanation}</p>
         <p role="status" className={COUNT_CLASS}>
           {countLabel}
@@ -74,6 +86,6 @@ export function AutoDecisions({ runId }: AutoDecisionsProps) {
         </ul>
         <p className={META_CLASS}>{reversibilityNote}</p>
       </section>
-    </Card>
+    </CollapsibleCard>
   );
 }

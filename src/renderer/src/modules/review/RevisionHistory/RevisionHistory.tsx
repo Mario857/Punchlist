@@ -1,6 +1,6 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { joinClassNames } from '@renderer/lib/classNames';
 import { useRevisionHistory } from '@renderer/modules/review/RevisionHistory/useRevisionHistory';
 
@@ -8,6 +8,7 @@ export interface RevisionHistoryProps {
   runId: string;
 }
 
+const SECTION_ID = 'revision-history';
 const SECTION_LABEL = 'Revision trail';
 const LIST_LABEL = 'Revisions, newest first';
 const CURRENT_LABEL = 'Current';
@@ -47,6 +48,8 @@ const COMMITTED_CLASS = 'text-muted text-xs';
 export function RevisionHistory({ runId }: RevisionHistoryProps) {
   const {
     heading,
+    summary,
+    isDefaultOpen,
     explanation,
     items,
     statusLabel,
@@ -149,9 +152,13 @@ export function RevisionHistory({ runId }: RevisionHistoryProps) {
   ) : null;
 
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM}>
+    <CollapsibleCard
+      sectionId={SECTION_ID}
+      heading={heading}
+      summary={summary}
+      isDefaultOpen={isDefaultOpen}
+    >
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
-        <h3 className={HEADING_CLASS}>{heading}</h3>
         <p className={META_CLASS}>{explanation}</p>
         {status}
         {revisionsError}
@@ -161,6 +168,6 @@ export function RevisionHistory({ runId }: RevisionHistoryProps) {
         </ol>
         {revertError}
       </section>
-    </Card>
+    </CollapsibleCard>
   );
 }

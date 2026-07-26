@@ -1,6 +1,6 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
+import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
 import { useSecondOpinion } from '@renderer/modules/review/SecondOpinion/useSecondOpinion';
 
@@ -8,6 +8,7 @@ export interface SecondOpinionProps {
   runId: string;
 }
 
+const SECTION_ID = 'second-opinion';
 const SECTION_LABEL = 'Second opinion';
 const CONCERNS_LIST_LABEL = 'Concerns raised by the second reader';
 
@@ -20,7 +21,6 @@ const MODIFICATION_ICON_SIZE = 14;
 
 const COLUMN_CLASS = 'flex flex-col gap-1.5';
 const HEADER_CLASS = 'flex flex-wrap items-center gap-2';
-const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const STATEMENT_CLASS = 'text-ink text-xs leading-relaxed';
 const META_CLASS = 'text-muted text-xs leading-relaxed';
 const SOURCE_CLASS = 'text-muted text-xs';
@@ -44,6 +44,8 @@ const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 export function SecondOpinion({ runId }: SecondOpinionProps) {
   const {
     heading,
+    summary,
+    isDefaultOpen,
     explanation,
     verdict,
     dissentNote,
@@ -149,14 +151,24 @@ export function SecondOpinion({ runId }: SecondOpinionProps) {
 
   const explanationLine = explanation === null ? null : <p className={META_CLASS}>{explanation}</p>;
 
+  // In the header rather than the body: a verdict is the one thing worth reading off a
+  // closed section, and the summary line beside it cannot carry a colour.
+  const headerBadges = (
+    <span className={HEADER_CLASS}>
+      {verdictBadge}
+      {poolSpendingBadge}
+    </span>
+  );
+
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM}>
+    <CollapsibleCard
+      sectionId={SECTION_ID}
+      heading={heading}
+      summary={summary}
+      isDefaultOpen={isDefaultOpen}
+      headerAccessory={headerBadges}
+    >
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
-        <div className={HEADER_CLASS}>
-          <h3 className={HEADING_CLASS}>{heading}</h3>
-          {verdictBadge}
-          {poolSpendingBadge}
-        </div>
         {verdictStatement}
         {modificationNotice}
         {concerns}
@@ -170,6 +182,6 @@ export function SecondOpinion({ runId }: SecondOpinionProps) {
         {requestPending}
         {requestError}
       </section>
-    </Card>
+    </CollapsibleCard>
   );
 }

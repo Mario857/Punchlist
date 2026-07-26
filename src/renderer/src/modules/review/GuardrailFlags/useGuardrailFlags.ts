@@ -43,6 +43,9 @@ interface UseGuardrailFlagsResult {
   explanation: string | null;
   items: GuardrailFlagItem[];
   /** Says what is still outstanding, because that is what gates approval. */
+  /** Stands in for the body while the section is closed. */
+  summary: string;
+  isDefaultOpen: boolean;
   statusLabel: string;
   isAcknowledgePending: boolean;
   acknowledgeErrorMessage: string | null;
@@ -193,6 +196,9 @@ export function useGuardrailFlags({ runId }: UseGuardrailFlagsOptions): UseGuard
     heading: HEADING,
     explanation: isVerbose ? EXPLANATION : null,
     items,
+    summary: buildStatusLabel(outstandingCount),
+    // Open exactly while something is still held back — an acknowledged card is history.
+    isDefaultOpen: outstandingCount !== NO_FLAGS_OUTSTANDING,
     statusLabel: buildStatusLabel(outstandingCount),
     isAcknowledgePending: isAcknowledgeGuardrailPending,
     acknowledgeErrorMessage,
