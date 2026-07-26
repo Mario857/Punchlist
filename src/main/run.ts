@@ -1,4 +1,5 @@
 import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
+import { appendAuditEntry } from '@main/audit';
 import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
 import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
 import {
@@ -35,7 +36,9 @@ import {
 } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
+import { AUDIT_ACTION } from '@shared/audit';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { hasUnacknowledgedFlags, selectUnacknowledgedFlags } from '@shared/guardrails';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import {
   FAILURE_REASON,
@@ -80,6 +83,9 @@ const NOT_CONTINUABLE_MESSAGE =
   'This run is not waiting for input, so there is nothing to continue.';
 const NOT_HAND_EDITABLE_MESSAGE =
   'This run has no reviewable patch, so there is nothing to hand-edit.';
+const GUARDRAIL_KIND_SEPARATOR = ', ';
+const UNACKNOWLEDGED_GUARDRAIL_REMEDIATION =
+  'Acknowledge every outstanding flag on those runs, then approve again.';
 
 /** needsDecision is waiting on a person; ready and approved accept a follow-up. */
 const CONTINUABLE_RUN_STATES: readonly RunState[] = [
@@ -606,9 +612,10 @@ export async function revertRun(request: RevertRunRequest): Promise<RunRecord> {
  * than held in the UI, because the record of what was accepted has to survive a
  * restart as much as the patch does.
  */
-export function acknowledgeGuardrail(runId: string, flagId: string): RunRecord {
+export async function acknowledgeGuardrail(runId: string, flagId: string): Promise<RunRecord> {
   const run = requireRun(runId);
-  if (!run.guardrailFlags.some((flag) => flag.id === flagId)) {
+  const flag = run.guardrailFlags.find((candidate) => candidate.id === flagId);
+  if (flag === undefined) {
     throw new AppError(APP_ERROR_KIND.NOT_FOUND, GUARDRAIL_FLAG_NOT_FOUND_MESSAGE, null);
   }
   if (run.acknowledgedGuardrailIds.includes(flagId)) return run;
@@ -616,8 +623,82 @@ export function acknowledgeGuardrail(runId: string, flagId: string): RunRecord {
   const acknowledged = patchRun(run, {
     acknowledgedGuardrailIds: [...run.acknowledgedGuardrailIds, flagId],
   });
+
+  // Audited even though it changes nothing outside the sandbox: acknowledging is what
+  // authorises a flagged patch to be approved and eventually landed, so the decision
+  // belongs in the same record as the actions it enables. The kind and path go in,
+  // never the flag's detail — this is written to a file that outlives the run.
+  await appendAuditEntry({
+    action: AUDIT_ACTION.GUARDRAIL_ACKNOWLEDGED,
+    prRef: run.prRef,
+    summary: `Acknowledged a ${flag.kind} guardrail flag${flag.path === null ? '' : ` on ${flag.path}`}`,
+    runIds: [run.id],
+  });
+
   emitStateChanged(acknowledged);
   return acknowledged;
+}
+
+/**
+ * Says how much is outstanding and of what kind, and nothing else. A flag's `detail`
+ * and path stay out of it: this message is rendered, and a flag reporting a secret
+ * must not become the leak it was raised about.
+ */
+function toUnacknowledgedGuardrailMessage(blocked: readonly RunRecord[], total: number): string {
+  const outstanding = blocked.flatMap((run) =>
+    selectUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds),
+  );
+  const kinds = [...new Set(outstanding.map((flag) => flag.kind))].join(GUARDRAIL_KIND_SEPARATOR);
+  return `Approval is blocked by unacknowledged guardrail flags on ${blocked.length} of ${total} selected runs. Outstanding: ${outstanding.length} (${kinds}).`;
+}
+
+/**
+ * Approving marks a run ready to land and lands nothing. No branch, no remote and no
+ * GitHub call is reachable from here, which is exactly what makes approving twelve at
+ * once safe: the landing gate is still ahead of every one of them, so a bulk approve
+ * can only ever move records.
+ *
+ * Unacknowledged guardrail flags refuse the approval. Containment keeps the agent off
+ * the network but says nothing about what it wrote, so the flags are the other half of
+ * the check and approving past an unread one would quietly discard it.
+ *
+ * A blocked run refuses the *whole* batch rather than being skipped around: approving
+ * nine of twelve and staying silent about the three is the one outcome a reviewer
+ * cannot read off the tree, and refusing costs nothing because approval is cheap to
+ * retry once the flags are acknowledged. Every id is therefore resolved and checked
+ * before the first transition is committed. Whether the state itself allows approval
+ * is left to the transition table, which throws — restating that rule here would give
+ * it a second, driftable source.
+ */
+export function approveRuns(runIds: readonly string[]): RunRecord[] {
+  const runs = runIds.map(requireRun);
+  const blocked = runs.filter((run) =>
+    hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds),
+  );
+  if (blocked.length > 0) {
+    throw new AppError(
+      APP_ERROR_KIND.CONFIRMATION_REQUIRED,
+      toUnacknowledgedGuardrailMessage(blocked, runs.length),
+      UNACKNOWLEDGED_GUARDRAIL_REMEDIATION,
+    );
+  }
+
+  return runs.map((run) => advance(run, RUN_STATE.APPROVED));
+}
+
+/**
+ * Turning a resolution down is a review decision, not a destructive one, so nothing is
+ * torn down here: the worktree survives until the run is dismissed, and the transition
+ * table keeps the way back to `ready` open for a reviewer who changes their mind.
+ *
+ * Guardrail flags do not block a rejection. They exist to stop unread work being
+ * approved, and rejecting is the outcome they were raised to protect.
+ *
+ * Bulk rejection refuses as a batch for the same reason bulk approval does — every id
+ * is resolved before the first transition is committed.
+ */
+export function rejectRuns(runIds: readonly string[]): RunRecord[] {
+  return runIds.map(requireRun).map((run) => advance(run, RUN_STATE.REJECTED));
 }
 
 export function listRunsForPr(ref: PrRef): RunRecord[] {
