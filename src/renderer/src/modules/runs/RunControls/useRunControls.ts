@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import type { PrComment } from '@shared/comments';
+import { isRecommendedForRun, type PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
 import type { StartRunRequest } from '@shared/runs';
@@ -73,6 +73,8 @@ interface UseRunControlsResult {
   cleanupAttentionMessage: string | null;
   onStartClick: () => void;
   onCleanupClick: () => void;
+  /** Pre-selects the recommended set when auto mode is switched on. */
+  onAutoModeEnabled: () => void;
 }
 
 /**
@@ -161,6 +163,7 @@ function buildAcknowledgementKey(resolutions: readonly TierLaneResolution[]): st
 
 export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControlsResult {
   const selectedCommentIds = useSessionStore((state) => state.selectedCommentIds);
+  const setSelectedCommentIds = useSessionStore((state) => state.setSelectedCommentIds);
   const tierOverrideByCommentId = useSessionStore((state) => state.tierOverrideByCommentId);
   const activeRuns = useActiveRunsForPr(prRef);
 
@@ -289,6 +292,17 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     setAcknowledgedPoolSpendingKey(null);
   }, [startRequests, startRuns]);
 
+  // The one definition of "recommended" lives in src/shared/comments.ts, so the set auto
+  // mode pre-selects is the same set the rest of the app calls recommended.
+  const recommendedCommentIds = useMemo(
+    () => (prComments ?? []).filter(isRecommendedForRun).map((comment) => comment.id),
+    [prComments],
+  );
+
+  const onAutoModeEnabled = useCallback(() => {
+    setSelectedCommentIds(recommendedCommentIds);
+  }, [recommendedCommentIds, setSelectedCommentIds]);
+
   const onStopAllClick = useCallback(() => stopAllRuns(), [stopAllRuns]);
 
   const onCleanupClick = useCallback(() => cleanupSandbox(), [cleanupSandbox]);
@@ -322,5 +336,6 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     cleanupAttentionMessage,
     onStartClick,
     onCleanupClick,
+    onAutoModeEnabled,
   };
 }

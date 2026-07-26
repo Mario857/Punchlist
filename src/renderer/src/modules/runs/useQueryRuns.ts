@@ -18,9 +18,11 @@ import { useRunStore } from '@renderer/stores/runStore';
 
 const RUNS_QUERY_DOMAIN = 'runs';
 const SANDBOX_QUERY_DOMAIN = 'sandbox';
+const AUTO_MODE_QUERY_DOMAIN = 'autoMode';
 const LIST_SCOPE = 'list';
 const PATCH_SCOPE = 'patch';
 const USAGE_SCOPE = 'usage';
+const ENABLED_SCOPE = 'enabled';
 
 /**
  * Run reads are keyed here rather than in `lib/queryKeys.ts` because they are owned
@@ -38,6 +40,7 @@ export const runsQueryKeys = {
   candidatePatch: (runId: string, revisionCount: number) =>
     createQueryKey(RUNS_QUERY_DOMAIN, PATCH_SCOPE, runId, revisionCount),
   sandboxUsage: () => createQueryKey(SANDBOX_QUERY_DOMAIN, USAGE_SCOPE),
+  autoModeEnabled: () => createQueryKey(AUTO_MODE_QUERY_DOMAIN, ENABLED_SCOPE),
 } as const;
 
 const NO_PR_REPO_KEY = '';
@@ -134,6 +137,62 @@ export function useQuerySandboxUsage(): UseQuerySandboxUsageResult {
   });
 
   return { sandboxUsage: data, isSandboxUsageLoading: isLoading, sandboxUsageError: error };
+}
+
+interface UseQueryAutoModeEnabledResult {
+  /** Undefined only until the first read resolves; main is the single owner of it. */
+  isAutoModeEnabled: boolean | undefined;
+  isAutoModeEnabledLoading: boolean;
+  autoModeEnabledError: unknown;
+}
+
+/**
+ * Auto mode is per-session process state in main, off on every app start so it cannot
+ * be left on by accident. Reading it over IPC rather than keeping it in the session
+ * store is what makes that true: the session store is persisted, so a flag mirrored
+ * into it would survive the restart that is supposed to clear it.
+ */
+export function useQueryAutoModeEnabled(): UseQueryAutoModeEnabledResult {
+  const { data, isLoading, error } = useQuery({
+    queryKey: runsQueryKeys.autoModeEnabled(),
+    queryFn: async () => unwrapIpcResult(await requireBridge().autoMode.isEnabled()),
+  });
+
+  return {
+    isAutoModeEnabled: data,
+    isAutoModeEnabledLoading: isLoading,
+    autoModeEnabledError: error,
+  };
+}
+
+interface UseExecuteSetAutoModeResult {
+  setAutoModeEnabled: (isEnabled: boolean) => void;
+  isSetAutoModePending: boolean;
+  setAutoModeError: unknown;
+}
+
+/**
+ * Main returns the state it settled on, so the cache is written from the response
+ * rather than optimistically: the toggle must never show "on" for a mode main did not
+ * actually enter.
+ */
+export function useExecuteSetAutoMode(): UseExecuteSetAutoModeResult {
+  const queryClient = useQueryClient();
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (isEnabled: boolean) =>
+      unwrapIpcResult(await requireBridge().autoMode.setEnabled(isEnabled)),
+    onSuccess: (isEnabled) => {
+      queryClient.setQueryData(runsQueryKeys.autoModeEnabled(), isEnabled);
+    },
+    onError: (mutationError) => logError(mutationError, 'useExecuteSetAutoMode'),
+  });
+
+  return {
+    setAutoModeEnabled: mutate,
+    isSetAutoModePending: isPending,
+    setAutoModeError: error,
+  };
 }
 
 interface UseExecuteStartRunResult {

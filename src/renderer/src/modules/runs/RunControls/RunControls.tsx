@@ -6,6 +6,7 @@ import { StateBadge } from '@renderer/components/StateBadge';
 import { Toggle, TOGGLE_SIZE } from '@renderer/components/Toggle';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
 import { XIcon } from '@renderer/components/icons/XIcon';
+import { AutoModeToggle } from '@renderer/modules/runs/AutoModeToggle/AutoModeToggle';
 import { BatchTierPicker } from '@renderer/modules/runs/RunControls/components/BatchTierPicker/BatchTierPicker';
 import { useRunControls } from '@renderer/modules/runs/RunControls/useRunControls';
 
@@ -63,6 +64,7 @@ export function RunControls({ prRef }: RunControlsProps) {
     cleanupAttentionMessage,
     onStartClick,
     onCleanupClick,
+    onAutoModeEnabled,
   } = useRunControls({ prRef });
 
   const activeRunRows = activeRunItems.map((item) => (
@@ -182,6 +184,7 @@ export function RunControls({ prRef }: RunControlsProps) {
         {poolSpendingNotice}
         {costUnknownNotice}
         {startError}
+        <AutoModeToggle prRef={prRef} onEnabled={onAutoModeEnabled} />
         {activeRunList}
         {cancelError}
         {stopAllError}
