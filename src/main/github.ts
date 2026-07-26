@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { appendAuditEntry } from '@main/audit';
+import {
+  assertSandboxConfirmation,
+  SANDBOX_EXIT_ACTION,
+  type SandboxConfirmation,
+} from '@main/sandbox';
+import { AUDIT_ACTION } from '@shared/audit';
 import {
   COMMENT_KIND,
   type CommentAuthor,
@@ -92,6 +99,47 @@ query PrConversationComments($owner: String!, $repo: String!, $number: Int!, $pa
 `;
 
 /**
+ * The three mutations below are the only calls in the app that change anything on
+ * GitHub, and all three are GraphQL-only: `gh pr` has no equivalent of resolving,
+ * unresolving or replying to a review thread, which is why the CLI is driven through
+ * `gh api graphql` rather than a convenience subcommand.
+ *
+ * Each takes the `PRRT_`-prefixed **thread node id** — the id of the thread, not of
+ * the comment that opened it. `InlineThreadComment` carries both, and passing the
+ * comment id here fails at the API with a type mismatch rather than silently
+ * resolving the wrong thing.
+ */
+const RESOLVE_REVIEW_THREAD_MUTATION = `
+mutation ResolveReviewThread($threadId: ID!) {
+  resolveReviewThread(input: { threadId: $threadId }) {
+    thread { id isResolved }
+  }
+}
+`;
+
+const UNRESOLVE_REVIEW_THREAD_MUTATION = `
+mutation UnresolveReviewThread($threadId: ID!) {
+  unresolveReviewThread(input: { threadId: $threadId }) {
+    thread { id isResolved }
+  }
+}
+`;
+
+/**
+ * The reply's own `body` is deliberately not in the selection set. There is no reason
+ * to have GitHub echo user prose back into a response this process parses, formats
+ * into error messages and hands to the audit path — the id and url are what a reader
+ * needs to find the comment.
+ */
+const ADD_REVIEW_THREAD_REPLY_MUTATION = `
+mutation AddReviewThreadReply($threadId: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: { pullRequestReviewThreadId: $threadId, body: $body }) {
+    comment { id url }
+  }
+}
+`;
+
+/**
  * A deleted GitHub account leaves its comments in place with a null author, so this
  * is nullable at the schema level rather than assumed present.
  */
@@ -159,6 +207,36 @@ const conversationCommentPagesSchema = z.array(
   }),
 );
 
+/**
+ * `isResolved` is pinned to the state the mutation is supposed to have produced, so a
+ * response that parses but reports the thread still open is a failure rather than a
+ * success — the audit entry is written from this, and an entry claiming a resolve that
+ * did not happen is what the undo path would later try to replay.
+ */
+const resolveReviewThreadResultSchema = z.object({
+  data: z.object({
+    resolveReviewThread: z.object({
+      thread: z.object({ id: z.string(), isResolved: z.literal(true) }),
+    }),
+  }),
+});
+
+const unresolveReviewThreadResultSchema = z.object({
+  data: z.object({
+    unresolveReviewThread: z.object({
+      thread: z.object({ id: z.string(), isResolved: z.literal(false) }),
+    }),
+  }),
+});
+
+const addReviewThreadReplyResultSchema = z.object({
+  data: z.object({
+    addPullRequestReviewThreadReply: z.object({
+      comment: z.object({ id: z.string(), url: z.string() }),
+    }),
+  }),
+});
+
 type GraphqlAuthor = z.infer<typeof graphqlAuthorSchema>;
 type GraphqlUnanchoredNode = z.infer<typeof graphqlUnanchoredNodeSchema>;
 type GraphqlThreadComment = z.infer<typeof graphqlThreadCommentSchema>;
@@ -204,6 +282,21 @@ function buildGraphqlArgs(document: string, ref: PrRef): string[] {
     '-F',
     `pageSize=${GRAPHQL_PAGE_SIZE}`,
   ];
+}
+
+/**
+ * No `--paginate` and no `--slurp` here, unlike the queries above: a mutation must run
+ * exactly once, and `--paginate` would re-issue it for every page it believes exists.
+ * Without `--slurp` the output is a single JSON object rather than an array of pages.
+ */
+function buildGraphqlMutationArgs(document: string, variables: Record<string, string>): string[] {
+  const args = ['api', 'graphql', '-f', `query=${document}`];
+  for (const [name, value] of Object.entries(variables)) {
+    // -f rather than -F: raw-field sends the value verbatim, while -F coerces it and
+    // reads an @-prefixed value from a file — which a reply body is allowed to start with.
+    args.push('-f', `${name}=${value}`);
+  }
+  return args;
 }
 
 function normalizeAuthor(author: GraphqlAuthor): CommentAuthor {
@@ -328,4 +421,84 @@ export async function fetchPrComments(ref: PrRef): Promise<PrComment[]> {
   ]);
 
   return [...inlineThreads, ...reviewBodies, ...conversationComments].sort(compareByCreatedAt);
+}
+
+/**
+ * Marks a review thread resolved on GitHub. The `SandboxConfirmation` is a required
+ * parameter because this leaves the sandbox: the type makes the call unwritable without
+ * one, and the assertion below makes it unrunnable with one minted for a different
+ * action — belt and braces, because a confirmation never crosses IPC and the compiler
+ * cannot see the provenance of a value that arrived through a channel.
+ */
+export async function resolveReviewThread(
+  threadId: string,
+  confirmation: SandboxConfirmation,
+  landingId: string,
+): Promise<void> {
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.RESOLVE_REVIEW_THREAD);
+
+  await runGhJson(
+    buildGraphqlMutationArgs(RESOLVE_REVIEW_THREAD_MUTATION, { threadId }),
+    resolveReviewThreadResultSchema,
+  );
+
+  // Audited only after GitHub has confirmed it, never before: an undo replays the
+  // landing from these entries, so an entry for something that did not happen would
+  // send it to unresolve a thread nobody resolved.
+  await appendAuditEntry({
+    action: AUDIT_ACTION.THREAD_RESOLVED,
+    summary: `Resolved review thread ${threadId}`,
+    threadIds: [threadId],
+    landingId,
+  });
+}
+
+/** The reverse of `resolveReviewThread`, on the same thread node id an undo replays from. */
+export async function unresolveReviewThread(
+  threadId: string,
+  confirmation: SandboxConfirmation,
+  landingId: string,
+): Promise<void> {
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.UNRESOLVE_REVIEW_THREAD);
+
+  await runGhJson(
+    buildGraphqlMutationArgs(UNRESOLVE_REVIEW_THREAD_MUTATION, { threadId }),
+    unresolveReviewThreadResultSchema,
+  );
+
+  await appendAuditEntry({
+    action: AUDIT_ACTION.THREAD_UNRESOLVED,
+    summary: `Reopened review thread ${threadId}`,
+    threadIds: [threadId],
+    landingId,
+  });
+}
+
+/**
+ * Posts `body` as a reply under an existing review thread, from the user's own account.
+ *
+ * The body never reaches the audit log: the entry records that a reply was posted and to
+ * which thread, because the log holds actions rather than the content they were taken
+ * on. It stays out of error strings too — `ghCli` summarises a failed command by its
+ * first two arguments (`gh api`), so the field carrying it is never echoed back.
+ */
+export async function postReviewThreadReply(
+  threadId: string,
+  body: string,
+  confirmation: SandboxConfirmation,
+  landingId: string,
+): Promise<void> {
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.POST_REPLY);
+
+  await runGhJson(
+    buildGraphqlMutationArgs(ADD_REVIEW_THREAD_REPLY_MUTATION, { threadId, body }),
+    addReviewThreadReplyResultSchema,
+  );
+
+  await appendAuditEntry({
+    action: AUDIT_ACTION.REPLY_POSTED,
+    summary: `Posted a reply to review thread ${threadId}`,
+    threadIds: [threadId],
+    landingId,
+  });
 }
