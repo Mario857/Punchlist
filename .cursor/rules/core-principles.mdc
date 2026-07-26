@@ -22,11 +22,16 @@ These five are the ones that will feel harmless to inline. They are not:
 
 | Value | Constant | Owner |
 |-------|----------|-------|
-| Concurrency cap | `MAX_CONCURRENT_RUNS` | `src/main/queue.ts` |
+| Concurrency cap | _user setting, not a constant_ | `AppSettings.concurrencyCap` |
 | Diff write-back debounce | `DIFF_DEBOUNCE_MS` | `modules/review/` |
 | Watcher poll interval | `WATCHER_POLL_INTERVAL_MS` | `src/main/watcher.ts` |
-| Per-run max duration | `RUN_TIMEOUT_MS` | `src/main/queue.ts` |
-| Auto-answer cap per run | `MAX_AUTO_ANSWERS_PER_RUN` | `src/main/automation.ts` |
+| Per-run max duration | `RUN_TIMEOUT_MS` | `src/main/agent.ts` |
+| Auto-answer cap per run | `MAX_AUTO_ANSWERS_PER_RUN` | `src/main/autoMode.ts` |
+
+Two of these moved as they were built, and the reasons are worth keeping: the
+concurrency cap is a **user setting** read per scheduling pass, so a constant would
+be a second source of truth for it; and `RUN_TIMEOUT_MS` lives where the run is
+awaited, which is `agent.ts`, not the scheduler that queued it.
 
 ```ts
 // ❌
