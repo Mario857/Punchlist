@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import type { PrRef } from '@shared/discovery';
+import { RUN_STATE } from '@shared/runState';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import {
@@ -52,8 +53,14 @@ export function useAutoModeToggle({
     useQueryAutoModeEnabled();
   const { setAutoModeEnabled, isSetAutoModePending, setAutoModeError } = useExecuteSetAutoMode();
 
+  // "Awaiting review" means exactly that: an applied run's auto-decisions were seen
+  // and landed, so counting them would make the number never fall to zero and stop
+  // meaning anything.
   const deferredDecisionCount = useMemo(
-    () => runsForPr.reduce((total, run) => total + run.autoDecisions.length, NO_DEFERRED_DECISIONS),
+    () =>
+      runsForPr
+        .filter((run) => run.state !== RUN_STATE.APPLIED)
+        .reduce((total, run) => total + run.autoDecisions.length, NO_DEFERRED_DECISIONS),
     [runsForPr],
   );
 
