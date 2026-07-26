@@ -1,5 +1,5 @@
 import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve as resolvePath, sep } from 'node:path';
+import { dirname, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { app } from 'electron';
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { containWorktree, resolveGitIdentity, setWorktreeConfig } from '@main/sandbox';
@@ -28,6 +28,7 @@ const BRANCH_NAME_PREFIX = 'airlock';
 const SCRATCH_BRANCH_PREFIX = `${BRANCH_NAME_PREFIX}${GIT_PATH_SEPARATOR}`;
 const BRANCH_REF_PREFIX = 'refs/heads/';
 
+const GIT_DIRECTORY_NAME = '.git';
 const AIRLOCK_DIRECTORY_NAME = '.airlock';
 const EXCLUDE_ENTRY = `${AIRLOCK_DIRECTORY_NAME}${GIT_PATH_SEPARATOR}`;
 const GIT_COMMON_DIR_ARGS = ['--git-common-dir'] as const;
@@ -90,6 +91,7 @@ const WORKTREE_DIRTY_REMEDIATION =
 const WORKTREE_RESET_DIRTY_REMEDIATION =
   'Land or discard the changes, or escalate again confirming that they may be discarded.';
 const BASE_REVISION_MISSING_REMEDIATION = 'Re-run the comment to rebuild its worktree.';
+const HAND_EDIT_PATH_REMEDIATION = 'Edit a file that is part of the candidate patch.';
 const WORKTREE_MISSING_MESSAGE =
   'The run worktree is gone, so its agent can no longer resume in it.';
 
@@ -315,6 +317,40 @@ export async function readCandidatePatch(run: RunRecord): Promise<CandidatePatch
   );
 
   return { runId: run.id, files, isEmpty: files.length === 0 };
+}
+
+/**
+ * A hand edit's path comes from the renderer, so it is untrusted like any other IPC
+ * payload: `../` in it would put the write outside the sandbox every other rule in this
+ * file exists to maintain. The path is therefore resolved against the worktree root and
+ * required to land under it, and `.git` is refused on top of that — it is the worktree's
+ * link to its repository rather than a file the patch contains, so writing there breaks
+ * the sandbox instead of editing anything inside it.
+ *
+ * The content is never logged: an editor buffer is repository contents.
+ */
+export async function writeWorktreeFile(
+  worktreePath: string,
+  filePath: string,
+  content: string,
+): Promise<void> {
+  const root = resolvePath(worktreePath);
+  const target = resolvePath(root, filePath);
+  // The trailing separator matters for the same reason it does in the sandbox check
+  // below: a sibling directory whose name merely starts with the root's is not inside it.
+  const isInsideWorktree = target.startsWith(`${root}${sep}`);
+  const [firstSegment] = relative(root, target).split(sep);
+
+  if (!isInsideWorktree || firstSegment === GIT_DIRECTORY_NAME) {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      `${filePath} is not a file inside the run's worktree, so it was not written.`,
+      HAND_EDIT_PATH_REMEDIATION,
+    );
+  }
+
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, content, { encoding: FILE_ENCODING });
 }
 
 /**

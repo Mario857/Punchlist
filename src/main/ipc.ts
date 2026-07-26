@@ -2,9 +2,11 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { z } from 'zod';
 import { prRefSchema } from '@shared/discovery';
 import { MODEL_TIER } from '@shared/runState';
+import { SELECTION_SIDE } from '@shared/runs';
 import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
+import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
 import {
   acknowledgeGuardrail,
@@ -16,6 +18,7 @@ import {
   listRunRevisionTrail,
   listRunsForPr,
   revertRun,
+  writeRunFile,
   setRunEventListener,
 } from './run';
 import { listModelCatalog } from './router';
@@ -49,9 +52,25 @@ const startRunsPayloadSchema = z.object({
   ),
 });
 
+const targetedEditSelectionSchema = z.object({
+  path: z.string(),
+  startLine: z.number().int(),
+  endLine: z.number().int(),
+  content: z.string(),
+  side: z.enum(SELECTION_SIDE),
+});
+
 const continueRunPayloadSchema = z.object({
   runId: z.string(),
   message: z.string().min(MIN_CONTINUATION_MESSAGE_LENGTH),
+  selection: targetedEditSelectionSchema.nullish(),
+});
+
+const writeRunFilePayloadSchema = z.object({
+  runId: z.string(),
+  path: z.string(),
+  // Deliberately unconstrained: emptying a file is a legal hand edit.
+  content: z.string(),
 });
 
 const revertRunPayloadSchema = z.object({
@@ -158,8 +177,11 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_PATCH, z.string(), (runId) => getRunPatch(runId));
   registerHandler(IPC_CHANNEL.RUNS_DISMISS, z.string(), (runId) => dismissRun(runId));
   registerHandler(IPC_CHANNEL.RUNS_STOP_ALL, noPayloadSchema, () => stopAllRuns());
-  registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, ({ runId, message }) =>
-    continueRun(runId, message),
+  registerHandler(IPC_CHANNEL.RUNS_CONTINUE, continueRunPayloadSchema, (request) =>
+    continueRun(request),
+  );
+  registerHandler(IPC_CHANNEL.RUNS_WRITE_FILE, writeRunFilePayloadSchema, (request) =>
+    writeRunFile(request),
   );
   registerHandler(IPC_CHANNEL.RUNS_REVISIONS, z.string(), (runId) => listRunRevisionTrail(runId));
   registerHandler(IPC_CHANNEL.RUNS_REVERT, revertRunPayloadSchema, (request) => revertRun(request));
@@ -170,6 +192,13 @@ export function registerIpcHandlers(): void {
   );
   registerHandler(IPC_CHANNEL.RUNS_ESCALATE, escalateRunPayloadSchema, (request) =>
     escalateRun(request),
+  );
+
+  // Off on every app start by construction: this reads module state in main, not a
+  // persisted setting, so there is nothing that could carry it across a restart.
+  registerHandler(IPC_CHANNEL.RUNS_GET_AUTO_MODE, noPayloadSchema, () => isAutoModeEnabled());
+  registerHandler(IPC_CHANNEL.RUNS_SET_AUTO_MODE, z.boolean(), (isEnabled) =>
+    setAutoModeEnabled(isEnabled),
   );
 
   // The settings card forces a refresh so a newly-granted model appears without a

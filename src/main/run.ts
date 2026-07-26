@@ -1,4 +1,5 @@
 import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
+import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
 import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
 import {
   clearAgentDecision,
@@ -6,7 +7,7 @@ import {
   watchForDecision,
   type DecisionWatch,
 } from '@main/decision';
-import { buildResolutionPrompt } from '@main/prompt';
+import { buildResolutionPrompt, buildTargetedEditPrompt } from '@main/prompt';
 import {
   canTransitionRunState,
   createRunRecord,
@@ -30,6 +31,7 @@ import {
   readSandboxUsage,
   resetWorktreeToRevision,
   teardownRunWorktree,
+  writeWorktreeFile,
 } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
@@ -37,6 +39,7 @@ import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import {
   FAILURE_REASON,
+  MODEL_TIER,
   REVISION_KIND,
   RUN_STATE,
   isTerminalRunState,
@@ -48,11 +51,13 @@ import {
 import {
   RUN_EVENT_KIND,
   type CandidatePatch,
+  type ContinueRunRequest,
   type RunEvent,
   type RevertRunRequest,
   type RunRecord,
   type RunRevision,
   type SandboxUsage,
+  type WriteRunFileRequest,
 } from '@shared/runs';
 
 // One run, end to end: worktree, prompt, agent, decision watch, state transitions.
@@ -73,6 +78,8 @@ const GUARDRAIL_FLAG_NOT_FOUND_MESSAGE =
   'That guardrail flag is no longer on this run, so there is nothing to acknowledge.';
 const NOT_CONTINUABLE_MESSAGE =
   'This run is not waiting for input, so there is nothing to continue.';
+const NOT_HAND_EDITABLE_MESSAGE =
+  'This run has no reviewable patch, so there is nothing to hand-edit.';
 
 /** needsDecision is waiting on a person; ready and approved accept a follow-up. */
 const CONTINUABLE_RUN_STATES: readonly RunState[] = [
@@ -80,6 +87,8 @@ const CONTINUABLE_RUN_STATES: readonly RunState[] = [
   RUN_STATE.READY,
   RUN_STATE.APPROVED,
 ];
+/** The modified side is editable exactly where there is a patch to edit. */
+const HAND_EDITABLE_RUN_STATES: readonly RunState[] = [RUN_STATE.READY, RUN_STATE.APPROVED];
 const RESTART_NOT_RETRYABLE_MESSAGE =
   'Only a finished run can be retried, because a restart discards the work in progress.';
 const MALFORMED_DECISION_MESSAGE =
@@ -168,6 +177,7 @@ async function executeRun(
   activeRunControllers.set(startedRun.id, controller);
 
   let decidedRun: RunRecord | null = null;
+  let autoAnswer: string | null = null;
   let decisionWatch: DecisionWatch | null = null;
 
   try {
@@ -178,7 +188,16 @@ async function executeRun(
         if (current === null) return;
         // needsDecision is a waiting state, not an error: the agent hit a real fork
         // and stopped rather than guessing.
-        decidedRun = advance(current, RUN_STATE.NEEDS_DECISION, { decision });
+        const autoDecision = canAutoAnswer(current, decision) ? toAutoDecision(decision) : null;
+        decidedRun = advance(current, RUN_STATE.NEEDS_DECISION, {
+          decision,
+          autoDecisions:
+            autoDecision === null ? undefined : [...current.autoDecisions, autoDecision],
+        });
+        // Auto mode parks the run here too, then answers: the reply is a second
+        // `agent.send` on an agent whose first turn is still in flight, so the option is
+        // only chosen here and sent once that turn has settled.
+        autoAnswer = autoDecision === null ? null : autoDecision.chosenOption;
       },
       onMalformed: () => {
         const current = getRunById(startedRun.id);
@@ -209,6 +228,12 @@ async function executeRun(
       emitStateChanged(failed);
       return failed;
     }
+
+    // Not awaited inside the try on purpose: returning the promise lets the finally run
+    // now, which stops the decision watch before the continuation clears the file it
+    // polls. continueRun is reused rather than duplicated — it already resumes the same
+    // agent, serializes the send, commits the revision and re-runs the guardrails.
+    if (autoAnswer !== null) return continueRun({ runId: startedRun.id, message: autoAnswer });
 
     const summary = await readAgentSummary(startedRun.worktreePath);
     const patch = await readCandidatePatch(withTranscript);
@@ -339,25 +364,52 @@ function serializePerRun<T>(runId: string, work: () => Promise<T>): Promise<T> {
   return next;
 }
 
-/**
- * The decision reply and the whole-patch follow-up are the same mechanism: both are
- * `agent.send` on the *same* agent, so context is never rebuilt — it already knows
- * the comment, the code, and what it tried. Which one this is follows from the run's
- * state rather than a caller-supplied label the two could disagree about.
- */
-function resolveContinuation(run: RunRecord): { nextState: RunState; revisionKind: RevisionKind } {
-  if (run.state === RUN_STATE.NEEDS_DECISION) {
-    return {
-      nextState: RUN_STATE.RUNNING,
-      revisionKind: REVISION_KIND.DECISION_CONTINUATION,
-    };
-  }
-  // revising rather than running, so the right pane keeps showing the existing diff
-  // dimmed instead of swapping to a transcript and discarding what was being read.
-  return { nextState: RUN_STATE.REVISING, revisionKind: REVISION_KIND.FOLLOW_UP };
+interface ContinuationPlan {
+  nextState: RunState;
+  revisionKind: RevisionKind;
+  /** What the correction is worth in model terms, which is not always the run's tier. */
+  tier: ModelTier;
+  /** What is actually sent: the message as typed, or the message wrapped in a scope. */
+  prompt: string;
 }
 
-export async function continueRun(runId: string, message: string): Promise<RunRecord> {
+/**
+ * The decision reply, the whole-patch follow-up and the targeted edit are one mechanism:
+ * all three are `agent.send` on the *same* agent, so context is never rebuilt — it
+ * already knows the comment, the code, and what it tried. Where the run goes follows
+ * from its state rather than a caller-supplied label the two could disagree about; what
+ * is sent, and how much model it is worth, follows from whether a selection came with it.
+ */
+function resolveContinuation(run: RunRecord, request: ContinueRunRequest): ContinuationPlan {
+  const selection = request.selection ?? null;
+  // A decision reply resumes a halted agent; everything else amends a patch that already
+  // exists, and that is revising rather than running so the right pane keeps showing the
+  // existing diff dimmed instead of swapping to a transcript and discarding what was
+  // being read.
+  const isDecisionReply = run.state === RUN_STATE.NEEDS_DECISION;
+  const nextState = isDecisionReply ? RUN_STATE.RUNNING : RUN_STATE.REVISING;
+
+  if (selection !== null) {
+    return {
+      nextState,
+      revisionKind: REVISION_KIND.TARGETED_EDIT,
+      // A scoped correction is narrow by construction, so it neither needs nor should
+      // pay for the run's original tier — escalating one stays available and explicit.
+      tier: MODEL_TIER.MECHANICAL,
+      prompt: buildTargetedEditPrompt(selection, request.message),
+    };
+  }
+
+  return {
+    nextState,
+    revisionKind: isDecisionReply ? REVISION_KIND.DECISION_CONTINUATION : REVISION_KIND.FOLLOW_UP,
+    tier: run.tier,
+    prompt: request.message,
+  };
+}
+
+export async function continueRun(request: ContinueRunRequest): Promise<RunRecord> {
+  const { runId } = request;
   return serializePerRun(runId, async () => {
     const run = requireRun(runId);
     if (run.agentId === null) {
@@ -367,11 +419,11 @@ export async function continueRun(runId: string, message: string): Promise<RunRe
       throw new AppError(APP_ERROR_KIND.NOT_FOUND, NOT_CONTINUABLE_MESSAGE, null);
     }
 
-    const { nextState, revisionKind } = resolveContinuation(run);
+    const { nextState, revisionKind, tier, prompt } = resolveContinuation(run, request);
     // Consumed, so it cannot re-trigger needsDecision the moment the agent resumes.
     await clearAgentDecision(run.worktreePath);
 
-    const model = await resolveTierModel(run.tier);
+    const model = await resolveTierModel(tier);
     advance(run, nextState, { decision: null });
     const controller = new AbortController();
     activeRunControllers.set(runId, controller);
@@ -380,7 +432,7 @@ export async function continueRun(runId: string, message: string): Promise<RunRe
       const outcome = await resumeAgentRun({
         agentId: run.agentId,
         worktreePath: run.worktreePath,
-        message,
+        message: prompt,
         model,
         onTranscriptChunk: (chunk) => emitTranscriptChunk(runId, chunk),
         signal: controller.signal,
@@ -452,6 +504,46 @@ function withGuardrailFlags(run: RunRecord, patch: CandidatePatch, comment: PrCo
   const flagIds = new Set(guardrailFlags.map((flag) => flag.id));
   const acknowledgedGuardrailIds = run.acknowledgedGuardrailIds.filter((id) => flagIds.has(id));
   return patchRun(run, { guardrailFlags, acknowledgedGuardrailIds });
+}
+
+/**
+ * The hand-edit write-back. Debouncing is the renderer's job — main writes whatever it
+ * is handed, once.
+ *
+ * The path is renderer-supplied and therefore untrusted, so `writeWorktreeFile` resolves
+ * it against the worktree root and refuses anything landing outside it.
+ */
+export async function writeRunFile(request: WriteRunFileRequest): Promise<RunRecord> {
+  const run = requireRun(request.runId);
+  if (!HAND_EDITABLE_RUN_STATES.includes(run.state)) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, NOT_HAND_EDITABLE_MESSAGE, null);
+  }
+
+  await writeWorktreeFile(run.worktreePath, request.path, request.content);
+
+  // A hand edit is a revision like any other, so it joins the revert-to-revision trail
+  // instead of sitting outside it as an uncommitted change. Nothing to commit means the
+  // write changed nothing on disk, and a phantom revision would make that trail lie.
+  const subject = REVISION_COMMIT_SUBJECT[REVISION_KIND.HAND_EDIT];
+  const commit = await commitWorktree(run.worktreePath, subject);
+  const edited = commit === null ? run : recordRunRevision(run);
+
+  // Re-read from git rather than from the editor buffer that produced the write: git is
+  // the single source of truth, so an edit to a file the agent also changed cannot
+  // desync the view. The checks are re-run for the same reason a continuation re-runs
+  // them — a revision must not outrun them.
+  const patch = await readCandidatePatch(edited);
+  const checked = patch.isEmpty
+    ? edited
+    : withGuardrailFlags(edited, patch, await findRunComment(edited));
+  // An edit that empties the patch stays `ready` rather than becoming `noActionNeeded`:
+  // that state is terminal and would reclaim the worktree still being edited in. Coming
+  // from `approved`, the transition is the point — an edit revokes the approval, because
+  // what was approved is no longer what would land.
+  const settled =
+    checked.state === RUN_STATE.READY ? checked : transitionRun(checked, RUN_STATE.READY);
+  emitStateChanged(settled);
+  return settled;
 }
 
 export async function listRunRevisionTrail(runId: string): Promise<RunRevision[]> {

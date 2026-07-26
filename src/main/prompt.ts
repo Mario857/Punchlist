@@ -6,6 +6,8 @@ import {
   type InlineThreadComment,
   type PrComment,
 } from '@shared/comments';
+import { APP_ERROR_KIND, AppError } from '@shared/errors';
+import { SELECTION_SIDE, type SelectionSide, type TargetedEditSelection } from '@shared/runs';
 
 /**
  * The agent's scratch directory, excluded once via the repo's .git/info/exclude so it
@@ -157,6 +159,79 @@ The diff hunk the comment was left on:
 ${DIFF_FENCE_OPEN}
 ${diffHunk}
 ${FENCE_CLOSE}`;
+}
+
+const TARGETED_EDIT_ROLE_SECTION = `This is a scoped correction to the patch you have already produced in this worktree, not a new task. Everything you worked out earlier still holds: do not start over, do not re-derive the resolution, and do not revisit parts of the patch this message says nothing about.`;
+
+/**
+ * The two sides are different instructions, not the same instruction with different
+ * context: one is "the code you wrote is wrong", the other is "there is code you never
+ * touched that you should have". Collapsing them would lose the half of the meaning the
+ * editor already knows for free.
+ */
+const MODIFIED_SELECTION_SECTION = `The region below is part of the patch you wrote, and it is what needs to change. Read this as "change this code you wrote": the reviewer is looking at your output, and this part of it is wrong, incomplete, or not how they want it expressed.`;
+
+const ORIGINAL_SELECTION_SECTION = `The region below is code as it stands before your patch — code you read and left alone. Read this as "you missed this": the reviewer believes it should have been part of your change and it was not. Work out what it needs, then change it.`;
+
+const SELECTION_ANCHOR_SECTION = `Locate that region by its text, not by its line numbers. The range is a hint from the editor and may already be stale, because anything you edited above it has moved it. The verbatim text is the anchor: if it no longer appears exactly as given, find where it went instead of editing whatever now sits at those line numbers.`;
+
+const SELECTION_SCOPE_SECTION = `Confine your changes to that region. The rest of the patch has already been read and accepted, so every line you change outside the selection is a line someone has to review a second time. If the correction genuinely cannot be made without touching code elsewhere, make the smallest change that works and name every place you touched in your final message.
+
+This is checked afterwards rather than taken on trust: a scoped edit that rewrites unrelated files is flagged before the diff reaches review.`;
+
+const TARGETED_EDIT_PROTOCOL_SECTION = `Everything from the first message still applies: the halt-and-ask protocol, the commands you must not run, and the paths you must not modify. Rewrite \`${SUMMARY_FILE_PATH}\` so it describes the patch as it stands after this correction rather than as it was before it.`;
+
+function formatSelectionSide(side: SelectionSide): string {
+  switch (side) {
+    case SELECTION_SIDE.MODIFIED:
+      return MODIFIED_SELECTION_SECTION;
+    case SELECTION_SIDE.ORIGINAL:
+      return ORIGINAL_SELECTION_SECTION;
+    default: {
+      // Same reason as runState.ts: there is no main-side assertNever, the renderer's
+      // living behind the process boundary, so exhaustiveness is asserted with a never
+      // binding instead — adding a side to SELECTION_SIDE breaks this assignment.
+      const unhandled: never = side;
+      throw new AppError(APP_ERROR_KIND.UNKNOWN, `Unhandled selection side: ${String(unhandled)}`);
+    }
+  }
+}
+
+function formatSelectionContext(selection: TargetedEditSelection): string {
+  return `File: ${selection.path}
+Selected lines ${selection.startLine}–${selection.endLine}, which is a hint only:
+${BODY_FENCE}
+${selection.content}
+${BODY_FENCE}`;
+}
+
+function formatSelectionInstruction(instruction: string): string {
+  return `What is wrong with it, in the reviewer's words:
+${BODY_FENCE}
+${instruction}
+${BODY_FENCE}`;
+}
+
+/**
+ * The selection-scoped revision. Sent to the *same* agent through `agent.send`, so this
+ * carries only what is new — the region and the correction — rather than rebuilding the
+ * context the conversation already holds.
+ */
+export function buildTargetedEditPrompt(
+  selection: TargetedEditSelection,
+  instruction: string,
+): string {
+  const sections = [
+    TARGETED_EDIT_ROLE_SECTION,
+    formatSelectionSide(selection.side),
+    formatSelectionContext(selection),
+    SELECTION_ANCHOR_SECTION,
+    formatSelectionInstruction(instruction),
+    SELECTION_SCOPE_SECTION,
+    TARGETED_EDIT_PROTOCOL_SECTION,
+  ];
+
+  return sections.join(PROMPT_SECTION_SEPARATOR);
 }
 
 /**
