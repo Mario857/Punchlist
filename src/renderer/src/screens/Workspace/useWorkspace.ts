@@ -5,6 +5,7 @@ import { RUN_STATE, type RunState } from '@shared/runState';
 import { useReviewShortcuts } from '@renderer/hooks/useReviewShortcuts';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import type { CommentTreeNavigationHandle } from '@renderer/modules/comments/CommentTree/useCommentTreeNavigation';
+import { useQueryPrStatus } from '@renderer/modules/discovery/useQueryPrStatus';
 import { useExecuteDismissRun, useQueryRuns } from '@renderer/modules/runs/useQueryRuns';
 import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
 import { prRefKey } from '@shared/discovery';
@@ -12,10 +13,11 @@ import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runSt
 import { useSessionStore } from '@renderer/stores/sessionStore';
 
 /**
- * Where a landing goes when the PR has not been given one yet. A guess, but the
- * common one, and the field is right there in the top bar to correct.
+ * Only reached before the PR's own base branch is known — not every repository
+ * merges into `main`, so this is a placeholder for the gap between selecting a PR
+ * and its status arriving, never a claim about where the landing should go.
  */
-const DEFAULT_TARGET_BRANCH = 'main';
+const FALLBACK_TARGET_BRANCH = 'main';
 
 /** A stable identity, so an absent result does not remount the tree every render. */
 const EMPTY_COMMENTS: PrComment[] = [];
@@ -74,11 +76,14 @@ export function useWorkspace(): UseWorkspaceResult {
   // empty queue for runs that are still alive in main.
   useQueryRuns(selectedPr);
   const runStateByCommentId = useRunStateByCommentId();
+  const { prStatus } = useQueryPrStatus(selectedPr);
 
+  // An edit you made for this PR wins; otherwise the branch the PR is actually open
+  // against, which is the only defensible default.
   const targetBranch =
     selectedPr === null
-      ? DEFAULT_TARGET_BRANCH
-      : (targetBranchByPr[prRefKey(selectedPr)] ?? DEFAULT_TARGET_BRANCH);
+      ? FALLBACK_TARGET_BRANCH
+      : (targetBranchByPr[prRefKey(selectedPr)] ?? prStatus?.baseRefName ?? FALLBACK_TARGET_BRANCH);
 
   const commentTreeRef = useRef<CommentTreeNavigationHandle>(null);
   const diffPaneRef = useRef<HTMLDivElement>(null);

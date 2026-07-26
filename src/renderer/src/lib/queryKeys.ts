@@ -16,6 +16,7 @@ const QUERY_DOMAIN = {
   REPOS: 'repos',
   DISCOVERED_PRS: 'discoveredPrs',
   PR_COMMENTS: 'prComments',
+  PR_STATUS: 'prStatus',
   SESSION: 'session',
   MODELS: 'models',
   CURSOR_KEY: 'cursorKey',
@@ -23,6 +24,8 @@ const QUERY_DOMAIN = {
   AUDIT: 'audit',
   LANDING_PREVIEW: 'landingPreview',
   LANDING_UNDOABLE: 'landingUndoable',
+  CONVENTIONS: 'conventions',
+  CONVENTION_EXPORT_PREVIEW: 'conventionExportPreview',
 } as const;
 
 const LIST_SCOPE = 'list';
@@ -41,6 +44,8 @@ export const queryKeys = {
   // Keyed by repo as well as number: two repos both have a PR #1.
   prComments: (repoKey: string, prNumber: number) =>
     createQueryKey(QUERY_DOMAIN.PR_COMMENTS, repoKey, prNumber),
+  prStatus: (repoKey: string, prNumber: number) =>
+    createQueryKey(QUERY_DOMAIN.PR_STATUS, repoKey, prNumber),
   session: () => createQueryKey(QUERY_DOMAIN.SESSION),
   /**
    * Keyed by revision count as well as run: a hand edit, a targeted edit and a
@@ -76,6 +81,21 @@ export const queryKeys = {
    * somewhere else has already superseded.
    */
   undoableLanding: () => createQueryKey(QUERY_DOMAIN.LANDING_UNDOABLE),
+  /**
+   * Unkeyed by repo on purpose: distillation reads the whole evidence corpus at once
+   * and a rule promotes to global on the strength of the repos it recurred in, so
+   * slicing this per repo would hide the very evidence that decides a rule's scope.
+   */
+  conventions: () => createQueryKey(QUERY_DOMAIN.CONVENTIONS, LIST_SCOPE),
+  /** Keyed by repo: the preview is the file that would be written into that repository. */
+  conventionExportPreview: (repoKey: string) =>
+    createQueryKey(QUERY_DOMAIN.CONVENTION_EXPORT_PREVIEW, repoKey),
+  /**
+   * The prefix every repo's preview shares. Confirming or rejecting one rule changes
+   * what more than one repo's file would contain — a global rule is written alongside
+   * every repo's — so previews are invalidated as a group, not one exact key at a time.
+   */
+  conventionExportPreviews: () => createQueryKey(QUERY_DOMAIN.CONVENTION_EXPORT_PREVIEW),
   modelCatalog: () => createQueryKey(QUERY_DOMAIN.MODELS, CATALOG_SCOPE),
   cursorKeyStatus: () => createQueryKey(QUERY_DOMAIN.CURSOR_KEY, STATUS_SCOPE),
 } as const;

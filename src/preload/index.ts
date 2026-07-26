@@ -3,6 +3,7 @@ import type { PrComment } from '@shared/comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discovery';
 import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
+import type { PrStatus } from '@shared/automation';
 import type { AuditEntry } from '@shared/audit';
 import type {
   ConventionExportPreview,
@@ -70,6 +71,8 @@ const api: AirlockApi = {
     discover: (): Promise<IpcResult<PrListItem[]>> => ipcRenderer.invoke(IPC_CHANNEL.PRS_DISCOVER),
     resolveUrl: (url: string): Promise<IpcResult<PrListItem>> =>
       ipcRenderer.invoke(IPC_CHANNEL.PRS_RESOLVE_URL, url),
+    status: (ref: PrRef): Promise<IpcResult<PrStatus>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.PRS_STATUS, ref),
   },
   comments: {
     fetch: (ref: PrRef): Promise<IpcResult<PrComment[]>> =>

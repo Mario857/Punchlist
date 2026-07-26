@@ -110,6 +110,7 @@ query PrStatus($owner: String!, $repo: String!, $number: Int!) {
     pullRequest(number: $number) {
       updatedAt
       headRefOid
+      baseRefName
     }
   }
 }
@@ -230,6 +231,7 @@ const prStatusResultSchema = z.object({
       pullRequest: z.object({
         updatedAt: z.string(),
         headRefOid: z.string(),
+        baseRefName: z.string(),
       }),
     }),
   }),
@@ -478,8 +480,8 @@ export async function fetchPrStatus(ref: PrRef): Promise<PrStatus> {
     prStatusResultSchema,
   );
 
-  const { updatedAt, headRefOid } = result.data.repository.pullRequest;
-  return { updatedAt, headSha: headRefOid };
+  const { updatedAt, headRefOid, baseRefName } = result.data.repository.pullRequest;
+  return { updatedAt, headSha: headRefOid, baseRefName };
 }
 
 /**

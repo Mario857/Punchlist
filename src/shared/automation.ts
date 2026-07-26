@@ -56,4 +56,10 @@ export const DEFAULT_WATCHER_STATE: WatcherState = watcherStateSchema.parse({});
 export interface PrStatus {
   updatedAt: string;
   headSha: string;
+  /**
+   * The branch this PR is open against. `gh search prs --json` cannot return it, so
+   * it rides along on this query — which is also the only honest default for a
+   * landing target: not every repository merges into `main`.
+   */
+  baseRefName: string;
 }

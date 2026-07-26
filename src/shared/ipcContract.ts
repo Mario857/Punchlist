@@ -1,6 +1,7 @@
 import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
+import type { PrStatus } from './automation';
 import type { AuditEntry } from './audit';
 import type {
   ConventionExportPreview,
@@ -53,6 +54,7 @@ export const IPC_CHANNEL = {
   REPOS_CLONE: 'repos:clone',
   PRS_DISCOVER: 'prs:discover',
   PRS_RESOLVE_URL: 'prs:resolveUrl',
+  PRS_STATUS: 'prs:status',
   COMMENTS_FETCH: 'comments:fetch',
   SESSION_GET: 'session:get',
   SESSION_UPDATE: 'session:update',
@@ -138,6 +140,12 @@ export interface PrsApi {
   discover(): Promise<IpcResult<PrListItem[]>>;
   /** The URL-paste escape hatch for PRs outside the --author=@me filter. */
   resolveUrl(url: string): Promise<IpcResult<PrListItem>>;
+  /**
+   * The PR's head, its updatedAt and the branch it is open against. The last is what
+   * a landing should default to — not every repository merges into `main`, and the
+   * search API cannot report it.
+   */
+  status(ref: PrRef): Promise<IpcResult<PrStatus>>;
 }
 
 export interface CommentsApi {

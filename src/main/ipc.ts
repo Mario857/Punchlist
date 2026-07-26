@@ -47,7 +47,7 @@ import {
   resolvePrUrl,
 } from './discovery';
 import { getGhAuthStatus } from './ghCli';
-import { fetchPrComments } from './github';
+import { fetchPrComments, fetchPrStatus } from './github';
 import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettings } from './store';
 
 const CLONE_CANCELLED_MESSAGE = 'No folder was chosen, so nothing was cloned.';
@@ -231,6 +231,7 @@ export function registerIpcHandlers(): void {
 
   registerHandler(IPC_CHANNEL.PRS_DISCOVER, noPayloadSchema, () => discoverPrs());
   registerHandler(IPC_CHANNEL.PRS_RESOLVE_URL, z.string(), (url) => resolvePrUrl(url));
+  registerHandler(IPC_CHANNEL.PRS_STATUS, prRefSchema, (ref) => fetchPrStatus(ref));
 
   registerHandler(IPC_CHANNEL.COMMENTS_FETCH, prRefSchema, (ref) => fetchPrComments(ref));
 
