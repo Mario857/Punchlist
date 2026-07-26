@@ -50,6 +50,7 @@ export const IPC_CHANNEL = {
   REPOS_RESCAN: 'repos:rescan',
   REPOS_ADD_VIA_PICKER: 'repos:addViaPicker',
   REPOS_REMOVE: 'repos:remove',
+  REPOS_CLONE: 'repos:clone',
   PRS_DISCOVER: 'prs:discover',
   PRS_RESOLVE_URL: 'prs:resolveUrl',
   COMMENTS_FETCH: 'comments:fetch',
@@ -124,6 +125,13 @@ export interface ReposApi {
   /** Opens the native folder picker in main; resolves to null if cancelled. */
   addViaPicker(): Promise<IpcResult<LocalRepo | null>>;
   remove(repoPath: string): Promise<IpcResult<LocalRepo[]>>;
+  /**
+   * Clones a repository a discovered PR has no local copy of. Explicit rather than
+   * implicit: a PR is only actionable once it maps to a repo on disk, but writing a
+   * checkout onto someone's filesystem because they clicked a pull request would be
+   * the wrong kind of helpful.
+   */
+  clone(repoKey: string): Promise<IpcResult<LocalRepo[]>>;
 }
 
 export interface PrsApi {

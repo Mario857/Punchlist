@@ -1,4 +1,5 @@
 import { Badge } from '@renderer/components/Badge';
+import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
 import { FOCUS_RING, INTERACTIVE_TRANSITION } from '@renderer/components/interactiveClassNames';
 import { joinClassNames } from '@renderer/lib/classNames';
@@ -22,6 +23,10 @@ export interface PrPickerRowItem {
    */
   onSelect: (() => void) | null;
   notClonedNotice: string | null;
+  /** Null when the repo is already cloned, so there is nothing to offer. */
+  cloneLabel: string | null;
+  isClonePending: boolean;
+  onCloneClick: (() => void) | null;
 }
 
 interface Props {
@@ -29,6 +34,7 @@ interface Props {
 }
 
 const NOTICE_ICON_SIZE = 12;
+const NOTICE_CLASS = 'flex flex-col items-start gap-2';
 
 const ROW_SURFACE_CLASS = 'flex w-full flex-col gap-1 rounded-md border p-2.5 text-left';
 
@@ -39,12 +45,29 @@ export function PrPickerRow({ item }: Props) {
     </Badge>
   ) : null;
 
+  // The notice says why the row cannot be selected; the action is what fixes it, so
+  // the two belong together rather than sending someone to Settings to hunt for it.
+  const cloneAction =
+    item.cloneLabel === null || item.onCloneClick === null ? null : (
+      <Button
+        variant={BUTTON_VARIANT.SECONDARY}
+        size={BUTTON_SIZE.SM}
+        isLoading={item.isClonePending}
+        onClick={item.onCloneClick}
+      >
+        {item.cloneLabel}
+      </Button>
+    );
+
   const notice =
     item.notClonedNotice === null ? null : (
-      <p className="text-warning/90 flex items-start gap-1.5 text-xs leading-snug">
-        <AlertTriangleIcon size={NOTICE_ICON_SIZE} className="mt-0.5 shrink-0" />
-        {item.notClonedNotice}
-      </p>
+      <div className={NOTICE_CLASS}>
+        <p className="text-warning/90 flex items-start gap-1.5 text-xs leading-snug">
+          <AlertTriangleIcon size={NOTICE_ICON_SIZE} className="mt-0.5 shrink-0" />
+          {item.notClonedNotice}
+        </p>
+        {cloneAction}
+      </div>
     );
 
   const content = (

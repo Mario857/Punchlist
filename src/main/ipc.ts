@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prRefSchema } from '@shared/discovery';
 import { MODEL_TIER } from '@shared/runState';
 import { SELECTION_SIDE } from '@shared/runs';
-import { toErrorPayload, type IpcResult } from '@shared/errors';
+import { APP_ERROR_KIND, AppError, toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
@@ -39,6 +39,7 @@ import { listModelCatalog } from './router';
 import { readSandboxUsage } from './worktree';
 import {
   addRepoByPath,
+  cloneRepoForKey,
   discoverPrs,
   listRepos,
   removeRepoByPath,
@@ -48,6 +49,8 @@ import {
 import { getGhAuthStatus } from './ghCli';
 import { fetchPrComments } from './github';
 import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettings } from './store';
+
+const CLONE_CANCELLED_MESSAGE = 'No folder was chosen, so nothing was cloned.';
 
 /** An empty branch name would resolve to whatever git happened to be on. */
 const MIN_BRANCH_NAME_LENGTH = 1;
@@ -214,6 +217,17 @@ export function registerIpcHandlers(): void {
     return repos.find((repo) => repo.path === directory) ?? null;
   });
   registerHandler(IPC_CHANNEL.REPOS_REMOVE, z.string(), (repoPath) => removeRepoByPath(repoPath));
+  registerHandler(IPC_CHANNEL.REPOS_CLONE, z.string(), async (repoKey) => {
+    // The configured scan root is the obvious home for a new clone, and it means the
+    // repo is found again by a later rescan. Without one, the destination is asked
+    // for rather than guessed — this writes a directory onto a real filesystem.
+    const scanRoot = getSettings().repoScanRoot;
+    const destinationParent = scanRoot ?? (await pickRepoDirectory());
+    if (destinationParent === null) {
+      throw new AppError(APP_ERROR_KIND.NOT_FOUND, CLONE_CANCELLED_MESSAGE, null);
+    }
+    return cloneRepoForKey(repoKey, destinationParent);
+  });
 
   registerHandler(IPC_CHANNEL.PRS_DISCOVER, noPayloadSchema, () => discoverPrs());
   registerHandler(IPC_CHANNEL.PRS_RESOLVE_URL, z.string(), (url) => resolvePrUrl(url));

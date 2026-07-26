@@ -63,6 +63,8 @@ const api: AirlockApi = {
       ipcRenderer.invoke(IPC_CHANNEL.REPOS_ADD_VIA_PICKER),
     remove: (repoPath: string): Promise<IpcResult<LocalRepo[]>> =>
       ipcRenderer.invoke(IPC_CHANNEL.REPOS_REMOVE, repoPath),
+    clone: (repoKey: string): Promise<IpcResult<LocalRepo[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.REPOS_CLONE, repoKey),
   },
   prs: {
     discover: (): Promise<IpcResult<PrListItem[]>> => ipcRenderer.invoke(IPC_CHANNEL.PRS_DISCOVER),

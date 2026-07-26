@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrListItem } from '@shared/discovery';
 import { logError } from '@renderer/lib/logError';
 import { queryKeys } from '@renderer/lib/queryKeys';
@@ -36,6 +36,32 @@ export function useQueryDiscoveredPrs(): UseQueryDiscoveredPrsResult {
       void refetch();
     },
   };
+}
+
+interface UseExecuteCloneRepoResult {
+  cloneRepo: (repoKey: string) => void;
+  isCloneRepoPending: boolean;
+  cloneRepoError: unknown;
+}
+
+/**
+ * Cloning makes a listed PR actionable, so the discovered list and the registry both
+ * become stale the moment it succeeds.
+ */
+export function useExecuteCloneRepo(): UseExecuteCloneRepoResult {
+  const queryClient = useQueryClient();
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (repoKey: string) =>
+      unwrapIpcResult(await requireBridge().repos.clone(repoKey)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.repos() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.discoveredPrs() });
+    },
+    onError: (mutationError) => logError(mutationError, 'useExecuteCloneRepo'),
+  });
+
+  return { cloneRepo: mutate, isCloneRepoPending: isPending, cloneRepoError: error };
 }
 
 interface UseExecuteResolvePrUrlResult {

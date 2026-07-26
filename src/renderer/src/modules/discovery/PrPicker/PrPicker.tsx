@@ -17,6 +17,7 @@ export interface PrPickerProps {
 const PR_PICKER_HEADING_ID = 'pr-picker-heading';
 const PR_URL_INPUT_ID = 'pr-picker-url';
 const PR_URL_PLACEHOLDER = 'https://github.com/owner/repo/pull/123';
+const CLONE_PENDING_CLASS = 'text-muted text-xs';
 const LOADING_LABEL = 'Searching your open pull requests';
 
 export function PrPicker({ selectedPr, onSelectPr }: PrPickerProps) {
@@ -29,6 +30,8 @@ export function PrPicker({ selectedPr, onSelectPr }: PrPickerProps) {
     refreshStatusLabel,
     isRefreshingDiscoveredPrs,
     listAlert,
+    cloneAlert,
+    clonePendingLabel,
     prUrlValue,
     prUrlAlert,
     resolvedPrRow,
@@ -72,6 +75,20 @@ export function PrPicker({ selectedPr, onSelectPr }: PrPickerProps) {
   const listAlertBlock =
     listAlert === null ? null : (
       <PrPickerAlert message={listAlert.message} remediation={listAlert.remediation} />
+    );
+
+  const cloneAlertBlock =
+    cloneAlert === null ? null : (
+      <PrPickerAlert message={cloneAlert.message} remediation={cloneAlert.remediation} />
+    );
+
+  // Announced rather than left to the row's spinner: a clone is slow enough that
+  // silence reads as nothing having happened.
+  const clonePendingBlock =
+    clonePendingLabel === null ? null : (
+      <p role="status" className={CLONE_PENDING_CLASS}>
+        {clonePendingLabel}
+      </p>
     );
 
   const prUrlAlertBlock =
@@ -126,6 +143,8 @@ export function PrPicker({ selectedPr, onSelectPr }: PrPickerProps) {
       </p>
 
       {listAlertBlock}
+      {cloneAlertBlock}
+      {clonePendingBlock}
 
       <div className="min-h-0 flex-1 overflow-y-auto">{listContent}</div>
 

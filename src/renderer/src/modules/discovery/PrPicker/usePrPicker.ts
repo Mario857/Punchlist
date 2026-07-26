@@ -6,6 +6,7 @@ import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import type { PrPickerAlertProps } from '@renderer/modules/discovery/PrPicker/components/PrPickerAlert';
 import type { PrPickerRowItem } from '@renderer/modules/discovery/PrPicker/components/PrPickerRow';
 import {
+  useExecuteCloneRepo,
   useExecuteResolvePrUrl,
   useQueryDiscoveredPrs,
 } from '@renderer/modules/discovery/useQueryDiscoveredPrs';
@@ -22,6 +23,8 @@ const NO_COUNT_LABEL = '';
 const REFRESHING_LABEL = 'Refreshing…';
 const NO_REFRESH_STATUS_LABEL = '';
 
+const CLONE_LABEL_PREFIX = 'Clone ';
+const CLONE_PENDING_NOTICE = 'Cloning takes as long as the repository is large.';
 const NOT_CLONED_NOTICE =
   'No local clone found for this repository. A resolution runs in a git worktree, so this PR cannot be selected until the repository is registered in Settings.';
 
@@ -36,6 +39,8 @@ interface UsePrPickerResult {
   refreshStatusLabel: string;
   isRefreshingDiscoveredPrs: boolean;
   listAlert: PrPickerAlertProps | null;
+  cloneAlert: PrPickerAlertProps | null;
+  clonePendingLabel: string | null;
   prUrlValue: string;
   prUrlAlert: PrPickerAlertProps | null;
   resolvedPrRow: PrPickerRowItem | null;
@@ -62,12 +67,16 @@ function toCountLabel(prs: PrListItem[] | undefined): string {
   return `${prs.length} open pull requests`;
 }
 
-function toRowItem(
-  pr: PrListItem,
-  nowMs: number,
-  selectedPrKey: string | null,
-  onSelectPr: (ref: PrRef) => void,
-): PrPickerRowItem {
+interface RowItemContext {
+  nowMs: number;
+  selectedPrKey: string | null;
+  onSelectPr: (ref: PrRef) => void;
+  cloneRepo: (repoKey: string) => void;
+  isCloneRepoPending: boolean;
+}
+
+function toRowItem(pr: PrListItem, context: RowItemContext): PrPickerRowItem {
+  const { nowMs, selectedPrKey, onSelectPr, cloneRepo, isCloneRepoPending } = context;
   const ref: PrRef = { repoKey: pr.repoKey, number: pr.number };
   const prKey = prRefKey(ref);
   const elapsedMs = toElapsedMs(pr.updatedAt, nowMs);
@@ -86,6 +95,11 @@ function toRowItem(
     isSelected: prKey === selectedPrKey,
     onSelect: hasLocalClone ? () => onSelectPr(ref) : null,
     notClonedNotice: hasLocalClone ? null : NOT_CLONED_NOTICE,
+    // Names the repository, because several rows can be missing a clone at once and
+    // a bare "Clone" would not say which one it would fetch.
+    cloneLabel: hasLocalClone ? null : `${CLONE_LABEL_PREFIX}${pr.repoKey}`,
+    isClonePending: isCloneRepoPending,
+    onCloneClick: hasLocalClone ? null : () => cloneRepo(pr.repoKey),
   };
 }
 
@@ -107,12 +121,18 @@ export function usePrPicker(
   } = useQueryDiscoveredPrs();
   const { resolvePrUrl, resolvedPr, isResolvePrUrlPending, resolvePrUrlError, resetResolvePrUrl } =
     useExecuteResolvePrUrl();
+  const { cloneRepo, isCloneRepoPending, cloneRepoError } = useExecuteCloneRepo();
 
   const selectedPrKey = selectedPr === null ? null : prRefKey(selectedPr);
-  const rows = (discoveredPrs ?? []).map((pr) => toRowItem(pr, nowMs, selectedPrKey, onSelectPr));
-  const resolvedPrRow = isDefined(resolvedPr)
-    ? toRowItem(resolvedPr, nowMs, selectedPrKey, onSelectPr)
-    : null;
+  const rowContext: RowItemContext = {
+    nowMs,
+    selectedPrKey,
+    onSelectPr,
+    cloneRepo,
+    isCloneRepoPending,
+  };
+  const rows = (discoveredPrs ?? []).map((pr) => toRowItem(pr, rowContext));
+  const resolvedPrRow = isDefined(resolvedPr) ? toRowItem(resolvedPr, rowContext) : null;
 
   const trimmedPrUrl = prUrlValue.trim();
   const hasPrUrlInput = trimmedPrUrl.length > EMPTY_LENGTH;
@@ -130,6 +150,8 @@ export function usePrPicker(
     refreshStatusLabel: isRefreshingDiscoveredPrs ? REFRESHING_LABEL : NO_REFRESH_STATUS_LABEL,
     isRefreshingDiscoveredPrs,
     listAlert: toAlert(discoveredPrsError),
+    cloneAlert: toAlert(cloneRepoError),
+    clonePendingLabel: isCloneRepoPending ? CLONE_PENDING_NOTICE : null,
     prUrlValue,
     prUrlAlert,
     resolvedPrRow,

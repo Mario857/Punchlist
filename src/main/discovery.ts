@@ -3,13 +3,20 @@ import { access, readdir } from 'node:fs/promises';
 import { basename, isAbsolute, join, resolve as resolvePath } from 'node:path';
 import { simpleGit } from 'simple-git';
 import { z } from 'zod';
-import { runGhJson } from '@main/ghCli';
+import { runGh, runGhJson } from '@main/ghCli';
 import { getRepos, getSettings, setRepos } from '@main/store';
 import type { DiscoveredPr, LocalRepo, PrListItem, RepoSource } from '@shared/discovery';
 import { REPO_SOURCE, normalizeRemoteUrl } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 
 const GIT_ENTRY_NAME = '.git';
+
+const REPO_CLONE_ARGS = ['repo', 'clone'] as const;
+const REPO_KEY_SEPARATOR = '/';
+const NO_CHARACTERS = 0;
+const INVALID_REPO_KEY_MESSAGE = 'That repository name could not be read, so nothing was cloned.';
+const CLONE_DESTINATION_EXISTS_REMEDIATION =
+  'Add the existing directory in Settings, or clone into a different folder.';
 
 /**
  * A home directory is a plausible scan root, so the walk is bounded: an unlimited
@@ -125,6 +132,15 @@ async function readDirectoryEntries(directoryPath: string): Promise<Dirent[] | n
     // An unreadable directory (permissions, a stale mount) is skipped rather than
     // aborting the whole scan.
     return null;
+  }
+}
+
+async function isExistingPath(candidatePath: string): Promise<boolean> {
+  try {
+    await access(candidatePath);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -263,6 +279,39 @@ function buildPrViewArgs(target: PrUrlTarget): readonly string[] {
     '--json',
     PR_VIEW_JSON_FIELDS.join(JSON_FIELD_SEPARATOR),
   ];
+}
+
+/**
+ * Cloning is offered as an explicit action rather than happening implicitly: a
+ * discovered PR is only actionable once it maps to a repo on disk, and silently
+ * writing a checkout somewhere on someone's filesystem because they clicked a pull
+ * request would be the wrong kind of helpful.
+ *
+ * `gh repo clone` rather than `git clone`, so it uses the credentials `gh` already
+ * holds and works for a private repo without a second auth story.
+ */
+export async function cloneRepoForKey(
+  repoKey: string,
+  destinationParent: string,
+): Promise<LocalRepo[]> {
+  const [, repoName] = repoKey.split(REPO_KEY_SEPARATOR);
+  if (repoName === undefined || repoName.length === NO_CHARACTERS) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, INVALID_REPO_KEY_MESSAGE, null);
+  }
+
+  const destination = join(resolvePath(destinationParent), repoName);
+  // Refused rather than merged into: an existing directory here is either the clone
+  // they already have or unrelated work, and neither should be written over.
+  if (await isExistingPath(destination)) {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      `${destination} already exists, so it was not cloned over.`,
+      CLONE_DESTINATION_EXISTS_REMEDIATION,
+    );
+  }
+
+  await runGh([...REPO_CLONE_ARGS, repoKey, destination]);
+  return addRepoByPath(destination);
 }
 
 export async function listRepos(): Promise<LocalRepo[]> {
