@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { prRefSchema } from './discovery';
+import { guardrailFlagSchema } from './guardrails';
 import { FAILURE_REASON, MODEL_TIER, RUN_STATE, RUN_TRIGGER, type ModelTier } from './runState';
 
 /**
@@ -63,6 +64,13 @@ export const runRecordSchema = z.object({
    * sensitive: rendered in the UI, never written to a log file.
    */
   transcript: z.string().default(''),
+  /** Recomputed whenever the patch changes, so a revision cannot outrun its checks. */
+  guardrailFlags: z.array(guardrailFlagSchema).default([]),
+  /**
+   * Acknowledgements survive re-checking because a flag's id is derived from what it
+   * is about, so an unchanged finding stays acknowledged across revisions.
+   */
+  acknowledgedGuardrailIds: z.array(z.string()).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
   startedAt: z.string().nullable().default(null),
@@ -101,6 +109,11 @@ export interface ContinueRunRequest {
   runId: string;
   /** The answer to the agent's question, or the follow-up on the whole patch. */
   message: string;
+}
+
+export interface AcknowledgeGuardrailRequest {
+  runId: string;
+  flagId: string;
 }
 
 export interface EscalateRunRequest {

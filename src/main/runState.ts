@@ -215,6 +215,8 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     model: null,
     isPoolSpending: false,
     trigger: input.trigger,
+    guardrailFlags: [],
+    acknowledgedGuardrailIds: [],
     worktreePath: input.worktreePath,
     branchName: input.branchName,
     agentId: null,

@@ -5,6 +5,7 @@ import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
 import type { ModelCatalogEntry } from '@shared/models';
 import type {
+  AcknowledgeGuardrailRequest,
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
@@ -76,6 +77,8 @@ const api: AirlockApi = {
     stopAll: (): Promise<IpcResult<RunRecord[]>> => ipcRenderer.invoke(IPC_CHANNEL.RUNS_STOP_ALL),
     continueRun: (request: ContinueRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_CONTINUE, request),
+    acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest): Promise<IpcResult<RunRecord>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL, request),
     escalate: (request: EscalateRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_ESCALATE, request),
     onEvent: (listener: (event: RunEvent) => void): (() => void) => {
