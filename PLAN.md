@@ -143,6 +143,16 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 - [ ] `automation-ui` — AutomationSettings.tsx for the enable toggle and author allowlist; native notification when auto-runs finish; queue distinguishes auto from manual runs
 - [ ] `no-action-state` — Add noActionNeeded run state so an auto-triggered run producing an empty diff resolves cleanly instead of auto-escalating forever
 
+### Phase 10 — Ship it
+
+- [ ] `single-instance` — Take the single-instance lock and focus the existing window instead of starting a second process; two instances would share one JSON store and one set of worktrees and corrupt both
+- [ ] `app-menu` — Build a real application menu. On macOS an Electron app with no Edit menu has no working Cmd+C/V/X/A anywhere, including every text field this app has, so this is a correctness fix rather than chrome
+- [ ] `app-identity` — App icon, product name, description, bundle id, category and author metadata; the About panel and the dock/taskbar entry
+- [ ] `error-boundary` — A renderer error boundary so an uncaught render error shows something recoverable instead of a white window, and a main-process handler for unhandled rejections that does not take the app down silently
+- [ ] `window-state` — Remember window size and position across restarts, clamped back onto a currently-connected display
+- [ ] `packaging` — electron-builder config producing a macOS build, with the icon, the metadata and the entitlements wired; note plainly that it is unsigned and what that means for the person opening it
+- [ ] `readme` — A README written for someone deciding whether to run this, not for someone who already knows the architecture
+
 ### Phase 9 — Second opinion
 
 - [ ] `opinion-model` — Define the verdict model in src/shared/opinion.ts: Zod-backed, with verdict (addresses/partial/misses/harmful), concerns as plain strings, and the run it belongs to; treated as an agent-written file like decision.json
@@ -896,6 +906,25 @@ Reviewing twenty agent-written patches is genuinely tiring, and that is a design
 
 **And one thing that inescapably costs attention:** every diff still needs the user's eyes, by design. That is the review gate, and no amount of interface work should erode it. What the interface can do is make sure the attention goes to the diffs rather than to finding them, remembering where you were, or reading eight badges.
 
+## Shipping (phase 10)
+
+Everything above makes the app correct. This makes it an application rather than a development target, and two of its items are correctness rather than polish:
+
+**The single-instance lock is load-bearing.** State is one JSON file and one set of git worktrees. Two Airlock processes would both write `airlock-state.json` — last writer wins, silently — and both believe they own the same sandbox directories. That is not a rough edge, it is corruption, so the second launch focuses the existing window and exits.
+
+**An Electron app without an Edit menu has no clipboard.** On macOS, Cmd+C/V/X/A are delivered through menu accelerators rather than by the web contents, so a packaged build with the default menu has no working copy or paste in *any* text field — the decision reply box, the follow-up prompt, the inline prompt, the PR URL field, the target branch. It reads as chrome and behaves as a bug.
+
+The rest is what makes the thing feel finished:
+
+- **Identity.** A name, an icon, a description, a bundle id and a category. The icon has to survive being 16 pixels wide in a dock, which rules out anything with fine detail — the airlock metaphor reduces well, since a hatch is a circle inside a frame.
+- **Failure that is survivable.** A renderer exception currently blanks the window with no way back. An error boundary that offers a reload, and a main-process handler for unhandled rejections, cost little and convert a dead app into a recoverable one.
+- **Window state**, clamped back onto a display that currently exists — restoring a window onto a monitor that has since been unplugged is a classic way to lose an app off-screen.
+- **Packaging** via electron-builder, deferred until now on purpose so it was never configured against a moving target.
+
+### Signing is out of scope, and the README says so
+
+Notarizing a macOS build needs an Apple Developer certificate this project does not have. Rather than pretend, the packaging step produces an unsigned build and the README states plainly what that means: Gatekeeper will refuse it on first open, and the user has to allow it deliberately. A tool whose entire premise is that nothing happens without explicit confirmation should not be coy about its own installation.
+
 ## Second opinion (phase 9)
 
 A resolution can be plausible and wrong. The guardrails catch mechanical problems — a lock file touched, a credential-shaped literal, a diff far larger than its tier implies — but they say nothing about whether the patch actually does what the reviewer asked. That judgment currently rests entirely on the person reading the diff, which is exactly the attention the rest of this design is trying to spend well.
@@ -987,12 +1016,13 @@ Each phase is independently useful and de-risks the next.
 - **5 — Land, gated.** Approve/reject with bulk variants, sandbox integration worktree, squash-merge per comment, conflict re-run loop, and the landing preview with the combined-diff guardrail scan. The confirmation gate and audit log are built here, before any code path can reach the real repo.
 - **6 — Close the loop.** Publish the branch, push, `resolveReviewThread`, optional reply comment, and undo of the most recent landing — all behind the phase 5 gate.
 - **7 — Optional automation.** Author-allowlist auto-triggering, the polling watcher, and staleness detection. Last because it only pays off once the review loop is trustworthy, and it changes nothing about the approval gate.
+- **10 — Ship it.** Single-instance lock, application menu, identity, error boundaries, window state and packaging. Buildable any time after phase 6; two of its items are correctness rather than polish.
 - **9 — Second opinion.** A fresh agent reviews a candidate patch against the comment that prompted it, without the first agent's reasoning. Independent of phases 7 and 8 and buildable before either; placed last only because it is an enhancement to review rather than a missing capability.
 - **8 — Learn from the comments.** Distil the ingested comment corpus into durable, reusable conventions and export them as context for future coding agents. Placed last because capture is retroactive: evidence accumulates in the store from phase 1 onward, so distillation can run over history whenever it is built. It also depends on the phase 5 gate, since export writes to a real repo.
 
 ## Assumptions
 
-GitHub only for v1 (GitLab/Bitbucket would need a provider abstraction — deliberately skipped per "keep it simple and direct"). Packaging via `electron-builder` is deferred until after phase 5.
+GitHub only for v1 (GitLab/Bitbucket would need a provider abstraction — deliberately skipped per "keep it simple and direct"). Packaging via `electron-builder` is deferred to phase 10, so it is never configured against a moving target.
 
 ## Prerequisites
 
