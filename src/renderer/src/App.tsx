@@ -3,6 +3,7 @@ import { ErrorBoundary } from '@renderer/components/ErrorBoundary/ErrorBoundary'
 import { Spinner, SPINNER_SIZE } from '@renderer/components/Spinner';
 import { assertNever } from '@renderer/lib/assertNever';
 import { Audit } from '@renderer/screens/Audit/Audit';
+import { Conventions } from '@renderer/screens/Conventions/Conventions';
 import { Settings } from '@renderer/screens/Settings/Settings';
 import { Workspace } from '@renderer/screens/Workspace/Workspace';
 import { AppNav } from './AppNav';
@@ -20,7 +21,14 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  const { screen, isSessionHydrated, onOpenWorkspace, onOpenAudit, onOpenSettings } = useApp();
+  const {
+    screen,
+    isSessionHydrated,
+    onOpenWorkspace,
+    onOpenConventions,
+    onOpenAudit,
+    onOpenSettings,
+  } = useApp();
 
   const content = (() => {
     // Rendering before hydration would flash an empty workspace and then jump to
@@ -35,6 +43,8 @@ export default function App() {
     switch (screen) {
       case SCREEN.WORKSPACE:
         return <Workspace />;
+      case SCREEN.CONVENTIONS:
+        return <Conventions />;
       case SCREEN.AUDIT:
         return <Audit />;
       case SCREEN.SETTINGS:
@@ -53,6 +63,7 @@ export default function App() {
           <AppNav
             screen={screen}
             onOpenWorkspace={onOpenWorkspace}
+            onOpenConventions={onOpenConventions}
             onOpenAudit={onOpenAudit}
             onOpenSettings={onOpenSettings}
           />
