@@ -161,10 +161,10 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 
 ### Phase 9 — Second opinion
 
-- [ ] `opinion-model` — Define the verdict model in src/shared/opinion.ts: Zod-backed, with verdict (addresses/partial/misses/harmful), concerns as plain strings, and the run it belongs to; treated as an agent-written file like decision.json
-- [ ] `opinion-prompt` — Build the reviewer prompt in src/main/prompt.ts: the original comment and the candidate diff, explicitly without the first agent's transcript or summary, plus the instruction to write .airlock/opinion.json and to change nothing
-- [ ] `opinion-runner` — Run a fresh agent in the run's worktree, parse the verdict, and verify the patch is byte-identical afterwards; a reviewer that edited anything is itself a finding
-- [ ] `opinion-ui` — Render the verdict and its concerns beside the diff alongside the guardrail flags and auto-decisions, and offer it per run and per batch; never blocking
+- [x] `opinion-model` — Define the verdict model in src/shared/opinion.ts: Zod-backed, with verdict (addresses/partial/misses/harmful), concerns as plain strings, and the run it belongs to; treated as an agent-written file like decision.json
+- [x] `opinion-prompt` — Build the reviewer prompt in src/main/prompt.ts: the original comment and the candidate diff, explicitly without the first agent's transcript or summary, plus the instruction to write .airlock/opinion.json and to change nothing
+- [x] `opinion-runner` — Run a fresh agent in the run's worktree, parse the verdict, and verify the patch is byte-identical afterwards; a reviewer that edited anything is itself a finding
+- [x] `opinion-ui` — Render the verdict and its concerns beside the diff alongside the guardrail flags and auto-decisions, and offer it per run and per batch; never blocking
 
 ### Phase 8 — Learn from the comments
 
