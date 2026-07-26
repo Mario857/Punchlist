@@ -9,7 +9,7 @@ import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
 import { assembleLanding } from './landing';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
-import { enqueueRuns, escalateRun, stopAllRuns } from './queue';
+import { enqueueRuns, escalateRun, rerunConflictedRun, stopAllRuns } from './queue';
 import {
   acknowledgeGuardrail,
   approveRuns,
@@ -202,6 +202,9 @@ export function registerIpcHandlers(): void {
   );
   registerHandler(IPC_CHANNEL.RUNS_REVISIONS, z.string(), (runId) => listRunRevisionTrail(runId));
   registerHandler(IPC_CHANNEL.RUNS_REVERT, revertRunPayloadSchema, (request) => revertRun(request));
+  registerHandler(IPC_CHANNEL.RUNS_RERUN_CONFLICTED, z.string(), (runId) =>
+    rerunConflictedRun(runId),
+  );
   registerHandler(
     IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL,
     acknowledgeGuardrailPayloadSchema,

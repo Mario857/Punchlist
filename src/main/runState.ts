@@ -47,10 +47,16 @@ const ALLOWED_TRANSITIONS: Record<RunState, readonly RunState[]> = {
   [RUN_STATE.FAILED]: [RUN_STATE.RUNNING],
   // Approval is revocable up to the landing gate: a hand-edit or a late guardrail flag
   // drops an approved run back into review rather than landing something unreviewed.
+  //
+  // `running` is on that list because a squash-merge conflict is resolved by re-running
+  // the approved run's agent against the updated integration state. Re-entering work is
+  // what revokes the approval — what was approved no longer applies to the branch it has
+  // to land on — so it needs no separate step back through `ready` first.
   [RUN_STATE.APPROVED]: [
     RUN_STATE.APPLIED,
     RUN_STATE.READY,
     RUN_STATE.REVISING,
+    RUN_STATE.RUNNING,
     RUN_STATE.REJECTED,
     RUN_STATE.FAILED,
   ],

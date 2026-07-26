@@ -92,6 +92,8 @@ const api: AirlockApi = {
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVISIONS, runId),
     revert: (request: RevertRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVERT, request),
+    rerunConflicted: (runId: string): Promise<IpcResult<RunRecord>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_RERUN_CONFLICTED, runId),
     acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL, request),
     escalate: (request: EscalateRunRequest): Promise<IpcResult<RunRecord>> =>

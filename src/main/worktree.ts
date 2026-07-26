@@ -99,6 +99,12 @@ const NO_BYTES = 0;
 const HEAD_REVISION = 'HEAD';
 const SINGLE_LOG_ENTRY = 1;
 const BASE_REVISION_SUBJECT = 'Pull request head, before any agent work';
+/**
+ * The commit that makes a re-run's teardown possible without `--force`: see
+ * `recreateRunWorktree`. It lives on the scratch branch that is deleted moments later,
+ * so it is never part of anything that lands.
+ */
+const SUPERSEDED_COMMIT_SUBJECT = 'Conflicted resolution, superseded by a re-run';
 
 export const TEARDOWN_RESULT = {
   REMOVED: 'removed',
@@ -527,6 +533,67 @@ export async function teardownRunWorktree(run: RunRecord): Promise<TeardownResul
   const wasPresent = await isExistingDirectory(run.worktreePath);
   await removeWorktree(run.repoPath, run.worktreePath, run.branchName);
   return wasPresent ? TEARDOWN_RESULT.REMOVED : TEARDOWN_RESULT.ALREADY_REMOVED;
+}
+
+export interface RecreateRunWorktreeRequest {
+  run: RunRecord;
+  /**
+   * The commit the rebuilt worktree is checked out at. Resolved by the caller in main
+   * from a branch it owns — this becomes the base of a sandbox, so it is never a value
+   * that travelled across IPC.
+   */
+  baseRevision: string;
+}
+
+/**
+ * The same comment's worktree, rebuilt on a different commit. A patch whose squash-merge
+ * conflicted has to be redone against the integration state it will actually be merged
+ * into rather than the PR head it was first written on, and an agent can only see that
+ * state if its cwd is checked out at it.
+ *
+ * **A dirty worktree does not block here**, which is the opposite of `teardownRunWorktree`
+ * and deliberate. An agent's first result is never committed — only revisions are — so a
+ * `ready` or `approved` run's worktree is dirty by construction, and refusing one would
+ * refuse every re-run there is. What makes discarding it safe is that the patch being
+ * replaced is precisely the one that cannot be landed, and the re-run is asked for at the
+ * landing gate.
+ *
+ * It is still never `--force` and never `git clean`: whatever the worktree holds is
+ * committed onto the run's own scratch branch first, which is what makes the plain
+ * removal succeed, and leaves the discarded work reachable through the reflog instead of
+ * deleted off disk.
+ */
+export async function recreateRunWorktree(
+  request: RecreateRunWorktreeRequest,
+): Promise<RunWorktree> {
+  const { run, baseRevision } = request;
+  const git = simpleGit(run.repoPath);
+
+  // Preflight before anything is torn down, exactly as creating one does: an unset
+  // identity has no sensible default, and discovering it here would have destroyed the
+  // existing worktree for a run that then cannot start.
+  const identity = await resolveGitIdentity(run.repoPath);
+
+  if (await isExistingDirectory(run.worktreePath)) {
+    await commitWorktree(run.worktreePath, SUPERSEDED_COMMIT_SUBJECT);
+  }
+  // Teardown is the same three operations as everywhere else — remove, delete the
+  // branch, prune — because `worktree add -b` below would refuse a branch that still
+  // exists, and a stale registration would keep the path occupied.
+  await removeWorktree(run.repoPath, run.worktreePath, run.branchName);
+
+  await mkdir(dirname(run.worktreePath), { recursive: true });
+  await git.raw([...WORKTREE_ADD_ARGS, run.branchName, run.worktreePath, baseRevision]);
+
+  await containWorktree({ repoPath: run.repoPath, worktreePath: run.worktreePath, identity });
+  // Re-recorded rather than inherited, and load-bearing: `readCandidatePatch` and
+  // `resetWorktreeToBase` both read this key, so a stale PR head here would diff the new
+  // patch against a commit the worktree is no longer based on — and reset it back onto
+  // that commit on the next escalation.
+  await setWorktreeConfig(run.worktreePath, BASE_REVISION_CONFIG_KEY, baseRevision);
+  await ensureAirlockExcluded(git, run.repoPath);
+
+  return { worktreePath: run.worktreePath, branchName: run.branchName, baseRevision };
 }
 
 function parseWorktreeList(output: string): WorktreeRegistration[] {

@@ -60,6 +60,7 @@ export const IPC_CHANNEL = {
   RUNS_APPROVE: 'runs:approve',
   RUNS_REJECT: 'runs:reject',
   LANDING_ASSEMBLE: 'landing:assemble',
+  RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
   AUDIT_LIST: 'audit:list',
   MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
@@ -158,6 +159,12 @@ export interface RunsApi {
   listRevisions(runId: string): Promise<IpcResult<RunRevision[]>>;
   /** Resets the worktree to a revision, discarding every later one. */
   revert(request: RevertRunRequest): Promise<IpcResult<RunRecord>>;
+  /**
+   * Re-runs a conflicting comment against the integration state its patch must
+   * actually apply to. Conflicts are resolved by the agent, not by a merge
+   * heuristic — there is already an agent, so it is the one that reconciles.
+   */
+  rerunConflicted(runId: string): Promise<IpcResult<RunRecord>>;
   /**
    * Records that a guardrail finding was seen and accepted. Flags are not hard
    * blocks — a comment may legitimately ask for a lock-file bump — so the gate is

@@ -1,4 +1,5 @@
 import { fetchPrComments } from '@main/github';
+import { resolveIntegrationRevision } from '@main/landing';
 import {
   listModelCatalog,
   resolveEscalatedModel,
@@ -7,7 +8,7 @@ import {
 } from '@main/router';
 import { cancelActiveRuns, prepareRunRepoPath, requireRun, restartRun, startRun } from '@main/run';
 import { getRunById, getSettings } from '@main/store';
-import { resetWorktreeToBase } from '@main/worktree';
+import { recreateRunWorktree, resetWorktreeToBase } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
@@ -47,10 +48,17 @@ const NO_FRONTIER_MODEL_MESSAGE =
 const NO_FRONTIER_MODEL_REMEDIATION = 'Check the plan and API key at cursor.com/settings.';
 const ESCALATION_STOPPED_MESSAGE =
   'The escalation never started, because every run was stopped while it was queued.';
+const NOT_APPROVED_FOR_RERUN_MESSAGE =
+  'Only an approved resolution can be re-run against the integration state, because only approved work is part of a landing.';
+const NOT_APPROVED_FOR_RERUN_REMEDIATION =
+  'Approve the resolution first, or escalate the run from the review pane instead.';
+const RERUN_STOPPED_MESSAGE =
+  'The re-run never started, because every run was stopped while it was queued.';
 
 const QUEUED_WORK_KIND = {
   START: 'start',
   RESTART: 'restart',
+  RERUN: 'rerun',
 } as const;
 
 interface QueuedWorkBase {
@@ -62,8 +70,8 @@ interface QueuedWorkBase {
 
 /**
  * A discriminated union rather than a work item with optional fields, so "only a
- * restart resets an existing worktree" and "only a fresh start needs a repo path" are
- * compiler guarantees.
+ * restart resets an existing worktree", "only a re-run rebuilds one at a new base" and
+ * "only a fresh start needs a repo path" are compiler guarantees.
  */
 type QueuedWork =
   | (QueuedWorkBase & {
@@ -77,6 +85,12 @@ type QueuedWork =
       runId: string;
       worktreePath: string;
       isDiscardConfirmed: boolean;
+    })
+  | (QueuedWorkBase & {
+      kind: typeof QUEUED_WORK_KIND.RERUN;
+      run: RunRecord;
+      /** The integration branch tip, resolved in main from the branch itself. */
+      baseRevision: string;
     });
 
 interface PendingWork {
@@ -148,6 +162,14 @@ function shouldAutoEscalate(run: RunRecord): boolean {
 }
 
 async function runFirstAttempt(work: QueuedWork): Promise<RunRecord> {
+  if (work.kind === QUEUED_WORK_KIND.RERUN) {
+    // Rebuilt rather than reset: the base is the integration branch tip, not the PR head
+    // the run was created on, so the agent works in a checkout of the state its patch
+    // actually has to apply to — which is the state it conflicted with.
+    await recreateRunWorktree({ run: work.run, baseRevision: work.baseRevision });
+    return restartRun({ runId: work.run.id, comment: work.comment, model: work.model });
+  }
+
   if (work.kind === QUEUED_WORK_KIND.RESTART) {
     await resetWorktreeToBase(work.worktreePath, {
       isDiscardConfirmed: work.isDiscardConfirmed,
@@ -374,4 +396,53 @@ export async function escalateRun(request: EscalateRunRequest): Promise<RunRecor
     throw new AppError(APP_ERROR_KIND.NOT_FOUND, ESCALATION_STOPPED_MESSAGE, null);
   }
   return escalated;
+}
+
+/**
+ * The conflict path. A squash-merge that could not be applied is not resolved by a merge
+ * heuristic: the comment's own agent runs again in a worktree rebuilt on the integration
+ * branch tip, because there is already an agent and a three-way resolver would be solving
+ * the wrong problem.
+ *
+ * It goes through the same slot as every other run, so the concurrency cap, tier routing,
+ * the guardrail pass and the revision commits all still apply rather than being restated
+ * on a second execution path. Everything it touches is inside the sandbox — a scratch
+ * branch and a worktree under the sandbox root — so there is no confirmation to take and
+ * nothing to audit.
+ */
+export async function rerunConflictedRun(runId: string): Promise<RunRecord> {
+  const run = requireRun(runId);
+  if (run.state !== RUN_STATE.APPROVED) {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      NOT_APPROVED_FOR_RERUN_MESSAGE,
+      NOT_APPROVED_FOR_RERUN_REMEDIATION,
+    );
+  }
+
+  // Read from the branch a previous assembly built rather than taken from the caller: it
+  // becomes the base of a worktree, and a revision supplied by the renderer is untrusted
+  // input. Refuses when nothing has been assembled — before the first preview, and after
+  // a restart, since reconciliation sweeps the integration worktree as the orphan it is.
+  const baseRevision = await resolveIntegrationRevision(run.prRef, run.repoPath);
+  // Refuses when the comment has vanished from the PR: the prompt is built from its body
+  // and diff hunk, so there is nothing to re-run it against.
+  const comment = findComment(await fetchPrComments(run.prRef), run.commentId);
+  const model = await resolveTierModel(run.tier);
+
+  const rerun = await schedule({
+    kind: QUEUED_WORK_KIND.RERUN,
+    run,
+    baseRevision,
+    comment,
+    model,
+    // A re-run is a fresh resolution attempt rather than an escalation, so it carries the
+    // same automatic-retry budget a first attempt does.
+    escalationAttempts: MAX_AUTO_ESCALATION_ATTEMPTS,
+  });
+
+  if (rerun === null) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, RERUN_STOPPED_MESSAGE, null);
+  }
+  return rerun;
 }
