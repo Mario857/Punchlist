@@ -17,6 +17,7 @@ const STATUS_CLASS = 'text-muted text-xs';
 const LABEL_CLASS = 'text-muted text-xs';
 const ACTION_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 const ERROR_CLASS = 'text-danger text-xs';
+const REMEDIATION_CLASS = 'text-muted mt-1 text-xs';
 const INPUT_CLASS =
   'border-border bg-surface-raised text-ink w-full rounded border px-2 py-1 text-sm';
 
@@ -34,6 +35,7 @@ export function CursorKeyCard() {
     isSaveDisabled,
     isPending,
     errorMessage,
+    errorRemediation,
     onDraftChange,
     onSaveClick,
     onClearClick,
@@ -61,11 +63,15 @@ export function CursorKeyCard() {
       </Button>
     );
 
+  const errorRemediationLine =
+    errorRemediation === null ? null : <p className={REMEDIATION_CLASS}>{errorRemediation}</p>;
+
   const errorLine =
     errorMessage === null ? null : (
-      <p role="alert" className={ERROR_CLASS}>
-        {errorMessage}
-      </p>
+      <div role="alert">
+        <p className={ERROR_CLASS}>{errorMessage}</p>
+        {errorRemediationLine}
+      </div>
     );
 
   return (

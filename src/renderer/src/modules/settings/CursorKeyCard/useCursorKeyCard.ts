@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@renderer/lib/queryKeys';
+import { isDefined } from '@renderer/lib/guards';
 import { logError } from '@renderer/lib/logError';
 import { requireBridge, unwrapIpcResult } from '@renderer/lib/unwrapIpcResult';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
@@ -34,6 +35,7 @@ interface UseCursorKeyCardResult {
   isSaveDisabled: boolean;
   isPending: boolean;
   errorMessage: string | null;
+  errorRemediation: string | null;
   onDraftChange: (draft: string) => void;
   onSaveClick: () => void;
   onClearClick: () => void;
@@ -78,11 +80,18 @@ export function useCursorKeyCard(): UseCursorKeyCardResult {
   const isStored = isCursorKeySet === true;
   const activeError = save.error ?? clear.error;
 
+  // Any error carries a readable message; only a non-Error falls back to generic
+  // copy. Swallowing the real text was its own bug — "no handler registered" is
+  // exactly the sentence that identifies a stale main process, and hiding it behind
+  // "could not be stored" left nothing to act on.
   const errorMessage = (() => {
-    if (activeError === null || activeError === undefined) return null;
+    if (!isDefined(activeError)) return null;
     if (isIpcError(activeError)) return activeError.message;
-    return save.error === null ? CLEAR_ERROR_FALLBACK : SAVE_ERROR_FALLBACK;
+    if (activeError instanceof Error) return activeError.message;
+    return isDefined(save.error) ? SAVE_ERROR_FALLBACK : CLEAR_ERROR_FALLBACK;
   })();
+
+  const errorRemediation = isIpcError(activeError) ? activeError.remediation : null;
 
   return {
     heading: HEADING,
@@ -97,6 +106,7 @@ export function useCursorKeyCard(): UseCursorKeyCardResult {
     isSaveDisabled: trimmedDraft.length === EMPTY_LENGTH || save.isPending,
     isPending: save.isPending || clear.isPending,
     errorMessage,
+    errorRemediation,
     onDraftChange: setDraft,
     onSaveClick: () => {
       if (trimmedDraft.length === EMPTY_LENGTH) return;
