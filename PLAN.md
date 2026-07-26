@@ -745,6 +745,7 @@ New main-process modules (all Node-side, secrets never cross IPC):
 - `src/main/guardrails.ts` — protected-path, secret-scan, and tier-versus-diff-size checks over a candidate patch and over the combined landing diff
 - `src/main/landing.ts` — build the integration result in a sandbox worktree, produce the preview payload, execute the landing only when handed a confirmation, and undo the most recent one
 - `src/main/audit.ts` — append-only log of every action taken outside the sandbox, plus guardrail acknowledgements and landing undos
+- `src/main/run.ts` — executes one run end to end: worktree, prompt, agent, decision watch, state transitions. Added in phase 2 because `phase2-single-run` needs somewhere for per-run orchestration to live and `queue.ts` is phase 3; the split leaves `queue.ts` a pure scheduler over this rather than a scheduler with an execution path welded into it
 - `src/main/queue.ts` — concurrency-capped scheduler over selected comments; asks the router for a tier and handles escalation on hard failure
 - `src/main/router.ts` — pure `PrComment` to tier heuristic, plus tier-to-model resolution against `Cursor.models.list()`
 - `src/main/store.ts` — `safeStorage` for `CURSOR_API_KEY` (the only stored secret) + JSON run state including `agentId` per run
