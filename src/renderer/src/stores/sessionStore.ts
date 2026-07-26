@@ -35,6 +35,7 @@ interface SessionStore extends SessionState {
   setTargetBranch: (ref: PrRef, targetBranch: string) => void;
   /** Partial because a drag moves one edge, and the other pane keeps what it had. */
   setPaneWidths: (patch: Partial<PaneWidths>) => void;
+  setIsRunControlsExpanded: (isExpanded: boolean) => void;
   setTierOverride: (commentId: string, tier: ModelTier) => void;
   /** Drops the override so the comment falls back to the heuristic's answer. */
   clearTierOverride: (commentId: string) => void;
@@ -79,6 +80,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     })),
 
   setPaneWidths: (patch) => set((state) => ({ paneWidths: { ...state.paneWidths, ...patch } })),
+
+  setIsRunControlsExpanded: (isRunControlsExpanded) => set({ isRunControlsExpanded }),
 
   markPrViewed: (ref) =>
     set((state) => ({
@@ -133,5 +136,6 @@ export function selectPersistableSession(state: SessionStore): SessionState {
     lastViewedAtByPr: state.lastViewedAtByPr,
     targetBranchByPr: state.targetBranchByPr,
     paneWidths: state.paneWidths,
+    isRunControlsExpanded: state.isRunControlsExpanded,
   };
 }

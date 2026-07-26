@@ -8,6 +8,11 @@ export interface AutoModeToggleProps {
   prRef: PrRef | null;
   /** Called when auto mode is switched on, so the host can pre-select the recommended set. */
   onEnabled: () => void;
+  /**
+   * The boundary copy is worth reading once and then never again, so the host folds it
+   * away with the rest of the explanatory prose. The switch itself always shows.
+   */
+  isExplanationVisible: boolean;
 }
 
 const SECTION_LABEL = 'Auto mode';
@@ -28,7 +33,7 @@ const NOTE_CLASS = 'text-muted text-xs leading-relaxed';
 const DEFERRED_CLASS = 'text-accent text-xs leading-relaxed';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 
-export function AutoModeToggle({ prRef, onEnabled }: AutoModeToggleProps) {
+export function AutoModeToggle({ prRef, onEnabled, isExplanationVisible }: AutoModeToggleProps) {
   const {
     isEnabled,
     isToggleDisabled,
@@ -47,6 +52,8 @@ export function AutoModeToggle({ prRef, onEnabled }: AutoModeToggleProps) {
         {deferredDecisionsLabel}
       </p>
     );
+
+  const boundaryNote = isExplanationVisible ? <p className={NOTE_CLASS}>{BOUNDARY_NOTE}</p> : null;
 
   const error =
     errorMessage === null ? null : (
@@ -67,7 +74,7 @@ export function AutoModeToggle({ prRef, onEnabled }: AutoModeToggleProps) {
         />
         {onStateBadge}
       </div>
-      <p className={NOTE_CLASS}>{BOUNDARY_NOTE}</p>
+      {boundaryNote}
       {deferredDecisions}
       {error}
     </section>

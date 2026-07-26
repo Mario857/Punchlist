@@ -41,6 +41,8 @@ export interface ButtonProps {
   isLoading?: boolean;
   /** Rendered before the label; use an icon component, never an inline SVG. */
   icon?: ReactNode;
+  /** Set only on a disclosure, where the button owns the region it opens. */
+  isExpanded?: boolean;
   title?: string;
   onClick?: () => void;
   className?: string;
@@ -79,6 +81,7 @@ export function Button({
   isDisabled = false,
   isLoading = false,
   icon,
+  isExpanded,
   title,
   onClick,
   className,
@@ -94,6 +97,7 @@ export function Button({
       title={title}
       disabled={isInteractionBlocked}
       aria-busy={isLoading}
+      aria-expanded={isExpanded}
       onClick={onClick}
       className={mergeClassNames(
         'inline-flex shrink-0 items-center justify-center rounded-md',

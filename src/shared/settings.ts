@@ -81,6 +81,12 @@ export const sessionStateSchema = z.object({
    */
   targetBranchByPr: z.record(z.string(), z.string()).default({}),
   paneWidths: paneWidthsSchema.default(() => paneWidthsSchema.parse({})),
+  /**
+   * Closed by default. The batch actions and the sandbox summary are accelerators for
+   * work the panes already do one run at a time, and leaving them open costs a third
+   * of the window in explanatory prose before the first comment is visible.
+   */
+  isRunControlsExpanded: z.boolean().default(false),
 });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;

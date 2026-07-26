@@ -73,8 +73,16 @@ interface UseRunControlsResult {
   isStopAllRunsPending: boolean;
   stopAllErrorMessage: string | null;
   onStopAllClick: () => void;
-  /** False when no run on this PR is in a state a decision could reach at all. */
-  hasBulkDecisionScope: boolean;
+  /**
+   * The disclosure state for everything that is an accelerator rather than the main
+   * path: batch decisions, batch second opinions, the sandbox summary, and the prose
+   * that explains them. Persisted, so it is a preference and not a per-visit chore.
+   */
+  isExpanded: boolean;
+  expandLabel: string;
+  onToggleExpandedClick: () => void;
+  /** Scope *and* the disclosure, so the block is one flag rather than two at the call site. */
+  isBulkReviewVisible: boolean;
   bulkApproveLabel: string;
   isBulkApproveDisabled: boolean;
   isBulkApprovePending: boolean;
@@ -89,8 +97,8 @@ interface UseRunControlsResult {
   bulkRejectErrorMessage: string | null;
   onBulkApproveClick: () => void;
   onBulkRejectClick: () => void;
-  /** False when no run on this PR has a settled patch a second reader could look at. */
-  hasSecondOpinionScope: boolean;
+  isSecondOpinionVisible: boolean;
+  isSandboxSummaryVisible: boolean;
   secondOpinionLabel: string;
   isSecondOpinionDisabled: boolean;
   isSecondOpinionPending: boolean;
@@ -124,6 +132,8 @@ const UNROUTED_TIER = null;
 
 const NO_SELECTION_LABEL = 'Start selected';
 const SINGLE_SELECTION_LABEL = 'Start 1 comment';
+const EXPAND_LABEL = 'More actions';
+const COLLAPSE_LABEL = 'Fewer actions';
 const NO_ACTIVE_RUNS_LABEL = 'Nothing running';
 const SINGLE_ACTIVE_RUN_LABEL = '1 run in flight';
 
@@ -341,6 +351,8 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const selectedCommentIds = useSessionStore((state) => state.selectedCommentIds);
   const setSelectedCommentIds = useSessionStore((state) => state.setSelectedCommentIds);
   const tierOverrideByCommentId = useSessionStore((state) => state.tierOverrideByCommentId);
+  const isExpanded = useSessionStore((state) => state.isRunControlsExpanded);
+  const setIsRunControlsExpanded = useSessionStore((state) => state.setIsRunControlsExpanded);
   const activeRuns = useActiveRunsForPr(prRef);
   const runsForPr = useRunsForPr(prRef);
 
@@ -527,6 +539,11 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
 
   const onCleanupClick = useCallback(() => cleanupSandbox(), [cleanupSandbox]);
 
+  const onToggleExpandedClick = useCallback(
+    () => setIsRunControlsExpanded(!isExpanded),
+    [isExpanded, setIsRunControlsExpanded],
+  );
+
   return {
     startLabel,
     isStartDisabled,
@@ -548,9 +565,12 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     isStopAllRunsPending,
     stopAllErrorMessage: toErrorMessage(stopAllRunsError, STOP_ALL_ERROR_FALLBACK),
     onStopAllClick,
+    isExpanded,
+    expandLabel: isExpanded ? COLLAPSE_LABEL : EXPAND_LABEL,
+    onToggleExpandedClick,
     // A flag-blocked run is a `ready` run, so it is in this scope too: the row stays on
     // screen carrying its exclusion notice rather than vanishing along with the reason.
-    hasBulkDecisionScope: rejectableRunIds.length > EMPTY_COUNT,
+    isBulkReviewVisible: isExpanded && rejectableRunIds.length > EMPTY_COUNT,
     bulkApproveLabel: buildBulkApproveLabel(approvableRunIds.length),
     isBulkApproveDisabled: approvableRunIds.length === EMPTY_COUNT,
     isBulkApprovePending: isApproveRunsPending,
@@ -565,8 +585,10 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     onBulkRejectClick,
     // A run already carrying a verdict keeps the block on screen with its exclusion
     // notice, rather than the control vanishing along with the reason it did nothing.
-    hasSecondOpinionScope:
-      secondOpinionRunIds.length > EMPTY_COUNT || alreadyReviewedCount > EMPTY_COUNT,
+    isSecondOpinionVisible:
+      isExpanded &&
+      (secondOpinionRunIds.length > EMPTY_COUNT || alreadyReviewedCount > EMPTY_COUNT),
+    isSandboxSummaryVisible: isExpanded,
     secondOpinionLabel: buildSecondOpinionLabel(secondOpinionRunIds.length),
     isSecondOpinionDisabled: secondOpinionRunIds.length === EMPTY_COUNT,
     isSecondOpinionPending: isRequestSecondOpinionPending,

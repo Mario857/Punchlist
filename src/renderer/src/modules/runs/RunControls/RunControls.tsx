@@ -6,6 +6,8 @@ import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
 import { StateBadge } from '@renderer/components/StateBadge';
 import { Toggle, TOGGLE_SIZE } from '@renderer/components/Toggle';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
+import { ChevronDownIcon } from '@renderer/components/icons/ChevronDownIcon';
+import { ChevronRightIcon } from '@renderer/components/icons/ChevronRightIcon';
 import { XIcon } from '@renderer/components/icons/XIcon';
 import { AutoModeToggle } from '@renderer/modules/runs/AutoModeToggle/AutoModeToggle';
 import { BatchTierPicker } from '@renderer/modules/runs/RunControls/components/BatchTierPicker/BatchTierPicker';
@@ -33,6 +35,7 @@ const STALE_TITLE =
   'The PR head moved after this run started, so its patch is against code that is no longer current';
 
 const CANCEL_ICON_SIZE = 11;
+const DISCLOSURE_ICON_SIZE = 12;
 const ATTENTION_ICON_SIZE = 12;
 /** Matches the comment tree's row glyphs, so a badge means the same thing in both panes. */
 const ROW_ALERT_ICON_SIZE = 11;
@@ -70,7 +73,10 @@ export function RunControls({ prRef }: RunControlsProps) {
     isStopAllRunsPending,
     stopAllErrorMessage,
     onStopAllClick,
-    hasBulkDecisionScope,
+    isExpanded,
+    expandLabel,
+    onToggleExpandedClick,
+    isBulkReviewVisible,
     bulkApproveLabel,
     isBulkApproveDisabled,
     isBulkApprovePending,
@@ -83,7 +89,8 @@ export function RunControls({ prRef }: RunControlsProps) {
     bulkRejectErrorMessage,
     onBulkApproveClick,
     onBulkRejectClick,
-    hasSecondOpinionScope,
+    isSecondOpinionVisible,
+    isSandboxSummaryVisible,
     secondOpinionLabel,
     isSecondOpinionDisabled,
     isSecondOpinionPending,
@@ -229,7 +236,7 @@ export function RunControls({ prRef }: RunControlsProps) {
   // Reviewing one run at a time stays the default, so neither of these is the loud
   // button in this card. Nothing here reaches the landing gate: a bulk approve only
   // ever moves records to approved, which is what the note beneath it says.
-  const bulkReview = hasBulkDecisionScope ? (
+  const bulkReview = isBulkReviewVisible ? (
     <div className={BLOCK_COLUMN_CLASS}>
       <p className={BLOCK_HEADING_CLASS}>{BULK_REVIEW_HEADING}</p>
       <div className={BUTTON_ROW_CLASS}>
@@ -273,7 +280,7 @@ export function RunControls({ prRef }: RunControlsProps) {
 
   // Secondary like the bulk decisions, and for a sharper reason: this one spends an
   // agent per run, so it must not read as the obvious thing to press.
-  const secondOpinionBatch = hasSecondOpinionScope ? (
+  const secondOpinionBatch = isSecondOpinionVisible ? (
     <div className={BLOCK_COLUMN_CLASS}>
       <p className={BLOCK_HEADING_CLASS}>{SECOND_OPINION_HEADING}</p>
       <Button
@@ -310,6 +317,33 @@ export function RunControls({ prRef }: RunControlsProps) {
     </p>
   );
 
+  // Disk housekeeping, folded away with the other accelerators. Its warning is not:
+  // `cleanupAttention` stays outside, because a cleanup that left work behind is the
+  // one thing here that always needs a human.
+  const sandboxBlock = isSandboxSummaryVisible ? (
+    <div className={ROW_CLASS}>
+      <div className="min-w-0 flex-1">
+        <p className={BLOCK_HEADING_CLASS}>{SANDBOX_HEADING}</p>
+        {sandboxSummary}
+      </div>
+      <Button
+        variant={BUTTON_VARIANT.SECONDARY}
+        size={BUTTON_SIZE.SM}
+        isDisabled={isCleanupDisabled}
+        isLoading={isSandboxCleanupPending}
+        onClick={onCleanupClick}
+      >
+        {CLEANUP_LABEL}
+      </Button>
+    </div>
+  ) : null;
+
+  const expandIcon = isExpanded ? (
+    <ChevronDownIcon size={DISCLOSURE_ICON_SIZE} />
+  ) : (
+    <ChevronRightIcon size={DISCLOSURE_ICON_SIZE} />
+  );
+
   return (
     <section aria-label={SECTION_LABEL}>
       <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM} className="flex flex-col gap-2">
@@ -328,31 +362,30 @@ export function RunControls({ prRef }: RunControlsProps) {
             {activeRunsLabel}
           </span>
           {stopAllButton}
+          <Button
+            variant={BUTTON_VARIANT.GHOST}
+            size={BUTTON_SIZE.SM}
+            icon={expandIcon}
+            isExpanded={isExpanded}
+            onClick={onToggleExpandedClick}
+          >
+            {expandLabel}
+          </Button>
         </div>
         {poolSpendingNotice}
         {costUnknownNotice}
         {startError}
-        <AutoModeToggle prRef={prRef} onEnabled={onAutoModeEnabled} />
+        <AutoModeToggle
+          prRef={prRef}
+          onEnabled={onAutoModeEnabled}
+          isExplanationVisible={isExpanded}
+        />
         {activeRunList}
         {cancelError}
         {stopAllError}
         {bulkReview}
         {secondOpinionBatch}
-        <div className={ROW_CLASS}>
-          <div className="min-w-0 flex-1">
-            <p className={BLOCK_HEADING_CLASS}>{SANDBOX_HEADING}</p>
-            {sandboxSummary}
-          </div>
-          <Button
-            variant={BUTTON_VARIANT.SECONDARY}
-            size={BUTTON_SIZE.SM}
-            isDisabled={isCleanupDisabled}
-            isLoading={isSandboxCleanupPending}
-            onClick={onCleanupClick}
-          >
-            {CLEANUP_LABEL}
-          </Button>
-        </div>
+        {sandboxBlock}
         {cleanupAttention}
       </Card>
     </section>
