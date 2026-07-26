@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrRef } from '@shared/discovery';
 import type {
   CandidatePatch,
+  ContinueRunRequest,
   EscalateRunRequest,
   RunRecord,
   SandboxUsage,
@@ -180,6 +181,35 @@ export function useExecuteStopAllRuns(): UseExecuteStopAllRunsResult {
   });
 
   return { stopAllRuns: mutate, isStopAllRunsPending: isPending, stopAllRunsError: error };
+}
+
+interface UseExecuteContinueRunResult {
+  continueRun: (request: ContinueRunRequest) => void;
+  isContinueRunPending: boolean;
+  continueRunError: unknown;
+}
+
+/**
+ * The decision reply and the whole-patch follow-up are one mechanism — `agent.send` on
+ * the same agent — so they share one mutation. What the continuation *means* is decided
+ * in main from the run's state, which is why the request carries only a message.
+ *
+ * Sends are serialized per run in main, so the mutation stays pending until that run's
+ * turn completes rather than resolving early on a queued send. The returned record is
+ * authoritative and the store also receives the streamed transition, so there is
+ * nothing optimistic to patch here.
+ */
+export function useExecuteContinueRun(): UseExecuteContinueRunResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (request: ContinueRunRequest) =>
+      unwrapIpcResult(await requireBridge().runs.continueRun(request)),
+    onSuccess: (continued) => hydrate([continued]),
+    onError: (mutationError) => logError(mutationError, 'useExecuteContinueRun'),
+  });
+
+  return { continueRun: mutate, isContinueRunPending: isPending, continueRunError: error };
 }
 
 interface UseExecuteEscalateRunResult {

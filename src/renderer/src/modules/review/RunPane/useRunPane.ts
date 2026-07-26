@@ -36,6 +36,11 @@ export type RunPaneView =
       runId: string;
       /** Non-null only while revising, which keeps the diff on screen but dimmed. */
       revisionProgressLabel: string | null;
+      /**
+       * The whole-patch follow-up is offered in `ready` only: revising means the agent
+       * already has the run, and an applied patch is no longer a candidate.
+       */
+      isFollowUpAvailable: boolean;
     }
   | { kind: typeof RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED; heading: string; explanation: string }
   | {
@@ -188,11 +193,23 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         revisionProgressLabel: toRevisionProgressLabel(run),
+        isFollowUpAvailable: false,
       };
     case RUN_STATE.READY:
+      return {
+        kind: RUN_PANE_VIEW_KIND.DIFF,
+        runId: run.id,
+        revisionProgressLabel: null,
+        isFollowUpAvailable: true,
+      };
     case RUN_STATE.APPROVED:
     case RUN_STATE.APPLIED:
-      return { kind: RUN_PANE_VIEW_KIND.DIFF, runId: run.id, revisionProgressLabel: null };
+      return {
+        kind: RUN_PANE_VIEW_KIND.DIFF,
+        runId: run.id,
+        revisionProgressLabel: null,
+        isFollowUpAvailable: false,
+      };
     case RUN_STATE.NO_ACTION_NEEDED:
       return {
         kind: RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED,

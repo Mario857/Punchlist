@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import type { AgentDecision } from '@shared/runs';
+import { isDefined } from '@renderer/lib/guards';
+import { isIpcError } from '@renderer/lib/unwrapIpcResult';
+import { useExecuteContinueRun } from '@renderer/modules/runs/useQueryRuns';
 
 export interface UseDecisionPromptOptions {
   runId: string;
@@ -24,39 +27,49 @@ interface UseDecisionPromptResult {
   hasChoosableOptions: boolean;
   replyFieldId: string;
   replyLabel: string;
+  replyExplanation: string;
   replyPlaceholder: string;
   replyDraft: string;
   isSendDisabled: boolean;
-  /** Non-null while a drafted reply cannot yet be delivered to the agent. */
-  replyDeliveryNote: string | null;
+  isSendPending: boolean;
+  /** Non-null only while the reply is with the agent, which can take a while. */
+  sendPendingLabel: string | null;
+  sendErrorMessage: string | null;
+  sendErrorRemediation: string | null;
   onReplyChange: (event: ChangeEvent<HTMLTextAreaElement>) => void;
+  onSendClick: () => void;
 }
 
 const REPLY_FIELD_ID_PREFIX = 'decision-reply-';
 const REPLY_LABEL = 'Your answer';
+
+/**
+ * Adapted from the note this box used to carry while the reply could be composed but
+ * not delivered: the continuity is the point, so it stays as copy now that answering
+ * actually resumes the agent.
+ */
+const REPLY_EXPLANATION =
+  'Answering resumes this same agent, so it keeps everything it already worked out.';
+
 const REPLY_PLACEHOLDER = 'Pick an option above or describe what the agent should do instead.';
 const RECOMMENDED_OPTION_INDEX = 0;
 
 /** One option is a statement, not a choice; two is the first point a list earns its space. */
 const MIN_CHOOSABLE_OPTION_COUNT = 2;
 
+/** Sends are serialized per run in main, so a reply can wait its turn before working. */
+const SEND_PENDING_LABEL = 'Sending your answer to the agent…';
+const SEND_ERROR_FALLBACK = 'Could not send the answer to the agent.';
+
 const EMPTY_LENGTH = 0;
 const EMPTY_DRAFT = '';
-
-/**
- * Answering goes back through `agent.send` on the same agent, which is the identical
- * mechanism to a targeted edit and lands with revisions. Until that channel exists the
- * answer can be composed but not delivered, so the control says so instead of failing
- * silently on click.
- */
-const REPLY_DELIVERY_NOTE =
-  'Answering resumes this same agent, so it keeps everything it already worked out. Delivering the reply arrives with revisions.';
 
 export function useDecisionPrompt({
   runId,
   decision,
 }: UseDecisionPromptOptions): UseDecisionPromptResult {
   const [replyDraft, setReplyDraft] = useState(EMPTY_DRAFT);
+  const { continueRun, isContinueRunPending, continueRunError } = useExecuteContinueRun();
 
   const optionItems = useMemo(
     () =>
@@ -74,8 +87,20 @@ export function useDecisionPrompt({
     setReplyDraft(event.target.value);
   }, []);
 
-  const replyDeliveryNote: string | null = REPLY_DELIVERY_NOTE;
-  const isDraftEmpty = replyDraft.trim().length === EMPTY_LENGTH;
+  const trimmedReply = replyDraft.trim();
+  const isDraftEmpty = trimmedReply.length === EMPTY_LENGTH;
+
+  const onSendClick = useCallback(() => {
+    // Main rejects a blank continuation anyway; refusing it here keeps the button from
+    // offering a send that cannot land.
+    if (trimmedReply.length === EMPTY_LENGTH) return;
+    continueRun({ runId, message: trimmedReply });
+  }, [continueRun, runId, trimmedReply]);
+
+  const sendErrorMessage = (() => {
+    if (!isDefined(continueRunError)) return null;
+    return isIpcError(continueRunError) ? continueRunError.message : SEND_ERROR_FALLBACK;
+  })();
 
   return {
     question: decision.question,
@@ -84,10 +109,15 @@ export function useDecisionPrompt({
     hasChoosableOptions: decision.options.length >= MIN_CHOOSABLE_OPTION_COUNT,
     replyFieldId: `${REPLY_FIELD_ID_PREFIX}${runId}`,
     replyLabel: REPLY_LABEL,
+    replyExplanation: REPLY_EXPLANATION,
     replyPlaceholder: REPLY_PLACEHOLDER,
     replyDraft,
-    isSendDisabled: isDraftEmpty || replyDeliveryNote !== null,
-    replyDeliveryNote,
+    isSendDisabled: isDraftEmpty,
+    isSendPending: isContinueRunPending,
+    sendPendingLabel: isContinueRunPending ? SEND_PENDING_LABEL : null,
+    sendErrorMessage,
+    sendErrorRemediation: isIpcError(continueRunError) ? continueRunError.remediation : null,
     onReplyChange,
+    onSendClick,
   };
 }

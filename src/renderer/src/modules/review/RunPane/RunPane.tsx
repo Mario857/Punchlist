@@ -4,6 +4,7 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentTranscript';
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
+import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUpPrompt';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -44,14 +45,24 @@ export function RunPane({ commentId }: RunPaneProps) {
         );
       case RUN_PANE_VIEW_KIND.DECISION:
         return <DecisionPrompt key={view.runId} runId={view.runId} decision={view.decision} />;
-      case RUN_PANE_VIEW_KIND.DIFF:
+      case RUN_PANE_VIEW_KIND.DIFF: {
+        // Keyed per run so a drafted follow-up cannot follow the selection onto a
+        // different comment's patch.
+        const followUpPrompt = view.isFollowUpAvailable ? (
+          <FollowUpPrompt key={view.runId} runId={view.runId} />
+        ) : null;
+
         return (
-          <DiffReview
-            key={view.runId}
-            runId={view.runId}
-            revisionProgressLabel={view.revisionProgressLabel}
-          />
+          <div className={COLUMN_CLASS}>
+            <DiffReview
+              key={view.runId}
+              runId={view.runId}
+              revisionProgressLabel={view.revisionProgressLabel}
+            />
+            {followUpPrompt}
+          </div>
         );
+      }
       case RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED:
         return (
           <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD}>

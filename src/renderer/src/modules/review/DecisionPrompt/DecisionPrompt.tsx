@@ -33,6 +33,7 @@ const OPTION_CLASS = joinClassNames(
   'hover:border-border-strong hover:bg-surface-hover',
   FOCUS_RING,
   INTERACTIVE_TRANSITION,
+  DISABLED_STATE,
 );
 
 const OPTION_SELECTED_CLASS = 'border-accent bg-accent/10';
@@ -50,6 +51,8 @@ const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const SUB_HEADING_CLASS = 'text-muted text-xs font-medium tracking-wide uppercase';
 const BODY_CLASS = 'text-ink text-sm leading-relaxed';
 const META_CLASS = 'text-muted text-xs leading-relaxed';
+const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
+const REMEDIATION_CLASS = 'text-muted block';
 
 /**
  * needsDecision is not a failure, so this reads as a prompt waiting on you rather than
@@ -63,11 +66,16 @@ export function DecisionPrompt({ runId, decision }: DecisionPromptProps) {
     hasChoosableOptions,
     replyFieldId,
     replyLabel,
+    replyExplanation,
     replyPlaceholder,
     replyDraft,
     isSendDisabled,
-    replyDeliveryNote,
+    isSendPending,
+    sendPendingLabel,
+    sendErrorMessage,
+    sendErrorRemediation,
     onReplyChange,
+    onSendClick,
   } = useDecisionPrompt({ runId, decision });
 
   const optionButtons = optionItems.map((item) => {
@@ -83,6 +91,7 @@ export function DecisionPrompt({ runId, decision }: DecisionPromptProps) {
         <button
           type="button"
           onClick={item.onSelect}
+          disabled={isSendPending}
           aria-pressed={item.isSelected}
           className={optionClassName}
         >
@@ -108,8 +117,25 @@ export function DecisionPrompt({ runId, decision }: DecisionPromptProps) {
       </div>
     );
 
-  const deliveryNote =
-    replyDeliveryNote === null ? null : <p className={META_CLASS}>{replyDeliveryNote}</p>;
+  const sendPending =
+    sendPendingLabel === null ? null : (
+      <p role="status" className={META_CLASS}>
+        {sendPendingLabel}
+      </p>
+    );
+
+  const sendErrorRemediationLine =
+    sendErrorRemediation === null ? null : (
+      <span className={REMEDIATION_CLASS}>{sendErrorRemediation}</span>
+    );
+
+  const sendError =
+    sendErrorMessage === null ? null : (
+      <p role="alert" className={ERROR_CLASS}>
+        {sendErrorMessage}
+        {sendErrorRemediationLine}
+      </p>
+    );
 
   return (
     <section aria-label={SECTION_LABEL} className="flex min-h-0 flex-col gap-3 overflow-y-auto">
@@ -129,20 +155,25 @@ export function DecisionPrompt({ runId, decision }: DecisionPromptProps) {
         <label htmlFor={replyFieldId} className={SUB_HEADING_CLASS}>
           {replyLabel}
         </label>
+        <p className={META_CLASS}>{replyExplanation}</p>
         <textarea
           id={replyFieldId}
           rows={REPLY_ROW_COUNT}
           value={replyDraft}
           placeholder={replyPlaceholder}
+          disabled={isSendPending}
           onChange={onReplyChange}
           className={REPLY_FIELD_CLASS}
         />
-        {deliveryNote}
+        {sendPending}
+        {sendError}
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
           size={BUTTON_SIZE.SM}
           isDisabled={isSendDisabled}
+          isLoading={isSendPending}
           title={SEND_LABEL}
+          onClick={onSendClick}
         >
           {SEND_LABEL}
         </Button>
