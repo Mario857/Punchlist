@@ -5,6 +5,7 @@ import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentT
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
 import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUpPrompt';
+import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -52,8 +53,15 @@ export function RunPane({ commentId }: RunPaneProps) {
           <FollowUpPrompt key={view.runId} runId={view.runId} />
         ) : null;
 
+        // Above the diff rather than under it: a flag is worth seeing before you start
+        // reading the patch, not after you have already scrolled it.
+        const guardrailFlags = view.hasGuardrailFlags ? (
+          <GuardrailFlags key={view.runId} runId={view.runId} />
+        ) : null;
+
         return (
           <div className={COLUMN_CLASS}>
+            {guardrailFlags}
             <DiffReview
               key={view.runId}
               runId={view.runId}

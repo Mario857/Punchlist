@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrRef } from '@shared/discovery';
 import type {
+  AcknowledgeGuardrailRequest,
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
@@ -210,6 +211,34 @@ export function useExecuteContinueRun(): UseExecuteContinueRunResult {
   });
 
   return { continueRun: mutate, isContinueRunPending: isPending, continueRunError: error };
+}
+
+interface UseExecuteAcknowledgeGuardrailResult {
+  acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest) => void;
+  isAcknowledgeGuardrailPending: boolean;
+  acknowledgeGuardrailError: unknown;
+}
+
+/**
+ * Acknowledging a flag is what lets a patch be approved later, and main audits the
+ * acknowledgement, so it is never assumed here: the returned record is authoritative
+ * and the streamed state change arrives with it, leaving nothing optimistic to patch.
+ */
+export function useExecuteAcknowledgeGuardrail(): UseExecuteAcknowledgeGuardrailResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (request: AcknowledgeGuardrailRequest) =>
+      unwrapIpcResult(await requireBridge().runs.acknowledgeGuardrail(request)),
+    onSuccess: (acknowledged) => hydrate([acknowledged]),
+    onError: (mutationError) => logError(mutationError, 'useExecuteAcknowledgeGuardrail'),
+  });
+
+  return {
+    acknowledgeGuardrail: mutate,
+    isAcknowledgeGuardrailPending: isPending,
+    acknowledgeGuardrailError: error,
+  };
 }
 
 interface UseExecuteEscalateRunResult {

@@ -34,6 +34,11 @@ export type RunPaneView =
   | {
       kind: typeof RUN_PANE_VIEW_KIND.DIFF;
       runId: string;
+      /**
+       * True while the patch carries any flag at all, acknowledged or not: an accepted
+       * flag stays on screen because the record of what was accepted is the point.
+       */
+      hasGuardrailFlags: boolean;
       /** Non-null only while revising, which keeps the diff on screen but dimmed. */
       revisionProgressLabel: string | null;
       /**
@@ -111,6 +116,7 @@ const META_SEPARATOR = ' · ';
 /** A failure is diagnosed from the end of the output, not from the whole log. */
 const FAILURE_TRANSCRIPT_TAIL_LINE_COUNT = 40;
 const NO_REVISIONS = 0;
+const NO_GUARDRAIL_FLAGS = 0;
 
 interface FailureCopy {
   heading: string;
@@ -161,6 +167,8 @@ function toRevisionProgressLabel(run: RunRecord): string {
 }
 
 function toView(run: RunRecord): RunPaneView {
+  const hasGuardrailFlags = run.guardrailFlags.length > NO_GUARDRAIL_FLAGS;
+
   switch (run.state) {
     case RUN_STATE.QUEUED:
       return {
@@ -192,6 +200,7 @@ function toView(run: RunRecord): RunPaneView {
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
+        hasGuardrailFlags,
         revisionProgressLabel: toRevisionProgressLabel(run),
         isFollowUpAvailable: false,
       };
@@ -199,6 +208,7 @@ function toView(run: RunRecord): RunPaneView {
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
+        hasGuardrailFlags,
         revisionProgressLabel: null,
         isFollowUpAvailable: true,
       };
@@ -207,6 +217,7 @@ function toView(run: RunRecord): RunPaneView {
       return {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
+        hasGuardrailFlags,
         revisionProgressLabel: null,
         isFollowUpAvailable: false,
       };
