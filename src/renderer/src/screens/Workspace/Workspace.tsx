@@ -9,12 +9,18 @@ import { PrPicker } from '@renderer/modules/discovery/PrPicker/PrPicker';
 import { CommentDetail } from '@renderer/modules/review/CommentDetail/CommentDetail';
 import { RunPane } from '@renderer/modules/review/RunPane/RunPane';
 import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
+import { LEFT_PANE_WIDTH, RIGHT_PANE_WIDTH } from '@shared/settings';
+import { PaneDivider } from './components/PaneDivider/PaneDivider';
+import { PANE_EDGE } from './components/PaneDivider/usePaneDivider';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
-const LEFT_PANE_CLASS = 'border-border flex w-80 shrink-0 flex-col overflow-hidden border-r';
-const CENTER_PANE_CLASS = 'border-border min-w-0 flex-1 overflow-y-auto border-r';
-const RIGHT_PANE_CLASS = 'w-96 shrink-0 overflow-y-auto';
+// The dividers carry the border now, so the panes no longer draw their own.
+const LEFT_PANE_CLASS = 'flex shrink-0 flex-col overflow-hidden';
+const CENTER_PANE_CLASS = 'min-w-0 flex-1 overflow-y-auto';
+const RIGHT_PANE_CLASS = 'shrink-0 overflow-y-auto';
+const LEFT_DIVIDER_LABEL = 'Resize the comment list';
+const RIGHT_DIVIDER_LABEL = 'Resize the run pane';
 /** Focusable by the `e` shortcut, but never a stop in the normal tab order. */
 const PANE_FOCUS_TAB_INDEX = -1;
 const COMMENTS_ERROR_FALLBACK = 'Could not load comments for this pull request.';
@@ -32,6 +38,12 @@ export function Workspace() {
     runStateByCommentId,
     commentTreeRef,
     diffPaneRef,
+    leftPaneStyle,
+    rightPaneStyle,
+    leftPaneWidth,
+    rightPaneWidth,
+    onLeftPaneWidthChange,
+    onRightPaneWidthChange,
     targetBranch,
     isLandingOpen,
     onTargetBranchChange,
@@ -106,13 +118,36 @@ export function Workspace() {
     }
     return (
       <div className="flex min-h-0 flex-1">
-        <div className={LEFT_PANE_CLASS}>{leftPane}</div>
+        <div className={LEFT_PANE_CLASS} style={leftPaneStyle}>
+          {leftPane}
+        </div>
+        <PaneDivider
+          label={LEFT_DIVIDER_LABEL}
+          edge={PANE_EDGE.LEADING}
+          width={leftPaneWidth}
+          minWidth={LEFT_PANE_WIDTH.MIN}
+          maxWidth={LEFT_PANE_WIDTH.MAX}
+          onWidthChange={onLeftPaneWidthChange}
+        />
         <div className={CENTER_PANE_CLASS}>
           <CommentDetail comment={selectedComment} />
         </div>
+        <PaneDivider
+          label={RIGHT_DIVIDER_LABEL}
+          edge={PANE_EDGE.TRAILING}
+          width={rightPaneWidth}
+          minWidth={RIGHT_PANE_WIDTH.MIN}
+          maxWidth={RIGHT_PANE_WIDTH.MAX}
+          onWidthChange={onRightPaneWidthChange}
+        />
         {/* tabIndex makes the pane a focus target for the `e` shortcut, without
             making it a tab stop in the normal order. */}
-        <div className={RIGHT_PANE_CLASS} ref={diffPaneRef} tabIndex={PANE_FOCUS_TAB_INDEX}>
+        <div
+          className={RIGHT_PANE_CLASS}
+          style={rightPaneStyle}
+          ref={diffPaneRef}
+          tabIndex={PANE_FOCUS_TAB_INDEX}
+        >
           <RunPane commentId={selectedCommentId} />
         </div>
       </div>

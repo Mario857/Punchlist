@@ -25,6 +25,12 @@ const HEADLINE_CLASS = 'text-muted text-xs leading-relaxed';
 const EMPTY_STATE_CLASS = 'text-muted grid flex-1 place-items-center p-6 text-center text-sm';
 const ERROR_MESSAGE_CLASS = 'text-danger mt-2 font-mono text-xs break-words';
 const COLUMN_CLASS = 'flex min-h-0 flex-1 flex-col gap-2';
+/**
+ * `min-h-full`, not `h-full`: the diff view stacks cards around an editor with a
+ * height floor, and a section pinned to the pane's height would clip them instead of
+ * letting the pane scroll.
+ */
+const SECTION_CLASS = 'flex min-h-full flex-col gap-2 p-3';
 
 /**
  * The state-dependent right pane. The branch is a named `const` over a discriminated
@@ -145,7 +151,7 @@ export function RunPane({ commentId }: RunPaneProps) {
   })();
 
   return (
-    <section aria-label={SECTION_LABEL} className="flex h-full min-h-0 flex-col gap-2 p-3">
+    <section aria-label={SECTION_LABEL} className={SECTION_CLASS}>
       <header className="flex items-center gap-2">
         {stateBadge}
         {meta}

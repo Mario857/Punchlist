@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type Ref,
+} from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { RUN_STATE, type RunState } from '@shared/runState';
@@ -35,6 +43,13 @@ interface UseWorkspaceResult {
   runStateByCommentId: Readonly<Record<string, RunState>>;
   commentTreeRef: Ref<CommentTreeNavigationHandle>;
   diffPaneRef: Ref<HTMLDivElement>;
+  /** A persisted pixel width cannot be a utility class, so it arrives as a style. */
+  leftPaneStyle: CSSProperties;
+  rightPaneStyle: CSSProperties;
+  leftPaneWidth: number;
+  rightPaneWidth: number;
+  onLeftPaneWidthChange: (width: number) => void;
+  onRightPaneWidthChange: (width: number) => void;
   targetBranch: string;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
@@ -63,6 +78,8 @@ export function useWorkspace(): UseWorkspaceResult {
   const [isLandingOpen, setIsLandingOpen] = useState(false);
   const targetBranchByPr = useSessionStore((state) => state.targetBranchByPr);
   const setTargetBranch = useSessionStore((state) => state.setTargetBranch);
+  const paneWidths = useSessionStore((state) => state.paneWidths);
+  const setPaneWidths = useSessionStore((state) => state.setPaneWidths);
 
   const {
     prComments,
@@ -103,6 +120,18 @@ export function useWorkspace(): UseWorkspaceResult {
   const { onApproveClick, onRejectClick } = useReviewDecision({
     runId: selectedRun?.id ?? null,
   });
+
+  const leftPaneStyle = useMemo(() => ({ width: paneWidths.left }), [paneWidths.left]);
+  const rightPaneStyle = useMemo(() => ({ width: paneWidths.right }), [paneWidths.right]);
+
+  const onLeftPaneWidthChange = useCallback(
+    (left: number) => setPaneWidths({ left }),
+    [setPaneWidths],
+  );
+  const onRightPaneWidthChange = useCallback(
+    (right: number) => setPaneWidths({ right }),
+    [setPaneWidths],
+  );
 
   const onDismissSelectedRun = useCallback(() => {
     if (selectedRun === null) return;
@@ -145,6 +174,12 @@ export function useWorkspace(): UseWorkspaceResult {
     runStateByCommentId,
     commentTreeRef,
     diffPaneRef,
+    leftPaneStyle,
+    rightPaneStyle,
+    leftPaneWidth: paneWidths.left,
+    rightPaneWidth: paneWidths.right,
+    onLeftPaneWidthChange,
+    onRightPaneWidthChange,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,

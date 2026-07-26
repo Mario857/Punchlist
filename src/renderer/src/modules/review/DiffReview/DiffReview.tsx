@@ -29,7 +29,12 @@ const PROGRESS_CLASS = 'text-state-revising flex items-center gap-1.5 text-xs';
 const TOOLBAR_CLASS = 'flex shrink-0 items-center gap-1';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 const REMEDIATION_CLASS = 'text-muted block';
-const DIFF_BODY_CLASS = 'flex min-h-0 flex-1';
+/**
+ * A floor rather than `min-h-0`: the patch shares a scrolling column with the flag,
+ * opinion and decision cards, all of which take their natural height, so a shrinkable
+ * editor collapsed to a few pixels and the diff became invisible.
+ */
+const DIFF_BODY_CLASS = 'flex min-h-96 flex-1';
 const DIMMED_CLASS = 'opacity-50';
 
 export function DiffReview({ runId, revisionProgressLabel, isEditable }: DiffReviewProps) {

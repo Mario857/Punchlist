@@ -277,34 +277,79 @@ async function startAgentTurn(
   }
 }
 
-function toBlockLine(block: TextBlock | ToolUseBlock): string {
-  return block.type === SDK_BLOCK_TYPE.TEXT ? block.text : `${TOOL_CALL_LABEL} ${block.name}`;
+/**
+ * One piece of transcript. `isDelta` is the whole point: assistant text arrives as a
+ * stream of fragments — often a single word — so it has to be concatenated, while
+ * every other kind of message is already a complete line.
+ */
+interface TranscriptPiece {
+  text: string;
+  isDelta: boolean;
 }
 
-function formatTranscriptLine(label: string, text: string): string {
-  return `${label} ${text}${TRANSCRIPT_LINE_SEPARATOR}`;
+function toBlockPiece(block: TextBlock | ToolUseBlock): TranscriptPiece {
+  if (block.type === SDK_BLOCK_TYPE.TEXT) return { text: block.text, isDelta: true };
+  return { text: `${TOOL_CALL_LABEL} ${block.name}`, isDelta: false };
 }
 
-function toTranscriptChunk(message: SDKMessage): string | null {
+function toTranscriptPieces(message: SDKMessage): TranscriptPiece[] {
   switch (message.type) {
-    case SDK_MESSAGE_TYPE.ASSISTANT: {
-      const lines = message.message.content.map(toBlockLine).filter((line) => line.length > 0);
-      if (lines.length === 0) return null;
-      return `${lines.join(TRANSCRIPT_LINE_SEPARATOR)}${TRANSCRIPT_LINE_SEPARATOR}`;
-    }
+    case SDK_MESSAGE_TYPE.ASSISTANT:
+      return message.message.content.map(toBlockPiece).filter((piece) => piece.text.length > 0);
     case SDK_MESSAGE_TYPE.THINKING:
-      return formatTranscriptLine(THINKING_LABEL, message.text);
+      return [{ text: `${THINKING_LABEL} ${message.text}`, isDelta: false }];
     case SDK_MESSAGE_TYPE.TOOL_CALL:
       // Tool arguments and results are dropped on purpose: they quote file contents,
       // and the transcript is persisted and shown.
-      return formatTranscriptLine(TOOL_CALL_LABEL, `${message.name} (${message.status})`);
+      return [{ text: `${TOOL_CALL_LABEL} ${message.name} (${message.status})`, isDelta: false }];
     case SDK_MESSAGE_TYPE.TASK:
-      return message.text === undefined ? null : formatTranscriptLine(TASK_LABEL, message.text);
+      if (message.text === undefined) return [];
+      return [{ text: `${TASK_LABEL} ${message.text}`, isDelta: false }];
     default:
       // SDKMessage belongs to the SDK and gains members between versions, so an
       // unrecognised kind is skipped rather than made a compile error here.
-      return null;
+      return [];
   }
+}
+
+interface TranscriptFormatter {
+  format: (message: SDKMessage) => string | null;
+  /** The separator owed to an assistant turn that the stream ended in the middle of. */
+  flush: () => string | null;
+}
+
+/**
+ * Stateful because a line break can only be decided once the assistant's turn is over.
+ * Terminating each streamed message instead produced a transcript one word per row,
+ * which is unreadable and was the whole reason this exists.
+ */
+function createTranscriptFormatter(): TranscriptFormatter {
+  let isMidAssistantText = false;
+
+  const closeAssistantText = (): string => {
+    if (!isMidAssistantText) return '';
+    isMidAssistantText = false;
+    return TRANSCRIPT_LINE_SEPARATOR;
+  };
+
+  return {
+    format: (message) => {
+      let chunk = '';
+      for (const piece of toTranscriptPieces(message)) {
+        if (piece.isDelta) {
+          chunk += piece.text;
+          isMidAssistantText = true;
+          continue;
+        }
+        chunk += `${closeAssistantText()}${piece.text}${TRANSCRIPT_LINE_SEPARATOR}`;
+      }
+      return chunk.length === 0 ? null : chunk;
+    },
+    flush: () => {
+      const chunk = closeAssistantText();
+      return chunk.length === 0 ? null : chunk;
+    },
+  };
 }
 
 async function cancelRunIfSupported(run: Run): Promise<void> {
@@ -348,10 +393,13 @@ async function driveRun(
     // A run shape without streaming still produces a result, so the transcript is
     // optional where the result is not.
     if (run.supports(RUN_OPERATION.STREAM)) {
+      const formatter = createTranscriptFormatter();
       for await (const message of run.stream()) {
-        const chunk = toTranscriptChunk(message);
+        const chunk = formatter.format(message);
         if (chunk !== null) appendTranscript(chunk);
       }
+      const trailing = formatter.flush();
+      if (trailing !== null) appendTranscript(trailing);
     }
 
     const result = await run.wait();

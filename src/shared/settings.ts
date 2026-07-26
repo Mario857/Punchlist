@@ -39,6 +39,30 @@ export type AppSettings = z.infer<typeof appSettingsSchema>;
 export const DEFAULT_APP_SETTINGS: AppSettings = appSettingsSchema.parse({});
 
 /**
+ * Pane widths in CSS pixels. Persisted rather than fixed because how much room the
+ * diff needs is a judgement about the monitor in front of you: the same width that is
+ * generous on a laptop leaves a side-by-side patch unreadable on a wide display.
+ */
+export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 320, MAX: 560 } as const;
+export const RIGHT_PANE_WIDTH = { MIN: 360, DEFAULT: 560, MAX: 1200 } as const;
+
+/**
+ * `.catch` rather than a bare default: a width persisted by an older build, or one
+ * saved on a monitor that is no longer attached, degrades to the default instead of
+ * failing the whole session parse and losing the rest of the restored state.
+ */
+const paneWidthsSchema = z.object({
+  left: z.number().min(LEFT_PANE_WIDTH.MIN).max(LEFT_PANE_WIDTH.MAX).catch(LEFT_PANE_WIDTH.DEFAULT),
+  right: z
+    .number()
+    .min(RIGHT_PANE_WIDTH.MIN)
+    .max(RIGHT_PANE_WIDTH.MAX)
+    .catch(RIGHT_PANE_WIDTH.DEFAULT),
+});
+
+export type PaneWidths = z.infer<typeof paneWidthsSchema>;
+
+/**
  * Reopening the app restores the last PR, the selection, and the tree's expansion
  * state, so a restart is not a reset.
  */
@@ -56,6 +80,7 @@ export const sessionStateSchema = z.object({
    * would invite typing it wrong.
    */
   targetBranchByPr: z.record(z.string(), z.string()).default({}),
+  paneWidths: paneWidthsSchema.default(() => paneWidthsSchema.parse({})),
 });
 
 export type SessionState = z.infer<typeof sessionStateSchema>;

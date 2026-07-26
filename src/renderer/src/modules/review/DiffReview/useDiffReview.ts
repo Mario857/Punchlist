@@ -140,6 +140,8 @@ const MONACO_THEME = 'vs-dark';
 const MONACO_HEIGHT = '100%';
 const MONACO_FONT_SIZE = 12;
 const MONACO_LINE_HEIGHT = 18;
+/** Editor pixels, not pane pixels: the changed-files tree is already subtracted. */
+const SIDE_BY_SIDE_MIN_WIDTH = 620;
 
 /**
  * The candidate patch is read from git, never from an editor buffer, so the base side
@@ -150,6 +152,10 @@ const READ_ONLY_DIFF_EDITOR_OPTIONS: monaco.editor.IDiffEditorConstructionOption
   readOnly: true,
   originalEditable: false,
   renderSideBySide: true,
+  // Two columns need real width. Below this the editor folds to the inline view on its
+  // own, which is the difference between reading a patch and reading two gutters.
+  useInlineViewWhenSpaceIsLimited: true,
+  renderSideBySideInlineBreakpoint: SIDE_BY_SIDE_MIN_WIDTH,
   automaticLayout: true,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,

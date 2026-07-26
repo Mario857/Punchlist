@@ -4,7 +4,7 @@ import { DEFAULT_COMMENT_FILTERS } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { prRefKey } from '@shared/discovery';
 import type { ModelTier } from '@shared/runState';
-import { DEFAULT_SESSION_STATE, type SessionState } from '@shared/settings';
+import { DEFAULT_SESSION_STATE, type PaneWidths, type SessionState } from '@shared/settings';
 
 /**
  * Session state is Zustand rather than TanStack Query even though main owns the
@@ -33,6 +33,8 @@ interface SessionStore extends SessionState {
   setFilters: (filters: CommentFilters) => void;
   markPrViewed: (ref: PrRef) => void;
   setTargetBranch: (ref: PrRef, targetBranch: string) => void;
+  /** Partial because a drag moves one edge, and the other pane keeps what it had. */
+  setPaneWidths: (patch: Partial<PaneWidths>) => void;
   setTierOverride: (commentId: string, tier: ModelTier) => void;
   /** Drops the override so the comment falls back to the heuristic's answer. */
   clearTierOverride: (commentId: string) => void;
@@ -75,6 +77,8 @@ export const useSessionStore = create<SessionStore>((set) => ({
     set((state) => ({
       targetBranchByPr: { ...state.targetBranchByPr, [prRefKey(ref)]: targetBranch },
     })),
+
+  setPaneWidths: (patch) => set((state) => ({ paneWidths: { ...state.paneWidths, ...patch } })),
 
   markPrViewed: (ref) =>
     set((state) => ({
@@ -128,5 +132,6 @@ export function selectPersistableSession(state: SessionStore): SessionState {
     filters: state.filters,
     lastViewedAtByPr: state.lastViewedAtByPr,
     targetBranchByPr: state.targetBranchByPr,
+    paneWidths: state.paneWidths,
   };
 }
