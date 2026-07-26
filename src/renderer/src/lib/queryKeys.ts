@@ -22,6 +22,7 @@ const QUERY_DOMAIN = {
   RUN_REVISIONS: 'runRevisions',
   AUDIT: 'audit',
   LANDING_PREVIEW: 'landingPreview',
+  LANDING_UNDOABLE: 'landingUndoable',
 } as const;
 
 const LIST_SCOPE = 'list';
@@ -62,6 +63,19 @@ export const queryKeys = {
    */
   landingPreview: (repoKey: string, prNumber: number, targetBranch: string) =>
     createQueryKey(QUERY_DOMAIN.LANDING_PREVIEW, repoKey, prNumber, targetBranch),
+  /**
+   * The prefix every assembled preview shares. A landing or an undo moves the branches
+   * every preview was squash-merged onto, and an undo knows only its landing id — not
+   * which PR or target the stale previews were keyed by — so they are invalidated as a
+   * group rather than one exact key at a time.
+   */
+  landingPreviews: () => createQueryKey(QUERY_DOMAIN.LANDING_PREVIEW),
+  /**
+   * Unkeyed on purpose: main holds at most one undoable landing, the most recent one.
+   * Keying this by PR would keep offering an undo for a landing that a later landing
+   * somewhere else has already superseded.
+   */
+  undoableLanding: () => createQueryKey(QUERY_DOMAIN.LANDING_UNDOABLE),
   modelCatalog: () => createQueryKey(QUERY_DOMAIN.MODELS, CATALOG_SCOPE),
   cursorKeyStatus: () => createQueryKey(QUERY_DOMAIN.CURSOR_KEY, STATUS_SCOPE),
 } as const;

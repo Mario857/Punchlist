@@ -1,7 +1,9 @@
 import type { ChangeEvent } from 'react';
 import type { PrComment } from '@shared/comments';
 import { GUARDRAIL_FLAG_KIND, type GuardrailFlagKind } from '@shared/guardrails';
+import type { LandingResult } from '@shared/landing';
 import type { CandidatePatchFile } from '@shared/runs';
+import { buildThreadCountPhrase } from '@renderer/modules/landing/landingCopy';
 
 /**
  * The four states of the gate, as a discriminated union so the pane's branch is a
@@ -123,13 +125,33 @@ export interface LandingConflictsView {
   onReassembleClick: () => void;
 }
 
+/**
+ * A landing that stopped partway. Rendered instead of a bare error because the steps
+ * before the failing one have already taken effect: presenting this as "nothing
+ * happened" would be the one lie this screen exists to prevent.
+ */
+export interface LandingFailureView {
+  message: string;
+  remediation: string | null;
+  partialWarningLabel: string;
+  auditNoticeLabel: string;
+}
+
 export interface LandingConfirmView {
   heading: string;
+  explanation: string;
+  /** Names the actual effects — the branch, the remote, the threads, the reply. */
   confirmLabel: string;
   isConfirmDisabled: boolean;
-  /** What still stands in the way; null when nothing but execution itself does. */
+  isConfirmExecuting: boolean;
+  /** What still stands in the way; null when nothing does. */
   blockerLabel: string | null;
-  executionNoticeLabel: string;
+  /** Non-null only while the sequence is running. */
+  pendingLabel: string | null;
+  /** Non-null once main has reported what it did. */
+  successLabel: string | null;
+  failure: LandingFailureView | null;
+  onConfirmClick: () => void;
 }
 
 /**
@@ -227,7 +249,8 @@ export const CONFLICT_PATHS_LABEL = 'Conflicting files: ';
 export const CONFLICT_PATHS_SEPARATOR = ', ';
 
 export const CONFIRM_HEADING = 'Confirm this landing';
-export const CONFIRM_LABEL = 'Land these commits and resolve the listed threads';
+export const CONFIRM_EXPLANATION =
+  'This is the only step that leaves the sandbox. It publishes the integration branch, pushes it, resolves each thread listed above and only then posts the reply — separate network calls, in that order, and not atomic. There is deliberately no keyboard shortcut for this button and it is not focused for you: the gate is worth nothing if it becomes muscle memory.';
 export const NOTHING_TO_LAND_BLOCKER =
   'Nothing is approved to land, so there is nothing to confirm.';
 export const SINGLE_OUTSTANDING_FLAG_BLOCKER =
@@ -235,13 +258,20 @@ export const SINGLE_OUTSTANDING_FLAG_BLOCKER =
 export const OUTSTANDING_FLAGS_BLOCKER_SUFFIX =
   ' guardrail flags on the combined diff are still unacknowledged.';
 
+export const LANDING_PENDING_LABEL =
+  'Landing… publishing the integration branch, pushing it, resolving each thread and posting the reply. These run one after another, so leave this open until it reports back what it did.';
+
+export const LANDING_ERROR_FALLBACK = 'The landing failed.';
+
 /**
- * The honest line. The gate is finished and the step behind it is not: publishing the
- * integration branch, pushing it, resolving the threads and posting the reply arrive
- * with the close-the-loop phase, and there is no channel on the bridge to invoke.
+ * The honest line about a partial failure. A landing is a sequence of network calls
+ * against a remote and against GitHub, and there is no transaction around them — so the
+ * one thing this must never say, by omission or by tone, is that nothing happened.
  */
-export const EXECUTION_UNAVAILABLE_NOTICE =
-  'Confirming is not wired to anything in this build: the step that publishes the integration branch, pushes it, resolves the threads and posts the reply does not exist yet, so this button stays unavailable rather than pretending to work.';
+export const LANDING_PARTIAL_FAILURE_NOTICE =
+  'This landing stopped partway. It is not atomic: whatever ran before the step that failed has already taken effect and was not rolled back, so the branch may be pushed and some threads may already be resolved.';
+export const LANDING_FAILURE_AUDIT_NOTICE =
+  'The audit log records each action as it actually ran, so it — not this message — is what says how far this landing got. If the branch was pushed before the failure, the undo below is what deletes it again.';
 
 /**
  * Landing-local copy on purpose: these name the same kinds the per-patch flags do, but
@@ -322,4 +352,57 @@ export function buildOutstandingFlagsBlocker(outstandingCount: number): string {
 
 export function buildConflictPathsLabel(paths: readonly string[]): string {
   return `${CONFLICT_PATHS_LABEL}${paths.join(CONFLICT_PATHS_SEPARATOR)}`;
+}
+
+const CONFIRM_PUSH_PREFIX = 'Push ';
+const CONFIRM_REMOTE_INFIX = ' to ';
+const CONFIRM_CLAUSE_SEPARATOR = ', ';
+const CONFIRM_FINAL_SEPARATOR = ' and ';
+const CONFIRM_RESOLVE_PREFIX = 'resolve ';
+const CONFIRM_REPLY_CLAUSE = 'post the reply comment shown above';
+const CONFIRM_NO_REPLY_CLAUSE = 'post no reply comment';
+
+export interface LandingEffectSummary {
+  integrationBranchName: string;
+  remoteName: string;
+  threadCount: number;
+  isReplyPlanned: boolean;
+}
+
+/**
+ * The accessible name of the most consequential button in the product. "Confirm" names
+ * the gesture and not the effect, so the label is built from what confirming will
+ * actually do: which branch goes to which remote, how many threads are resolved, and
+ * whether a comment is posted — the one part no undo can take back.
+ */
+export function buildConfirmLabel(summary: LandingEffectSummary): string {
+  const threadsClause = `${CONFIRM_RESOLVE_PREFIX}${buildThreadCountPhrase(summary.threadCount)}`;
+  const replyClause = summary.isReplyPlanned ? CONFIRM_REPLY_CLAUSE : CONFIRM_NO_REPLY_CLAUSE;
+  return [
+    `${CONFIRM_PUSH_PREFIX}${summary.integrationBranchName}`,
+    `${CONFIRM_REMOTE_INFIX}${summary.remoteName}`,
+    `${CONFIRM_CLAUSE_SEPARATOR}${threadsClause}`,
+    `${CONFIRM_FINAL_SEPARATOR}${replyClause}`,
+  ].join('');
+}
+
+const SUCCESS_PREFIX = 'Landed. ';
+const SUCCESS_PUSHED_INFIX = ' is pushed to ';
+const SUCCESS_RESOLVED_SUFFIX = ' resolved';
+const SUCCESS_REPLY_CLAUSE = 'a reply comment was posted';
+const SUCCESS_NO_REPLY_CLAUSE = 'no reply comment was posted';
+const SUCCESS_AUDIT_SUFFIX =
+  '. Every one of those actions is in the audit log, and the undo below is what reverses the ones that can be reversed.';
+
+/** Reports what main did, from what main returned — never from what was asked for. */
+export function buildLandingSuccessLabel(result: LandingResult): string {
+  const threadsClause = `${buildThreadCountPhrase(result.resolvedThreadIds.length)}${SUCCESS_RESOLVED_SUFFIX}`;
+  const replyClause = result.isReplyPosted ? SUCCESS_REPLY_CLAUSE : SUCCESS_NO_REPLY_CLAUSE;
+  return [
+    `${SUCCESS_PREFIX}${result.integrationBranchName}`,
+    `${SUCCESS_PUSHED_INFIX}${result.remoteName}`,
+    `${CONFIRM_CLAUSE_SEPARATOR}${threadsClause}`,
+    `${CONFIRM_FINAL_SEPARATOR}${replyClause}`,
+    SUCCESS_AUDIT_SUFFIX,
+  ].join('');
 }

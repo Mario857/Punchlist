@@ -12,6 +12,7 @@ import { LandingTargetCard } from '@renderer/modules/landing/LandingPreview/comp
 import { LandingThreadList } from '@renderer/modules/landing/LandingPreview/components/LandingThreadList';
 import { LANDING_VIEW_KIND } from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
 import { useLandingPreview } from '@renderer/modules/landing/LandingPreview/useLandingPreview';
+import { LandingUndo } from '@renderer/modules/landing/LandingUndo/LandingUndo';
 
 export interface LandingPreviewProps {
   /** Null before a PR is selected: the gate then has nothing to describe. */
@@ -121,6 +122,10 @@ export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
         <p className={EXPLANATION_CLASS}>{explanation}</p>
       </header>
       {content}
+      {/* Outside the view switch: an undo is offered on the strength of the last
+          landing, not of whatever preview happens to be assembled — including right
+          after a landing, when the preview has emptied out because it succeeded. */}
+      <LandingUndo prRef={prRef} />
     </section>
   );
 }

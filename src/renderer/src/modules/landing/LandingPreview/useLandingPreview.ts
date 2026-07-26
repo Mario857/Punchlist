@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { selectUnacknowledgedFlags, type GuardrailFlag } from '@shared/guardrails';
@@ -12,14 +12,17 @@ import { keyBy } from '@renderer/lib/collections';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
+import { useExecuteLanding } from '@renderer/modules/landing/useExecuteLanding';
 import { useQueryLandingPreview } from '@renderer/modules/landing/useQueryLandingPreview';
 import { useExecuteRerunConflicted } from '@renderer/modules/runs/useQueryRuns';
 import {
   ASSEMBLE_ERROR_FALLBACK,
   ASSEMBLING_LABEL,
   buildAcknowledgeLabel,
+  buildConfirmLabel,
   buildConflictPathsLabel,
   buildGuardrailStatusLabel,
+  buildLandingSuccessLabel,
   buildOutstandingFlagsBlocker,
   COMBINED_DIFF_EMPTY_LABEL,
   COMBINED_DIFF_EXPLANATION,
@@ -31,17 +34,20 @@ import {
   COMMITS_EMPTY_LABEL,
   COMMITS_EXPLANATION,
   COMMITS_HEADING,
+  CONFIRM_EXPLANATION,
   CONFIRM_HEADING,
-  CONFIRM_LABEL,
   CONFLICTS_EXPLANATION,
   CONFLICTS_HEADING,
-  EXECUTION_UNAVAILABLE_NOTICE,
   GUARDRAIL_ACKNOWLEDGED_LABEL,
   GUARDRAILS_EXPLANATION,
   GUARDRAILS_HEADING,
+  LANDING_ERROR_FALLBACK,
   LANDING_EXPLANATION,
+  LANDING_FAILURE_AUDIT_NOTICE,
   LANDING_GUARDRAIL_KIND_LABEL,
   LANDING_HEADING,
+  LANDING_PARTIAL_FAILURE_NOTICE,
+  LANDING_PENDING_LABEL,
   LANDING_VIEW_KIND,
   NO_REPLY_LABEL,
   NOTHING_TO_LAND_BLOCKER,
@@ -64,6 +70,7 @@ import {
   toCommentSummary,
   type LandingCommitItem,
   type LandingConflictItem,
+  type LandingFailureView,
   type LandingGuardrailItem,
   type LandingView,
 } from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
@@ -88,12 +95,11 @@ interface LandingCommitMessageDraft {
 }
 
 /**
- * There is no execute channel on the bridge: `landing.assemble` exists, the step that
- * publishes the integration branch, pushes it, resolves the threads and posts the reply
- * does not. The gate is therefore complete and permanently closed, and the flag says so
- * in one place rather than the confirm control quietly having no handler.
+ * The confirmation itself, and the only place in the renderer that spells it true. Main
+ * mints its type-level `SandboxConfirmation` from this field, so it is set at exactly the
+ * step where the user clicked and nowhere a default could carry it.
  */
-const IS_LANDING_EXECUTABLE = false;
+const IS_CONFIRMED_BY_USER = true;
 
 /** Stable identities, so an absent preview does not rebuild every list each render. */
 const NO_DRAFTS: ReadonlyMap<string, LandingCommitMessageDraft> = new Map();
@@ -261,6 +267,38 @@ export function useLandingPreview({
     acknowledgedGuardrailIds,
   ).length;
 
+  const { executeLanding, landingResult, isLandingExecuting, landingError } = useExecuteLanding();
+
+  /**
+   * The PR and target come off the assembled preview rather than off the props: what
+   * gets landed has to be the artifact that was read, and the preview is the only thing
+   * that knows which merges produced it.
+   */
+  const onConfirmClick = useCallback(() => {
+    if (!isDefined(landingPreview)) return;
+    executeLanding({
+      prRef: landingPreview.prRef,
+      targetBranch: landingPreview.targetBranch,
+      commits,
+      replyText: landingPreview.replyText,
+      acknowledgedGuardrailIds: [...acknowledgedGuardrailIds],
+      isConfirmedByUser: IS_CONFIRMED_BY_USER,
+    });
+  }, [acknowledgedGuardrailIds, commits, executeLanding, landingPreview]);
+
+  // A failed landing is never rendered as though nothing happened: the steps before the
+  // one that failed are already real, so the notice and the audit pointer travel with
+  // the message rather than being something the reader has to think to ask about.
+  const landingFailure = ((): LandingFailureView | null => {
+    if (!isDefined(landingError)) return null;
+    return {
+      message: isIpcError(landingError) ? landingError.message : LANDING_ERROR_FALLBACK,
+      remediation: isIpcError(landingError) ? landingError.remediation : null,
+      partialWarningLabel: LANDING_PARTIAL_FAILURE_NOTICE,
+      auditNoticeLabel: LANDING_FAILURE_AUDIT_NOTICE,
+    };
+  })();
+
   const view = ((): LandingView => {
     if (request === null) {
       return {
@@ -376,10 +414,22 @@ export function useLandingPreview({
         ? null
         : {
             heading: CONFIRM_HEADING,
-            confirmLabel: CONFIRM_LABEL,
-            isConfirmDisabled: blockerLabel !== null || !IS_LANDING_EXECUTABLE,
+            explanation: CONFIRM_EXPLANATION,
+            confirmLabel: buildConfirmLabel({
+              integrationBranchName: landingPreview.integrationBranchName,
+              remoteName: landingPreview.remoteName,
+              threadCount: threads.length,
+              isReplyPlanned: landingPreview.replyText !== null,
+            }),
+            // A landed preview is stale by definition, and re-clicking would push a
+            // second time; the button stays out of reach until this preview is rebuilt.
+            isConfirmDisabled: blockerLabel !== null || isDefined(landingResult),
+            isConfirmExecuting: isLandingExecuting,
             blockerLabel,
-            executionNoticeLabel: EXECUTION_UNAVAILABLE_NOTICE,
+            pendingLabel: isLandingExecuting ? LANDING_PENDING_LABEL : null,
+            successLabel: isDefined(landingResult) ? buildLandingSuccessLabel(landingResult) : null,
+            failure: landingFailure,
+            onConfirmClick,
           },
     };
   })();

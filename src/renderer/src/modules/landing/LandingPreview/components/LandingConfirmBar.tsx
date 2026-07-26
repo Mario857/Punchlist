@@ -8,17 +8,24 @@ interface Props {
 
 const COLUMN_CLASS = 'flex flex-col gap-2';
 const HEADING_CLASS = 'text-ink text-sm font-semibold';
+const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const BLOCKER_CLASS = 'text-warning text-xs leading-relaxed';
+const PENDING_CLASS = 'text-muted text-xs leading-relaxed';
+const SUCCESS_CLASS = 'text-success text-xs leading-relaxed';
+const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
+const REMEDIATION_CLASS = 'text-muted text-xs leading-relaxed';
+const WARNING_CLASS = 'text-warning text-xs leading-relaxed';
 const NOTICE_CLASS = 'text-muted text-xs leading-relaxed';
 const ACTION_ROW_CLASS = 'flex items-center gap-2';
 
 /**
- * The outer door. It carries no keyboard binding on purpose: a shortcut may open this
- * preview, but confirming is a click, because the one action that reaches the real
- * repository must not become muscle memory.
+ * The outer door. It carries no keyboard binding and is not autofocused, on purpose: a
+ * shortcut may open this preview, but confirming is a click, because the one action that
+ * reaches the real repository must not become muscle memory.
  *
- * The button has no click handler at all rather than one that silently does nothing —
- * there is no execute channel on the bridge yet, and the notice below says so.
+ * The button's label is its accessible name and names the effects — which branch to which
+ * remote, how many threads, whether a comment is posted — because "Confirm" describes the
+ * gesture and this control is the only one in the app whose consequences leave the machine.
  */
 export function LandingConfirmBar({ view }: Props) {
   const blocker =
@@ -28,17 +35,56 @@ export function LandingConfirmBar({ view }: Props) {
       </p>
     );
 
+  const pending =
+    view.pendingLabel === null ? null : (
+      <p role="status" className={PENDING_CLASS}>
+        {view.pendingLabel}
+      </p>
+    );
+
+  const success =
+    view.successLabel === null ? null : (
+      <p role="status" className={SUCCESS_CLASS}>
+        {view.successLabel}
+      </p>
+    );
+
+  const failureView = view.failure;
+
+  const remediation =
+    failureView === null || failureView.remediation === null ? null : (
+      <p className={REMEDIATION_CLASS}>{failureView.remediation}</p>
+    );
+
+  // Grouped under one alert so the message, the "this stopped partway" notice and the
+  // pointer at the audit log are announced together — the notice is the part that keeps
+  // a failure from reading as though the repository was left untouched.
+  const failure =
+    failureView === null ? null : (
+      <div role="alert" className={COLUMN_CLASS}>
+        <p className={ERROR_CLASS}>{failureView.message}</p>
+        {remediation}
+        <p className={WARNING_CLASS}>{failureView.partialWarningLabel}</p>
+        <p className={NOTICE_CLASS}>{failureView.auditNoticeLabel}</p>
+      </div>
+    );
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={COLUMN_CLASS}>
       <h3 className={HEADING_CLASS}>{view.heading}</h3>
+      <p className={EXPLANATION_CLASS}>{view.explanation}</p>
       {blocker}
-      <p className={NOTICE_CLASS}>{view.executionNoticeLabel}</p>
+      {pending}
+      {success}
+      {failure}
       <div className={ACTION_ROW_CLASS}>
         <Button
           variant={BUTTON_VARIANT.PRIMARY}
           size={BUTTON_SIZE.MD}
           isDisabled={view.isConfirmDisabled}
+          isLoading={view.isConfirmExecuting}
           title={view.confirmLabel}
+          onClick={view.onConfirmClick}
         >
           {view.confirmLabel}
         </Button>
