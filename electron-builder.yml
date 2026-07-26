@@ -1,0 +1,25 @@
+appId: dev.airlock.app
+productName: Airlock
+# electron-vite emits here; packaging the sources again would double the bundle.
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  target:
+    - dmg
+    - zip
+  # The app shells out to `gh` and to `git`, and runs Cursor agents as child
+  # processes. Hardened runtime without these would kill both.
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # Unsigned on purpose: there is no Apple Developer certificate for this project.
+  # The README says what that means at first open rather than leaving it to Gatekeeper.
+  identity: null
+dmg:
+  writeUpdateInfo: false

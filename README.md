@@ -1,30 +1,87 @@
 # Airlock
 
-Desktop Electron app that ingests every comment on a GitHub PR, resolves selected ones with Cursor SDK agents in isolated git worktrees, and holds the results behind a review gate until you approve them.
+Desktop app that ingests every comment on a GitHub pull request, resolves the ones you pick using Cursor agents in isolated git worktrees, and holds the results behind a review gate until you approve them.
 
-The name is the architecture: work accumulates in a sandbox chamber, gets inspected, and passes into your real repo only through one deliberate action.
+The name is the architecture. An airlock is a chamber with two doors that are never open at once: work accumulates inside, gets inspected, and passes through on one deliberate action.
 
-## Stack
+## What it actually does
 
-- Electron
-- electron-vite
-- React + TypeScript
+1. Lists your open pull requests and matches each to a local clone.
+2. Pulls every comment on the selected PR — inline review threads, review summaries and top-level conversation — into one filterable tree.
+3. Runs an agent per selected comment, each in its own git worktree at the PR head, in parallel under a concurrency cap.
+4. Shows you the candidate patch. You can hand-edit it, select lines and prompt for a fix, follow up on the whole patch, answer a question the agent stopped on, or revert to any earlier revision.
+5. Checks each patch for protected paths, credential-shaped content, and diffs wildly larger than the comment implied.
+6. Assembles the landing in a sandbox worktree by really squash-merging each approved branch, so conflicts are findings rather than predictions.
+7. Pushes, resolves the review threads and optionally posts a reply — only after you confirm, and only ever as an integration branch of its own.
 
-## Scripts
+## The premise
+
+**Nothing reaches your repository without an explicit confirmation**, and this is enforced by the code rather than promised by the UI:
+
+- Agents work in throwaway worktrees whose `remote.origin.pushurl` is invalid, so a push fails at the git level rather than relying on the agent's cooperation.
+- The agent's `gh` is de-authenticated — the whole process is contained and `gh` explicitly opts out for the app's own calls, so an agent cannot post a comment on your behalf.
+- Every operation that leaves the sandbox takes a confirmation object at the type level. A function that could push without being handed one would not compile.
+- Every such operation appends to an append-only audit log, which you can read on the Audit screen.
+- The target branch is never pushed to directly, and nothing is ever force-pushed.
+
+Approving a resolution means *ready to land*, and nothing more. Landing is a separate action with its own preview.
+
+## Requirements
+
+- **macOS.** The build target is macOS; little is platform-specific by design, but nothing else is tested.
+- **The `gh` CLI, installed and authenticated.** Run `gh auth login` first. Airlock stores no GitHub credential of its own — `gh` owns the token, so there is nothing here to leak.
+- **A Cursor API key**, from Cursor Dashboard → API Keys. Needed from the moment you run an agent. It is stored with Electron's `safeStorage` and never crosses into the UI process.
+- **A local clone** of each repository you want to work on. Discovery is global; resolution needs a worktree, so it needs a clone.
+
+## Cost
+
+Airlock runs on your existing Cursor plan. Every tier defaults into the **free lane** — Auto and Cursor's first-party models, which are unlimited on paid plans and do not draw down your included dollar pool. Frontier models are never selected automatically: choosing one is an explicit, labelled action, and the UI marks those selections as pool-spending before anything runs.
+
+So the default marginal cost of running this is zero, and any spend is something you deliberately asked for.
+
+## Installing
 
 ```bash
 bun install
-bun run dev      # start the app in development
-bun run build    # production build
-bun run typecheck
+bun run dist      # produces release/Airlock-<version>.dmg
 ```
+
+**The build is unsigned.** There is no Apple Developer certificate for this project, so on first open macOS will refuse to launch it. Right-click the app and choose Open, then confirm — or clear the quarantine attribute yourself:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Airlock.app
+```
+
+That is a real security prompt doing its job, and you should be no more casual about it here than anywhere else. A tool whose entire premise is that nothing happens without explicit confirmation should not be coy about its own installation.
+
+## Developing
+
+```bash
+bun install
+bun run dev
+```
+
+Verification, all three of which must pass:
+
+```bash
+bun run typecheck
+bun run lint
+bun run build
+```
+
+`build` is not optional — it is the only thing that catches main/preload bundling and externalization failures, which `typecheck` cannot see.
+
+There are no unit tests; verification is those three commands.
 
 ## Docs
 
-- [PLAN.md](PLAN.md) — architecture and the phased implementation checklist; the single source of truth for progress
-- [AGENTS.md](AGENTS.md) — coding rules and conventions for anyone (human or agent) working on this codebase
+- [PLAN.md](PLAN.md) — architecture and the phased checklist; the single source of truth for what is built and what is not
+- [AGENTS.md](AGENTS.md) — coding rules for anyone, human or agent, working on this codebase
 - [CLAUDE.md](CLAUDE.md) — Claude Code entry point; imports AGENTS.md and points at PLAN.md
 
-## Status
+## What it deliberately does not do
 
-Bootstrap only — app shell and window wiring. Phase 0 (standards) is next; see the checklist in PLAN.md.
+- **Approve anything for you.** Auto mode can answer a blocking question so a run finishes, but every diff still needs your eyes. That is the review gate, and nothing in the design erodes it.
+- **Support GitLab or Bitbucket.** GitHub only; a provider abstraction for a second implementation that does not exist would be cost without benefit.
+- **Force-push, ever.** Not as a fallback, not on undo. Undo deletes the branch it pushed and unresolves the threads it resolved.
+- **Unpost a reply.** GitHub allows only a further comment, so undo says so rather than pretending.
