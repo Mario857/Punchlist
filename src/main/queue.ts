@@ -13,7 +13,13 @@ import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { MODEL_LANE, type ResolvedModel } from '@shared/models';
-import { FAILURE_REASON, RUN_STATE, RUN_TRIGGER, type ModelTier } from '@shared/runState';
+import {
+  FAILURE_REASON,
+  RUN_STATE,
+  RUN_TRIGGER,
+  type ModelTier,
+  type RunTrigger,
+} from '@shared/runState';
 import type { EscalateRunRequest, RunRecord, StartRunRequest } from '@shared/runs';
 import { classifyCommentTier } from '@shared/tier';
 
@@ -79,6 +85,11 @@ type QueuedWork =
       ref: PrRef;
       repoPath: string;
       tier: ModelTier;
+      /**
+       * Only a fresh start carries one: a restart and a re-run act on an existing record,
+       * which already knows whether a human asked for it.
+       */
+      trigger: RunTrigger;
     })
   | (QueuedWorkBase & {
       kind: typeof QUEUED_WORK_KIND.RESTART;
@@ -183,7 +194,7 @@ async function runFirstAttempt(work: QueuedWork): Promise<RunRecord> {
     comment: work.comment,
     tier: work.tier,
     model: work.model,
-    trigger: RUN_TRIGGER.MANUAL,
+    trigger: work.trigger,
   });
 }
 
@@ -314,10 +325,16 @@ async function resolveEscalationModel(
  * Every selected comment, run up to the concurrency cap. Each run records the tier it
  * was classified into and the model that tier resolved to, and `startRun` flags the
  * pool-spending ones, so spend stays attributable after the fact.
+ *
+ * The trigger defaults to manual because every caller but automation is a person pressing
+ * a button. It is recorded on the run rather than inferred later: whether an empty diff
+ * escalates depends on it, and so does telling an auto batch apart from a deliberate one
+ * in the queue and in the landing's audit trail.
  */
 export async function enqueueRuns(
   ref: PrRef,
   requests: readonly StartRunRequest[],
+  trigger: RunTrigger = RUN_TRIGGER.MANUAL,
 ): Promise<RunRecord[]> {
   const repoPath = await prepareRunRepoPath(ref);
   const comments = await fetchPrComments(ref);
@@ -338,6 +355,7 @@ export async function enqueueRuns(
         comment,
         tier,
         model,
+        trigger,
         escalationAttempts: MAX_AUTO_ESCALATION_ATTEMPTS,
       }),
     );

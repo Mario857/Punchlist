@@ -7,6 +7,7 @@ import { toErrorPayload, type IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
 import { listAuditEntries } from './audit';
+import { setLandingInProgress } from './automation';
 import {
   assembleLanding,
   executeLanding,
@@ -113,6 +114,19 @@ const assembleLandingPayloadSchema = z.object({
   prRef: prRefSchema,
   targetBranch: z.string().min(MIN_BRANCH_NAME_LENGTH),
 });
+
+/**
+ * Automation must not race the integration branch, so it is paused for the whole
+ * landing and resumed whether it succeeded or not.
+ */
+async function withLandingPaused<T>(work: () => Promise<T>): Promise<T> {
+  setLandingInProgress(true);
+  try {
+    return await work();
+  } finally {
+    setLandingInProgress(false);
+  }
+}
 
 /** Bulk approve and reject are the same operation applied to many, so one schema. */
 const runIdsPayloadSchema = z.array(z.string());
@@ -264,22 +278,29 @@ export function registerIpcHandlers(): void {
   // commits, and nowhere else. That is what makes the branded type meaningful: no
   // handler can reach a push, a thread resolve or a reply without one.
   registerHandler(IPC_CHANNEL.LANDING_EXECUTE, executeLandingPayloadSchema, (request) =>
-    executeLanding(
-      request,
-      confirmSandboxExit({
-        action: LANDING_GATE_ACTION,
-        isConfirmedByUser: request.isConfirmedByUser,
-      }),
+    // Paused from here rather than inside landing.ts: queue.ts imports landing.ts and
+    // automation.ts imports queue.ts, so landing reaching for automation would close a
+    // module cycle.
+    withLandingPaused(() =>
+      executeLanding(
+        request,
+        confirmSandboxExit({
+          action: LANDING_GATE_ACTION,
+          isConfirmedByUser: request.isConfirmedByUser,
+        }),
+      ),
     ),
   );
   registerHandler(IPC_CHANNEL.LANDING_UNDOABLE, noPayloadSchema, () => findUndoableLanding());
   registerHandler(IPC_CHANNEL.LANDING_UNDO, undoLandingPayloadSchema, (request) =>
-    undoLanding(
-      request,
-      confirmSandboxExit({
-        action: UNDO_LANDING_GATE_ACTION,
-        isConfirmedByUser: request.isConfirmedByUser,
-      }),
+    withLandingPaused(() =>
+      undoLanding(
+        request,
+        confirmSandboxExit({
+          action: UNDO_LANDING_GATE_ACTION,
+          isConfirmedByUser: request.isConfirmedByUser,
+        }),
+      ),
     ),
   );
 

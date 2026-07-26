@@ -1,9 +1,12 @@
 import { app, BrowserWindow, shell } from 'electron';
 import { join } from 'node:path';
+import { handleHeadMoved, handleNewComments } from './automation';
 import { registerIpcHandlers } from './ipc';
 import { applyProcessContainment } from './sandbox';
 import { loadStore } from './store';
+import { startWatcher, stopWatcher } from './watcher';
 import { reconcileWorktrees } from './worktree';
+import { prRefKey } from '@shared/discovery';
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -46,6 +49,18 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   createWindow();
 
+  // The watcher reports; automation decides. Head movement is handled before the new
+  // comments of the same poll, so its quiet period covers that batch.
+  startWatcher({
+    onHeadMoved: (ref) => handleHeadMoved(ref),
+    onNewComments: (ref, comments) => {
+      void handleNewComments(ref, comments);
+    },
+    onPollFailed: (ref, error) => {
+      console.warn('[main] watch poll failed', prRefKey(ref), error.kind);
+    },
+  });
+
   // A crash or force-quit leaves worktrees registered with no live process, so the
   // sandbox is reconciled against persisted run state on every start. Deliberately
   // not the reverse: worktrees are never cleared on quit, because a ready or
@@ -59,6 +74,10 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on('will-quit', () => {
+  stopWatcher();
 });
 
 app.on('window-all-closed', () => {
