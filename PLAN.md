@@ -59,7 +59,7 @@
 
 ### Phase 4 — Revise
 
-- [ ] `decision-protocol` — Detect .airlock/decision.json written by a halted agent (excluded via .git/info/exclude), surface question + options, reply box sends agent.send to continue
+- [ ] `decision-protocol` — Surface the question + options and send the reply through agent.send to continue. **Detection landed early, in phase 2**: the phase 2 prompt already instructs the agent to halt and write `.airlock/decision.json`, so without a watcher a halted run would simply hang until its timeout. `src/main/decision.ts` therefore ships with the run engine, and what remains here is the reply UI and the continuation path
 - [ ] `auto-mode` — Per-session auto mode toggle, off on every app start; pre-selects the recommended comment set, takes the heuristic tier silently, and auto-answers blocking questions with the agent's top option; never approves diffs, never crosses the landing gate or into the paid lane; capped auto-answers per run before parking for a human
 - [ ] `auto-mode-visibility` — Record auto-decisions per run (what was chosen, what the alternatives were) and render them beside the diff in review; show the toggle state and a count of deferred decisions awaiting review
 - [ ] `hand-edit-diff` — Editable modified side of Monaco DiffEditor, debounced write-back to the worktree file, re-diff and commit as a revision
@@ -149,7 +149,9 @@ Containment keeps the agent off the network; it does not vet what the agent wrot
 Worktrees share the parent repo's remotes and credentials, so an agent with shell access could push or comment on its own. Prompt instructions telling it not to are a request, not a guarantee, so containment is structural:
 
 - `extensions.worktreeConfig` is enabled and each worktree gets `remote.origin.pushurl` set to an invalid value, so a push attempt fails at the git level rather than relying on the agent's cooperation.
-- **The agent's `gh` is de-authenticated.** Using the CLI for auth means the credential is ambient, so an agent could otherwise just run `gh pr comment` itself. The agent's environment sets `GH_CONFIG_DIR` to an empty directory and clears `GH_TOKEN` and `GITHUB_TOKEN`, so `gh` finds no credentials in that subprocess while the main process keeps working normally.
+- **The agent's `gh` is de-authenticated.** Using the CLI for auth means the credential is ambient, so an agent could otherwise just run `gh pr comment` itself. `GH_CONFIG_DIR` points at an empty directory and `GH_TOKEN` / `GITHUB_TOKEN` are cleared, so `gh` finds no credentials in that subprocess while the main process keeps working normally.
+
+  **As built, the direction is inverted.** The above assumed a per-child environment, but `@cursor/sdk` has no env override for local agents: `LocalAgentOptions` exposes only `cwd`, `settingSources`, `sandboxOptions` and `customTools`, and `env` appears solely on `McpServerConfig` and the cloud options. A local agent inherits the main process's environment, so an env object that cannot be handed to it is not containment — it merely looks like it. Containment is therefore applied to the whole main process at startup, before anything can spawn a subprocess, and `ghCli` is the single explicit opt-out that restores main's own credentials for its own calls. This is the stronger arrangement anyway: every subprocess is contained unless it opts out, so a child added later is contained by omission rather than exposed by it.
 - `local.settingSources: []` (the SDK default) keeps ambient user, project, and team settings out of the run.
 - The prompt still forbids git and network commands, as defense in depth rather than the primary control.
 

@@ -1,9 +1,20 @@
 import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { z } from 'zod';
 import { prRefSchema } from '@shared/discovery';
+import { MODEL_TIER } from '@shared/runState';
 import { toErrorPayload, type IpcResult } from '@shared/errors';
-import { IPC_CHANNEL, type IpcChannel } from '@shared/ipcContract';
+import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type IpcChannel } from '@shared/ipcContract';
 import { appSettingsSchema, sessionStateSchema } from '@shared/settings';
+import {
+  cancelRun,
+  cleanupTerminalRuns,
+  dismissRun,
+  getRunPatch,
+  listRunsForPr,
+  setRunEventListener,
+  startRuns,
+} from './run';
+import { readSandboxUsage } from './worktree';
 import {
   addRepoByPath,
   discoverPrs,
@@ -18,6 +29,17 @@ import { getSession, getSettings, isCursorApiKeySet, updateSession, updateSettin
 
 /** Channels that take no payload; `invoke` with no argument arrives as undefined. */
 const noPayloadSchema = z.undefined();
+
+const startRunsPayloadSchema = z.object({
+  ref: prRefSchema,
+  requests: z.array(
+    z.object({
+      commentId: z.string(),
+      // Null means "use the default"; phase 3's router supplies a real tier.
+      tier: z.enum(MODEL_TIER).nullable(),
+    }),
+  ),
+});
 
 /**
  * Electron flattens a thrown Error across IPC into a string, which would lose the
@@ -95,4 +117,24 @@ export function registerIpcHandlers(): void {
 
   // Whether a key is stored, never its value. The secret stays in main.
   registerHandler(IPC_CHANNEL.CURSOR_KEY_STATUS, noPayloadSchema, () => isCursorApiKeySet());
+
+  registerHandler(IPC_CHANNEL.RUNS_LIST, prRefSchema, (ref) => listRunsForPr(ref));
+  registerHandler(IPC_CHANNEL.RUNS_START, startRunsPayloadSchema, ({ ref, requests }) =>
+    startRuns(ref, requests),
+  );
+  registerHandler(IPC_CHANNEL.RUNS_CANCEL, z.string(), (runId) => cancelRun(runId));
+  registerHandler(IPC_CHANNEL.RUNS_PATCH, z.string(), (runId) => getRunPatch(runId));
+  registerHandler(IPC_CHANNEL.RUNS_DISMISS, z.string(), (runId) => dismissRun(runId));
+
+  registerHandler(IPC_CHANNEL.SANDBOX_USAGE, noPayloadSchema, () => readSandboxUsage());
+  registerHandler(IPC_CHANNEL.SANDBOX_CLEANUP, noPayloadSchema, () => cleanupTerminalRuns());
+
+  // Transport for the push stream. run.ts knows something wants to hear about
+  // progress; it does not know a BrowserWindow exists.
+  setRunEventListener((event) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.isDestroyed()) continue;
+      window.webContents.send(IPC_EVENT_CHANNEL.RUN_EVENT, event);
+    }
+  });
 }

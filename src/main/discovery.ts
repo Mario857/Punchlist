@@ -212,6 +212,15 @@ function buildRepoPathIndex(repos: readonly LocalRepo[]): Map<string, string> {
   return index;
 }
 
+/**
+ * The single authoritative PR-to-clone lookup, so the run engine resolves a
+ * worktree's repository exactly the way the picker decided it was actionable.
+ * Null means no local clone, which is not something a run can proceed without.
+ */
+export function resolveLocalRepoPath(repoKey: string): string | null {
+  return buildRepoPathIndex(getRepos()).get(repoKey) ?? null;
+}
+
 function toPrListItem(pr: DiscoveredPr, pathsByRepoKey: ReadonlyMap<string, string>): PrListItem {
   // Discovery is global but a worktree needs a clone, so an unmatched PR is still
   // listed — null is what renders the not-cloned marker.

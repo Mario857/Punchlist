@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { registerIpcHandlers } from './ipc';
 import { applyProcessContainment } from './sandbox';
 import { loadStore } from './store';
+import { reconcileWorktrees } from './worktree';
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -44,6 +45,14 @@ app.whenReady().then(() => {
   loadStore();
   registerIpcHandlers();
   createWindow();
+
+  // A crash or force-quit leaves worktrees registered with no live process, so the
+  // sandbox is reconciled against persisted run state on every start. Deliberately
+  // not the reverse: worktrees are never cleared on quit, because a ready or
+  // needsDecision run must survive a restart.
+  void reconcileWorktrees().catch((error: unknown) => {
+    console.error('[main] worktree reconciliation failed', error);
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
