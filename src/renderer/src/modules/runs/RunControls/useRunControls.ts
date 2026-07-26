@@ -12,6 +12,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import { TIER_LABEL } from '@renderer/modules/comments/tierPresentation';
+import { toSecondOpinionScope } from '@renderer/modules/review/SecondOpinion/secondOpinionScope';
 import {
   isPoolSpendingResolution,
   isUndecidedResolution,
@@ -22,6 +23,7 @@ import {
   useExecuteApproveRuns,
   useExecuteCancelRun,
   useExecuteRejectRuns,
+  useExecuteRequestSecondOpinion,
   useExecuteSandboxCleanup,
   useExecuteStartRun,
   useExecuteStopAllRuns,
@@ -87,6 +89,19 @@ interface UseRunControlsResult {
   bulkRejectErrorMessage: string | null;
   onBulkApproveClick: () => void;
   onBulkRejectClick: () => void;
+  /** False when no run on this PR has a settled patch a second reader could look at. */
+  hasSecondOpinionScope: boolean;
+  secondOpinionLabel: string;
+  isSecondOpinionDisabled: boolean;
+  isSecondOpinionPending: boolean;
+  /** States the cost in the units it is actually paid in: slots and wall-clock time. */
+  secondOpinionCostNote: string;
+  /** Says the verdicts change nothing about approval, which is what separates it. */
+  secondOpinionAdvisoryNote: string;
+  /** Non-null when runs are left out because their patch already carries a verdict. */
+  secondOpinionReviewedMessage: string | null;
+  secondOpinionErrorMessage: string | null;
+  onSecondOpinionClick: () => void;
   sandboxUsageLabel: string;
   sandboxWorktreeLabel: string;
   isSandboxUsageLoading: boolean;
@@ -174,6 +189,34 @@ const BULK_APPROVE_EXCLUSION_SUFFIX = ' ready runs';
 const BULK_APPROVE_EXCLUSION_REMEDIATION =
   '. Open each one, acknowledge its flags, then approve it.';
 
+const NO_SECOND_OPINION_LABEL = 'Get a second opinion on every run awaiting one';
+const SINGLE_SECOND_OPINION_LABEL = 'Get a second opinion on the 1 run awaiting one';
+const SECOND_OPINION_LABEL_PREFIX = 'Get a second opinion on all ';
+const SECOND_OPINION_LABEL_SUFFIX = ' runs awaiting one';
+
+/**
+ * A batch here is one fresh agent per run, so it is priced on the control rather than
+ * presented as free. It stays in the free lane like every other run, which makes the
+ * cost wall-clock time and concurrency slots — not money.
+ */
+const SECOND_OPINION_COST_NOTE =
+  'Each reading is a fresh agent given the comment and the patch, so this starts one more run per patch. They stay in the free lane, so nothing here is billed: what it costs is a queue slot per run and roughly the wait the original run took.';
+
+/**
+ * The distinction from the guardrail flags, stated where a batch is launched. A flag
+ * holds approval until it is acknowledged; a verdict holds nothing at all.
+ */
+const SECOND_OPINION_ADVISORY_NOTE =
+  'A verdict is advice. Nothing to acknowledge, nothing held back — a disagreement leaves every one of these runs exactly as approvable as it is now.';
+
+const SECOND_OPINION_REVIEWED_PREFIX = 'Left out because their patch already carries a verdict: ';
+const SINGLE_SECOND_OPINION_REVIEWED = '1 run';
+const SECOND_OPINION_REVIEWED_SUFFIX = ' runs';
+const SECOND_OPINION_REVIEWED_REMEDIATION =
+  '. A revision clears a verdict, so a re-read is only worth an agent once the patch has changed.';
+
+const SECOND_OPINION_ERROR_FALLBACK = 'Could not get a second opinion on those runs.';
+
 const BULK_APPROVE_ERROR_FALLBACK = 'Could not approve those runs.';
 const BULK_REJECT_ERROR_FALLBACK = 'Could not reject those runs.';
 
@@ -259,6 +302,21 @@ function buildBulkRejectLabel(rejectableCount: number): string {
   return `${BULK_REJECT_LABEL_PREFIX}${rejectableCount}${BULK_REJECT_LABEL_SUFFIX}`;
 }
 
+function buildSecondOpinionLabel(requestableCount: number): string {
+  if (requestableCount === EMPTY_COUNT) return NO_SECOND_OPINION_LABEL;
+  if (requestableCount === SINGLE_COUNT) return SINGLE_SECOND_OPINION_LABEL;
+  return `${SECOND_OPINION_LABEL_PREFIX}${requestableCount}${SECOND_OPINION_LABEL_SUFFIX}`;
+}
+
+function buildSecondOpinionReviewedMessage(alreadyReviewedCount: number): string | null {
+  if (alreadyReviewedCount === EMPTY_COUNT) return null;
+  const countLabel =
+    alreadyReviewedCount === SINGLE_COUNT
+      ? SINGLE_SECOND_OPINION_REVIEWED
+      : `${alreadyReviewedCount}${SECOND_OPINION_REVIEWED_SUFFIX}`;
+  return `${SECOND_OPINION_REVIEWED_PREFIX}${countLabel}${SECOND_OPINION_REVIEWED_REMEDIATION}`;
+}
+
 function buildBulkApproveExclusionMessage(flagBlockedCount: number): string | null {
   if (flagBlockedCount === EMPTY_COUNT) return null;
   const countLabel =
@@ -299,6 +357,8 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const { stopAllRuns, isStopAllRunsPending, stopAllRunsError } = useExecuteStopAllRuns();
   const { approveRuns, isApproveRunsPending, approveRunsError } = useExecuteApproveRuns();
   const { rejectRuns, isRejectRunsPending, rejectRunsError } = useExecuteRejectRuns();
+  const { requestSecondOpinion, isRequestSecondOpinionPending, requestSecondOpinionError } =
+    useExecuteRequestSecondOpinion();
   const { sandboxUsage, isSandboxUsageLoading } = useQuerySandboxUsage();
   const { cleanupSandbox, isSandboxCleanupPending, sandboxCleanupError, cleanedSandboxUsage } =
     useExecuteSandboxCleanup();
@@ -455,6 +515,16 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     [rejectableRunIds, rejectRuns],
   );
 
+  const { requestableRunIds: secondOpinionRunIds, alreadyReviewedCount } = useMemo(
+    () => toSecondOpinionScope(runsForPr),
+    [runsForPr],
+  );
+
+  const onSecondOpinionClick = useCallback(
+    () => requestSecondOpinion(secondOpinionRunIds),
+    [requestSecondOpinion, secondOpinionRunIds],
+  );
+
   const onCleanupClick = useCallback(() => cleanupSandbox(), [cleanupSandbox]);
 
   return {
@@ -493,6 +563,21 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     bulkRejectErrorMessage: toErrorMessage(rejectRunsError, BULK_REJECT_ERROR_FALLBACK),
     onBulkApproveClick,
     onBulkRejectClick,
+    // A run already carrying a verdict keeps the block on screen with its exclusion
+    // notice, rather than the control vanishing along with the reason it did nothing.
+    hasSecondOpinionScope:
+      secondOpinionRunIds.length > EMPTY_COUNT || alreadyReviewedCount > EMPTY_COUNT,
+    secondOpinionLabel: buildSecondOpinionLabel(secondOpinionRunIds.length),
+    isSecondOpinionDisabled: secondOpinionRunIds.length === EMPTY_COUNT,
+    isSecondOpinionPending: isRequestSecondOpinionPending,
+    secondOpinionCostNote: SECOND_OPINION_COST_NOTE,
+    secondOpinionAdvisoryNote: SECOND_OPINION_ADVISORY_NOTE,
+    secondOpinionReviewedMessage: buildSecondOpinionReviewedMessage(alreadyReviewedCount),
+    secondOpinionErrorMessage: toErrorMessage(
+      requestSecondOpinionError,
+      SECOND_OPINION_ERROR_FALLBACK,
+    ),
+    onSecondOpinionClick,
     sandboxUsageLabel: formatBytes(sandboxUsage?.totalBytes),
     sandboxWorktreeLabel,
     isSandboxUsageLoading,

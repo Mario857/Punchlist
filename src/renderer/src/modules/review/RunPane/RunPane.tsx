@@ -9,6 +9,7 @@ import { AutoDecisions } from '@renderer/modules/review/AutoDecisions/AutoDecisi
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
 import { ReviewDecision } from '@renderer/modules/review/ReviewDecision/ReviewDecision';
+import { SecondOpinion } from '@renderer/modules/review/SecondOpinion/SecondOpinion';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -72,6 +73,14 @@ export function RunPane({ commentId }: RunPaneProps) {
         // without you is something to know before you read the diff it produced.
         const autoDecisions = <AutoDecisions key={view.runId} runId={view.runId} />;
 
+        // With the flags and the auto-decisions, because a second reader's verdict is
+        // worth having before you read the patch — but it is the one card up here that
+        // gates nothing, and asking for one lives in it so the answer arrives where the
+        // question was put.
+        const secondOpinion = view.isSecondOpinionAvailable ? (
+          <SecondOpinion key={view.runId} runId={view.runId} />
+        ) : null;
+
         // Directly under the patch: the decision is what you take once you have read
         // it, and it must come before the ways of asking for more work rather than
         // after them.
@@ -83,6 +92,7 @@ export function RunPane({ commentId }: RunPaneProps) {
           <div className={COLUMN_CLASS}>
             {guardrailFlags}
             {autoDecisions}
+            {secondOpinion}
             <DiffReview
               key={view.runId}
               runId={view.runId}

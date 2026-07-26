@@ -175,6 +175,14 @@ function toActionPresentation(action: AuditAction): AuditActionPresentation {
         tone: BADGE_TONE.DANGER,
         isOutsideSandbox: true,
       };
+    case AUDIT_ACTION.CONVENTIONS_EXPORTED:
+      return {
+        label: 'Conventions exported',
+        explanation:
+          'Distilled conventions were written into a repository, at a path the guardrails otherwise protect against agent writes. This was a deliberate exception you confirmed.',
+        tone: BADGE_TONE.INFO,
+        isOutsideSandbox: true,
+      };
     default:
       return assertNever(action);
   }

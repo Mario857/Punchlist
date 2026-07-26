@@ -18,6 +18,7 @@ export interface RunControlsProps {
 
 const SECTION_LABEL = 'Run controls';
 const BULK_REVIEW_HEADING = 'Bulk review';
+const SECOND_OPINION_HEADING = 'Second opinion';
 const SANDBOX_HEADING = 'Sandbox';
 const CLEANUP_LABEL = 'Clean up finished';
 const CANCEL_LABEL_PREFIX = 'Cancel ';
@@ -82,6 +83,15 @@ export function RunControls({ prRef }: RunControlsProps) {
     bulkRejectErrorMessage,
     onBulkApproveClick,
     onBulkRejectClick,
+    hasSecondOpinionScope,
+    secondOpinionLabel,
+    isSecondOpinionDisabled,
+    isSecondOpinionPending,
+    secondOpinionCostNote,
+    secondOpinionAdvisoryNote,
+    secondOpinionReviewedMessage,
+    secondOpinionErrorMessage,
+    onSecondOpinionClick,
     sandboxUsageLabel,
     sandboxWorktreeLabel,
     isSandboxUsageLoading,
@@ -249,6 +259,39 @@ export function RunControls({ prRef }: RunControlsProps) {
     </div>
   ) : null;
 
+  const secondOpinionReviewed =
+    secondOpinionReviewedMessage === null ? null : (
+      <p className={META_CLASS}>{secondOpinionReviewedMessage}</p>
+    );
+
+  const secondOpinionError =
+    secondOpinionErrorMessage === null ? null : (
+      <p role="alert" className={ALERT_CLASS}>
+        {secondOpinionErrorMessage}
+      </p>
+    );
+
+  // Secondary like the bulk decisions, and for a sharper reason: this one spends an
+  // agent per run, so it must not read as the obvious thing to press.
+  const secondOpinionBatch = hasSecondOpinionScope ? (
+    <div className={BLOCK_COLUMN_CLASS}>
+      <p className={BLOCK_HEADING_CLASS}>{SECOND_OPINION_HEADING}</p>
+      <Button
+        variant={BUTTON_VARIANT.SECONDARY}
+        size={BUTTON_SIZE.SM}
+        isDisabled={isSecondOpinionDisabled}
+        isLoading={isSecondOpinionPending}
+        onClick={onSecondOpinionClick}
+      >
+        {secondOpinionLabel}
+      </Button>
+      <p className={META_CLASS}>{secondOpinionCostNote}</p>
+      <p className={META_CLASS}>{secondOpinionAdvisoryNote}</p>
+      {secondOpinionReviewed}
+      {secondOpinionError}
+    </div>
+  ) : null;
+
   const cleanupAttention =
     cleanupAttentionMessage === null ? null : (
       <p role="alert" className={WARNING_CLASS}>
@@ -294,6 +337,7 @@ export function RunControls({ prRef }: RunControlsProps) {
         {cancelError}
         {stopAllError}
         {bulkReview}
+        {secondOpinionBatch}
         <div className={ROW_CLASS}>
           <div className="min-w-0 flex-1">
             <p className={BLOCK_HEADING_CLASS}>{SANDBOX_HEADING}</p>

@@ -494,6 +494,40 @@ export function useExecuteRejectRuns(): UseExecuteRejectRunsResult {
   return { rejectRuns: mutate, isRejectRunsPending: isPending, rejectRunsError: error };
 }
 
+interface UseExecuteRequestSecondOpinionResult {
+  requestSecondOpinion: (runIds: string[]) => void;
+  isRequestSecondOpinionPending: boolean;
+  requestSecondOpinionError: unknown;
+}
+
+/**
+ * Asks a fresh agent whether each patch does what its comment asked. Batched at the
+ * IPC level even for one run, like approval, because main resolves every id before it
+ * starts anything.
+ *
+ * Advisory by construction: the verdict lands on the run record and no state
+ * transition reads it, so there is nothing to gate and nothing to invalidate beyond
+ * the store the returned records hydrate.
+ */
+export function useExecuteRequestSecondOpinion(): UseExecuteRequestSecondOpinionResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (runIds: string[]) =>
+      unwrapIpcResult(await requireBridge().runs.requestSecondOpinion(runIds)),
+    onSuccess: (reviewed) => hydrate(reviewed),
+    // A verdict quotes the patch it read, so only the failure is logged — never the
+    // concerns that came back with it.
+    onError: (mutationError) => logError(mutationError, 'useExecuteRequestSecondOpinion'),
+  });
+
+  return {
+    requestSecondOpinion: mutate,
+    isRequestSecondOpinionPending: isPending,
+    requestSecondOpinionError: error,
+  };
+}
+
 interface UseExecuteEscalateRunResult {
   escalateRun: (request: EscalateRunRequest) => void;
   isEscalateRunPending: boolean;
