@@ -3,6 +3,7 @@ import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { StateBadge } from '@renderer/components/StateBadge';
 import { COMMENT_TREE_NODE_KIND, type CommentTreeRow } from '../commentTreeModel';
 import { CommentAttributeBadges } from './CommentAttributeBadges';
+import { CommentTierBadge } from './CommentTierBadge/CommentTierBadge';
 
 export interface CommentRowBadgesProps {
   row: CommentTreeRow;
@@ -21,6 +22,14 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
     // double every signal; the roll-up exists to keep a collapsed subtree informative.
     if (row.isExpanded) return null;
     return <StateBadge state={row.runState} />;
+  })();
+
+  const tierBadge = (() => {
+    if (row.node.kind !== COMMENT_TREE_NODE_KIND.COMMENT) return null;
+    // Tier answers "what will this cost to run", which stops being the question the
+    // moment a run exists: from then on StateBadge supersedes it.
+    if (row.runState !== null) return null;
+    return <CommentTierBadge comment={row.node.comment} />;
   })();
 
   const attributeBadges = (() => {
@@ -45,6 +54,7 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
   return (
     <span className={BADGE_LIST_CLASS}>
       {stateBadge}
+      {tierBadge}
       {attributeBadges}
     </span>
   );

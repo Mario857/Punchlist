@@ -4,6 +4,7 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentTranscript';
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
+import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
 export interface RunPaneProps {
@@ -76,6 +77,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               {settingsHint}
               {errorMessage}
             </Card>
+            <RunEscalation key={view.runId} runId={view.runId} />
             <AgentTranscript
               transcript={view.transcript}
               isStreaming={false}

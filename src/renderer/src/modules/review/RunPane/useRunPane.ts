@@ -4,6 +4,7 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { formatDuration } from '@renderer/lib/format';
 import { isDefined } from '@renderer/lib/guards';
 import { useRunForComment } from '@renderer/stores/runStore';
+import { TIER_LABEL } from '@renderer/modules/comments/tierPresentation';
 
 export const RUN_PANE_VIEW_KIND = {
   NO_RUN: 'noRun',
@@ -39,6 +40,8 @@ export type RunPaneView =
   | { kind: typeof RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED; heading: string; explanation: string }
   | {
       kind: typeof RUN_PANE_VIEW_KIND.FAILURE;
+      /** Carried so the failure surface can offer escalation on this exact run. */
+      runId: string;
       heading: string;
       explanation: string;
       /** Present only for startFailed, whose remedy lives in Settings. */
@@ -93,6 +96,8 @@ const WORKTREE_MISSING_EXPLANATION =
 const CANCELLED_HEADING = 'You stopped this run';
 const CANCELLED_EXPLANATION =
   'It was cancelled before it finished. Everything it had done stayed inside the sandbox.';
+
+const POOL_SPENDING_LABEL = 'Spent the included pool';
 
 const REVISING_LABEL = 'Revising the patch…';
 const REVISION_LABEL_PREFIX = 'Revision ';
@@ -198,6 +203,7 @@ function toView(run: RunRecord): RunPaneView {
       const { heading, explanation, settingsHint } = toFailureCopy(run);
       return {
         kind: RUN_PANE_VIEW_KIND.FAILURE,
+        runId: run.id,
         heading,
         explanation,
         settingsHint,
@@ -212,8 +218,11 @@ function toView(run: RunRecord): RunPaneView {
 }
 
 function toMetaLabel(run: RunRecord): string {
-  const parts: string[] = [run.tier];
+  const parts: string[] = [TIER_LABEL[run.tier]];
   if (isDefined(run.model)) parts.push(run.model);
+  // Each run records whether it drew down the pool, so spend stays attributable to a
+  // specific run after the fact rather than only to a day's usage total.
+  if (run.isPoolSpending) parts.push(POOL_SPENDING_LABEL);
   if (isDefined(run.durationMs)) parts.push(formatDuration(run.durationMs));
   if (run.revisionCount > NO_REVISIONS) {
     parts.push(`${REVISION_LABEL_PREFIX}${run.revisionCount}`);

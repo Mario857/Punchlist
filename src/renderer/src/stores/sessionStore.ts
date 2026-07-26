@@ -3,6 +3,7 @@ import type { CommentFilters } from '@shared/comments';
 import { DEFAULT_COMMENT_FILTERS } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { prRefKey } from '@shared/discovery';
+import type { ModelTier } from '@shared/runState';
 import { DEFAULT_SESSION_STATE, type SessionState } from '@shared/settings';
 
 /**
@@ -15,6 +16,15 @@ import { DEFAULT_SESSION_STATE, type SessionState } from '@shared/settings';
 interface SessionStore extends SessionState {
   /** Nothing should persist before hydration, or an empty store would overwrite the file. */
   isHydrated: boolean;
+  /**
+   * The tier heuristic will misfire, so every comment's tier is overridable before
+   * anything runs. Overrides live beside `selectedCommentIds` because a batch start
+   * reads exactly that pair, and deliberately *outside* `SessionState`: they describe
+   * work that has not started yet, so they last the session rather than the install.
+   * Being absent from `SessionState` is what keeps `selectPersistableSession` from
+   * ever shipping them to the file on disk.
+   */
+  tierOverrideByCommentId: Readonly<Record<string, ModelTier>>;
   hydrate: (state: SessionState) => void;
   setLastPr: (ref: PrRef | null) => void;
   setSelectedCommentIds: (commentIds: readonly string[]) => void;
@@ -22,17 +32,25 @@ interface SessionStore extends SessionState {
   setExpandedNodeIds: (ref: PrRef, nodeIds: readonly string[]) => void;
   setFilters: (filters: CommentFilters) => void;
   markPrViewed: (ref: PrRef) => void;
+  setTierOverride: (commentId: string, tier: ModelTier) => void;
+  /** Drops the override so the comment falls back to the heuristic's answer. */
+  clearTierOverride: (commentId: string) => void;
+  /** One tier applied to a whole selection, which is the batch-level override. */
+  setTierOverrideForComments: (commentIds: readonly string[], tier: ModelTier) => void;
+  clearTierOverridesForComments: (commentIds: readonly string[]) => void;
 }
 
 export const useSessionStore = create<SessionStore>((set) => ({
   ...DEFAULT_SESSION_STATE,
   isHydrated: false,
+  tierOverrideByCommentId: {},
 
   hydrate: (state) => set({ ...state, isHydrated: true }),
 
   // Switching PR clears the selection: the ids belong to the PR that was open, and
-  // carrying them across would select nothing while showing a non-zero count.
-  setLastPr: (ref) => set({ lastPr: ref, selectedCommentIds: [] }),
+  // carrying them across would select nothing while showing a non-zero count. Tier
+  // overrides are keyed by those same ids, so they go with them.
+  setLastPr: (ref) => set({ lastPr: ref, selectedCommentIds: [], tierOverrideByCommentId: {} }),
 
   setSelectedCommentIds: (commentIds) => set({ selectedCommentIds: [...commentIds] }),
 
@@ -59,6 +77,38 @@ export const useSessionStore = create<SessionStore>((set) => ({
         [prRefKey(ref)]: new Date().toISOString(),
       },
     })),
+
+  setTierOverride: (commentId, tier) =>
+    set((state) => ({
+      tierOverrideByCommentId: { ...state.tierOverrideByCommentId, [commentId]: tier },
+    })),
+
+  clearTierOverride: (commentId) =>
+    set((state) => {
+      const tierOverrideByCommentId: Record<string, ModelTier> = {
+        ...state.tierOverrideByCommentId,
+      };
+      delete tierOverrideByCommentId[commentId];
+      return { tierOverrideByCommentId };
+    }),
+
+  setTierOverrideForComments: (commentIds, tier) =>
+    set((state) => {
+      const tierOverrideByCommentId: Record<string, ModelTier> = {
+        ...state.tierOverrideByCommentId,
+      };
+      for (const commentId of commentIds) tierOverrideByCommentId[commentId] = tier;
+      return { tierOverrideByCommentId };
+    }),
+
+  clearTierOverridesForComments: (commentIds) =>
+    set((state) => {
+      const tierOverrideByCommentId: Record<string, ModelTier> = {
+        ...state.tierOverrideByCommentId,
+      };
+      for (const commentId of commentIds) delete tierOverrideByCommentId[commentId];
+      return { tierOverrideByCommentId };
+    }),
 }));
 
 export const DEFAULT_FILTERS = DEFAULT_COMMENT_FILTERS;

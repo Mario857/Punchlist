@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrRef } from '@shared/discovery';
-import type { CandidatePatch, RunRecord, SandboxUsage, StartRunRequest } from '@shared/runs';
+import type {
+  CandidatePatch,
+  EscalateRunRequest,
+  RunRecord,
+  SandboxUsage,
+  StartRunRequest,
+} from '@shared/runs';
 import { logError } from '@renderer/lib/logError';
 import { createQueryKey } from '@renderer/lib/queryKeys';
 import { requireBridge, unwrapIpcResult } from '@renderer/lib/unwrapIpcResult';
@@ -151,6 +157,54 @@ export function useExecuteCancelRun(): UseExecuteCancelRunResult {
   });
 
   return { cancelRun: mutate, isCancelRunPending: isPending, cancelRunError: error };
+}
+
+interface UseExecuteStopAllRunsResult {
+  stopAllRuns: () => void;
+  isStopAllRunsPending: boolean;
+  stopAllRunsError: unknown;
+}
+
+/**
+ * One action for a bad batch rather than one cancel per agent. Main returns every run
+ * it stopped, so the store learns all of them from the response instead of waiting on
+ * a dozen streamed transitions.
+ */
+export function useExecuteStopAllRuns(): UseExecuteStopAllRunsResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async () => unwrapIpcResult(await requireBridge().runs.stopAll()),
+    onSuccess: (stopped) => hydrate(stopped),
+    onError: (mutationError) => logError(mutationError, 'useExecuteStopAllRuns'),
+  });
+
+  return { stopAllRuns: mutate, isStopAllRunsPending: isPending, stopAllRunsError: error };
+}
+
+interface UseExecuteEscalateRunResult {
+  escalateRun: (request: EscalateRunRequest) => void;
+  isEscalateRunPending: boolean;
+  /** A WORKTREE_DIRTY error here is the request for confirmation, not a failure. */
+  escalateRunError: unknown;
+}
+
+/**
+ * Retries a hard failure with a fresh agent against the worktree reset to base. The
+ * error is surfaced rather than swallowed because main refuses a reset that would
+ * discard hand-edits, and that refusal is what drives the confirmation step.
+ */
+export function useExecuteEscalateRun(): UseExecuteEscalateRunResult {
+  const hydrate = useRunStore((state) => state.hydrate);
+
+  const { mutate, isPending, error } = useMutation({
+    mutationFn: async (request: EscalateRunRequest) =>
+      unwrapIpcResult(await requireBridge().runs.escalate(request)),
+    onSuccess: (escalated) => hydrate([escalated]),
+    onError: (mutationError) => logError(mutationError, 'useExecuteEscalateRun'),
+  });
+
+  return { escalateRun: mutate, isEscalateRunPending: isPending, escalateRunError: error };
 }
 
 interface UseExecuteDismissRunResult {
