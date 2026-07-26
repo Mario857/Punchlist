@@ -126,8 +126,15 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 
 ### Phase 6 — Close the loop
 
-- [ ] `close-loop` — Behind the gate, publish the integration branch, push it (never the target branch, never force), resolveReviewThread, optional reply comment
-- [ ] `undo-landing` — Undo the most recent landing from its audit record (delete pushed branch, unresolveReviewThread each resolved thread, return runs to approved); offered only while it is the latest landing, states plainly that a posted reply cannot be unposted, and is itself audited
+- [x] `close-loop` — Behind the gate, publish the integration branch, push it (never the target branch, never force), resolveReviewThread, optional reply comment
+- [x] `undo-landing` — Undo the most recent landing from its audit record (delete pushed branch, unresolveReviewThread each resolved thread, return runs to approved); offered only while it is the latest landing, states plainly that a posted reply cannot be unposted, and is itself audited
+
+#### As built: four notes
+
+- **`applied` gained an edge back to `approved`.** Undo genuinely returns a run to approved — the branch was deleted and its threads unresolved — so it goes through the state machine rather than rewriting the record to look right.
+- **A landing is not atomic, and that is stated rather than hidden.** Each step audits after it succeeds; a failure propagates without rolling back the log, so undo still sees exactly what happened. Recovery is undo-then-land-again rather than retry: re-assembly rebuilds the branch with new commit shas, and a second push would be a non-fast-forward, which is not forced.
+- **Undo is derived from the log, not from extra bookkeeping.** `unresolveReviewThread` takes the same `PRRT_` node id `resolveReviewThread` consumed. A landing group containing `LANDING_UNDONE` is spent, one without `BRANCH_PUSHED` never reached the remote, and already-unresolved threads are subtracted so an interrupted undo is retryable.
+- **Known limitation: one integration branch per PR.** A second landing on the same PR rebuilds that branch from the target, and its push would be rejected as a non-fast-forward rather than forced. Undoing the first landing first is the supported path. Fixing it means a per-landing branch name, which the preview and the conflict re-run both key off.
 
 ### Phase 7 — Optional automation
 
