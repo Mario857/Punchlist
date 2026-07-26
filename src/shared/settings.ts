@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { commentFiltersSchema } from './comments';
 import { prRefSchema } from './discovery';
+import { tierModelMapSchema } from './models';
 
 /** The concurrency cap bounds how many worktrees and agents exist at once. */
 export const DEFAULT_CONCURRENCY_CAP = 4;
@@ -23,6 +24,11 @@ export const appSettingsSchema = z.object({
     .default(DEFAULT_CONCURRENCY_CAP),
   /** Retains terminal-state worktrees so you can inspect what an agent did. */
   shouldRetainWorktrees: z.boolean().default(false),
+  /**
+   * Configurable rather than hardcoded, because the SDK's model list evolves per
+   * account. Defaults resolve to the free lane at run time.
+   */
+  tierModelMap: tierModelMapSchema.default(() => tierModelMapSchema.parse({})),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;

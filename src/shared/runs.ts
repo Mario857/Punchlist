@@ -93,7 +93,22 @@ export type RunEvent =
 
 export interface StartRunRequest {
   commentId: string;
+  /** Null takes the router's heuristic tier; a value is an explicit override. */
   tier: ModelTier | null;
+}
+
+export interface EscalateRunRequest {
+  runId: string;
+  /**
+   * Crossing into the pool-spending lane. Never set automatically — auto-escalation
+   * stays inside the unlimited lane by raising reasoning effort instead.
+   */
+  shouldUseFrontier: boolean;
+  /**
+   * Escalation resets the worktree to base, so hand-edits would be lost. The reset
+   * refuses on a dirty worktree until this says the loss is intended.
+   */
+  isDiscardConfirmed: boolean;
 }
 
 /** One file in a candidate patch, as the diff viewer needs it. */

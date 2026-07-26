@@ -1,7 +1,15 @@
 import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
-import type { CandidatePatch, RunEvent, RunRecord, SandboxUsage, StartRunRequest } from './runs';
+import type { ModelCatalogEntry } from './models';
+import type {
+  CandidatePatch,
+  EscalateRunRequest,
+  RunEvent,
+  RunRecord,
+  SandboxUsage,
+  StartRunRequest,
+} from './runs';
 import type { AppSettings, SessionState } from './settings';
 
 /**
@@ -33,6 +41,9 @@ export const IPC_CHANNEL = {
   RUNS_CANCEL: 'runs:cancel',
   RUNS_PATCH: 'runs:patch',
   RUNS_DISMISS: 'runs:dismiss',
+  RUNS_STOP_ALL: 'runs:stopAll',
+  RUNS_ESCALATE: 'runs:escalate',
+  MODELS_LIST: 'models:list',
   SANDBOX_USAGE: 'sandbox:usage',
   SANDBOX_CLEANUP: 'sandbox:cleanup',
 } as const;
@@ -105,11 +116,25 @@ export interface RunsApi {
   getPatch(runId: string): Promise<IpcResult<CandidatePatch>>;
   /** Tears down a terminal run's worktree and forgets it. */
   dismiss(runId: string): Promise<IpcResult<void>>;
+  /** Cancels every active run at once, so a bad batch needs one action, not twelve. */
+  stopAll(): Promise<IpcResult<RunRecord[]>>;
+  /**
+   * Retries a hard failure with a fresh agent against the worktree reset to base.
+   * `shouldUseFrontier` crosses into the pool-spending lane and is never automatic.
+   * A dirty worktree holds unlanded hand-edits that the reset would discard, so it
+   * refuses until `isDiscardConfirmed`.
+   */
+  escalate(request: EscalateRunRequest): Promise<IpcResult<RunRecord>>;
   /**
    * Subscribes to streamed run progress. Returns the unsubscribe function, which
    * the caller must invoke on unmount or listeners accumulate per mount.
    */
   onEvent(listener: (event: RunEvent) => void): () => void;
+}
+
+export interface ModelsApi {
+  /** The account's live catalog; the tier mapping is chosen from this, never hardcoded. */
+  list(): Promise<IpcResult<ModelCatalogEntry[]>>;
 }
 
 export interface SandboxApi {
@@ -132,6 +157,7 @@ export interface AirlockApi {
   session: SessionApi;
   cursorKey: CursorKeyApi;
   runs: RunsApi;
+  models: ModelsApi;
   sandbox: SandboxApi;
 }
 

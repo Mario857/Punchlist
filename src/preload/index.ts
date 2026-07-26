@@ -3,8 +3,10 @@ import type { PrComment } from '@shared/comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discovery';
 import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type AirlockApi } from '@shared/ipcContract';
+import type { ModelCatalogEntry } from '@shared/models';
 import type {
   CandidatePatch,
+  EscalateRunRequest,
   RunEvent,
   RunRecord,
   SandboxUsage,
@@ -70,6 +72,9 @@ const api: AirlockApi = {
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_PATCH, runId),
     dismiss: (runId: string): Promise<IpcResult<void>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_DISMISS, runId),
+    stopAll: (): Promise<IpcResult<RunRecord[]>> => ipcRenderer.invoke(IPC_CHANNEL.RUNS_STOP_ALL),
+    escalate: (request: EscalateRunRequest): Promise<IpcResult<RunRecord>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.RUNS_ESCALATE, request),
     onEvent: (listener: (event: RunEvent) => void): (() => void) => {
       // The IpcRendererEvent is deliberately not forwarded: it carries a `sender`
       // the renderer has no business holding, which would leak a way around the
@@ -78,6 +83,10 @@ const api: AirlockApi = {
       ipcRenderer.on(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
     },
+  },
+  models: {
+    list: (): Promise<IpcResult<ModelCatalogEntry[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.MODELS_LIST),
   },
   sandbox: {
     getUsage: (): Promise<IpcResult<SandboxUsage>> => ipcRenderer.invoke(IPC_CHANNEL.SANDBOX_USAGE),
