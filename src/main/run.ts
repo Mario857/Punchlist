@@ -428,7 +428,32 @@ export async function continueRun(request: ContinueRunRequest): Promise<RunRecor
     const controller = new AbortController();
     activeRunControllers.set(runId, controller);
 
+    // A continuation can halt again — an answer often exposes the next fork — and
+    // without a watcher that second decision file would sit unread while the run
+    // settled as ready over an unfinished patch.
+    let decidedRun: RunRecord | null = null;
+    let decisionWatch: DecisionWatch | null = null;
+
     try {
+      decisionWatch = watchForDecision({
+        worktreePath: run.worktreePath,
+        onDecision: (decision) => {
+          const current = getRunById(runId);
+          if (current === null) return;
+          decidedRun = advance(current, RUN_STATE.NEEDS_DECISION, { decision });
+        },
+        onMalformed: () => {
+          const current = getRunById(runId);
+          if (current === null) return;
+          decidedRun = recordRunFailure(
+            current,
+            FAILURE_REASON.AGENT_ERROR,
+            MALFORMED_DECISION_MESSAGE,
+          );
+          emitStateChanged(decidedRun);
+        },
+      });
+
       const outcome = await resumeAgentRun({
         agentId: run.agentId,
         worktreePath: run.worktreePath,
@@ -458,6 +483,9 @@ export async function continueRun(request: ContinueRunRequest): Promise<RunRecor
       const checked = patch.isEmpty
         ? revised
         : withGuardrailFlags(revised, patch, await findRunComment(revised));
+      // A fresh halt wins over the settled outcome: the run is waiting on a person
+      // again, not finished, exactly as on the first turn.
+      if (decidedRun !== null) return patchRun(checked, { summary });
       return advance(checked, settled, { summary });
     } catch (error: unknown) {
       const current = getRunById(runId);
@@ -474,6 +502,7 @@ export async function continueRun(request: ContinueRunRequest): Promise<RunRecor
       emitStateChanged(failed);
       return failed;
     } finally {
+      decisionWatch?.stop();
       activeRunControllers.delete(runId);
     }
   });
