@@ -3,7 +3,7 @@ import { upsertRun } from '@main/store';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import type { GuardrailFlag } from '@shared/guardrails';
-import type { AgentDecision, AgentSummary, RunRecord } from '@shared/runs';
+import type { AgentDecision, AgentSummary, AutoDecision, RunRecord } from '@shared/runs';
 import {
   isRunActive,
   isTerminalRunState,
@@ -91,6 +91,11 @@ export interface RunTransitionPatch {
   /** Recomputed on every patch, so a revision cannot outrun its own checks. */
   guardrailFlags?: GuardrailFlag[];
   acknowledgedGuardrailIds?: string[];
+  /**
+   * Append-only in practice: auto mode defers decisions rather than hiding them, so the
+   * trail of what it chose on the user's behalf has to survive every later transition.
+   */
+  autoDecisions?: AutoDecision[];
 }
 
 interface RunTimestamps {
@@ -122,6 +127,7 @@ function applyPatch(run: RunRecord, patch: RunTransitionPatch): RunRecord {
       patch.acknowledgedGuardrailIds,
       run.acknowledgedGuardrailIds,
     ),
+    autoDecisions: resolveField(patch.autoDecisions, run.autoDecisions),
   };
 }
 
