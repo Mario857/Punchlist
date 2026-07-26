@@ -1,6 +1,7 @@
 import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
+import type { CandidatePatch, RunEvent, RunRecord, SandboxUsage, StartRunRequest } from './runs';
 import type { AppSettings, SessionState } from './settings';
 
 /**
@@ -27,7 +28,25 @@ export const IPC_CHANNEL = {
   SESSION_GET: 'session:get',
   SESSION_UPDATE: 'session:update',
   CURSOR_KEY_STATUS: 'cursorKey:status',
+  RUNS_LIST: 'runs:list',
+  RUNS_START: 'runs:start',
+  RUNS_CANCEL: 'runs:cancel',
+  RUNS_PATCH: 'runs:patch',
+  RUNS_DISMISS: 'runs:dismiss',
+  SANDBOX_USAGE: 'sandbox:usage',
+  SANDBOX_CLEANUP: 'sandbox:cleanup',
 } as const;
+
+/**
+ * Push-only, main → renderer. Separate from the request/response channels above
+ * because run progress arrives as a stream, which is why run state lives in a
+ * Zustand store rather than the Query cache.
+ */
+export const IPC_EVENT_CHANNEL = {
+  RUN_EVENT: 'runs:event',
+} as const;
+
+export type IpcEventChannel = (typeof IPC_EVENT_CHANNEL)[keyof typeof IPC_EVENT_CHANNEL];
 
 export type IpcChannel = (typeof IPC_CHANNEL)[keyof typeof IPC_CHANNEL];
 
@@ -78,6 +97,30 @@ export interface CursorKeyApi {
   isSet(): Promise<IpcResult<boolean>>;
 }
 
+export interface RunsApi {
+  list(ref: PrRef): Promise<IpcResult<RunRecord[]>>;
+  start(ref: PrRef, requests: StartRunRequest[]): Promise<IpcResult<RunRecord[]>>;
+  cancel(runId: string): Promise<IpcResult<RunRecord>>;
+  /** The candidate patch, read from git rather than from any editor buffer. */
+  getPatch(runId: string): Promise<IpcResult<CandidatePatch>>;
+  /** Tears down a terminal run's worktree and forgets it. */
+  dismiss(runId: string): Promise<IpcResult<void>>;
+  /**
+   * Subscribes to streamed run progress. Returns the unsubscribe function, which
+   * the caller must invoke on unmount or listeners accumulate per mount.
+   */
+  onEvent(listener: (event: RunEvent) => void): () => void;
+}
+
+export interface SandboxApi {
+  getUsage(): Promise<IpcResult<SandboxUsage>>;
+  /**
+   * Removes worktrees for terminal runs only. Never force-removes: a dirty
+   * worktree means unlanded hand-edits, so it is reported rather than discarded.
+   */
+  cleanupTerminal(): Promise<IpcResult<SandboxUsage>>;
+}
+
 export interface AirlockApi {
   platform: string;
   versions: AirlockVersions;
@@ -88,6 +131,8 @@ export interface AirlockApi {
   comments: CommentsApi;
   session: SessionApi;
   cursorKey: CursorKeyApi;
+  runs: RunsApi;
+  sandbox: SandboxApi;
 }
 
 export type { AppErrorPayload, IpcResult };
