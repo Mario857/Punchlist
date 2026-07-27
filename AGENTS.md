@@ -1,6 +1,6 @@
-# Airlock
+# Punchlist
 
-> Desktop Electron app that ingests every comment on a GitHub PR, resolves selected ones with Cursor SDK agents in isolated git worktrees, and holds the results behind a review gate until the user approves them. The name is the architecture: work accumulates in a sandbox chamber, gets inspected, and passes into the real repo through one deliberate action.
+> Desktop Electron app that ingests every comment on a GitHub PR, resolves selected ones with Cursor SDK agents in isolated git worktrees, and holds the results behind a review gate until the user approves them. The name is the workflow: a punch list is the list of defects a reviewer records that must be fixed before sign-off — itemised, worked through in a sandbox, and signed off through one deliberate action.
 
 ## Tech Stack
 
@@ -86,7 +86,7 @@ This is the rule category with no equivalent in a web app, and the easiest to ge
 
 ### Trust Boundary
 
-Airlock's whole value is that nothing reaches a real branch or GitHub without explicit confirmation. Treat this as an invariant, not a convention:
+Punchlist's whole value is that nothing reaches a real branch or GitHub without explicit confirmation. Treat this as an invariant, not a convention:
 
 - Operations outside the sandbox — committing to the integration branch, pushing, `resolveReviewThread`, `unresolveReviewThread`, posting replies — must require a confirmation argument at the type level. A function that can push without being handed a confirmation is a bug.
 - Every out-of-sandbox action appends to the audit log. No exceptions, no silent paths.
@@ -99,7 +99,7 @@ Zod is required at exactly three places, all untrusted:
 
 1. **`gh` subprocess stdout** — untyped by definition; `author` can be null on deleted accounts.
 2. **The persisted JSON store** — may have been written by an older version of the app.
-3. **`.airlock/decision.json` and `.airlock/summary.json`** — written by an LLM, the least trustworthy input in the system. Malformed agent output must degrade to a clean state, never crash the main process.
+3. **`.punchlist/decision.json` and `.punchlist/summary.json`** — written by an LLM, the least trustworthy input in the system. Malformed agent output must degrade to a clean state, never crash the main process.
 
 Derive types with `z.infer`. Do not hand-write a type next to a schema.
 
@@ -232,7 +232,7 @@ await git.raw(['branch', '-D', branchName]);
 - Lock files (`bun.lock`) — only via bun
 - Build output: `out/`, `dist/`, `node_modules/`, `*.tsbuildinfo`
 
-> These are the rules for agents working **on Airlock**. Airlock separately enforces an overlapping protected-path list on agents working on _your_ repos through it (`src/main/guardrails.ts`). Keep the two lists consistent — the guardrail defaults are seeded from this one — but do not conflate their scope.
+> These are the rules for agents working **on Punchlist**. Punchlist separately enforces an overlapping protected-path list on agents working on _your_ repos through it (`src/main/guardrails.ts`). Keep the two lists consistent — the guardrail defaults are seeded from this one — but do not conflate their scope.
 
 ### Security
 
@@ -276,7 +276,7 @@ One source of truth per kind of state; never mix patterns.
 - Decide nullish behavior once (return `'--'`) so callers don't repeat null checks
 - Use a safe-division helper to avoid divide-by-zero
 
-Airlock's real formatting needs are **durations** (run elapsed time) and **byte sizes** (worktree disk usage), so `formatDuration` and `formatBytes` are the helpers to build. There is no money in this app, so arbitrary-precision numeric libraries are explicitly **not** used — native `number` is correct here.
+Punchlist's real formatting needs are **durations** (run elapsed time) and **byte sizes** (worktree disk usage), so `formatDuration` and `formatBytes` are the helpers to build. There is no money in this app, so arbitrary-precision numeric libraries are explicitly **not** used — native `number` is correct here.
 
 ## Styling & classNames
 
@@ -362,7 +362,7 @@ Define once, reuse everywhere:
 
 Stated explicitly so they are not ported by reflex from sibling projects:
 
-- **i18n.** Airlock is a single-user English developer tool. There are no translation keys and no `messages/` directory. Hard-coded user-facing strings are acceptable here.
+- **i18n.** Punchlist is a single-user English developer tool. There are no translation keys and no `messages/` directory. Hard-coded user-facing strings are acceptable here.
 - **Arbitrary-precision numbers.** No money, no financial math. Native `number` throughout.
 - **Next.js conventions.** No App Router, Server Components, route builders, or `next build`. The renderer is a plain SPA in a `BrowserWindow`.
 - **ORM / database.** State is a JSON file in `app.getPath('userData')`. No Prisma, no SQL, no migrations.

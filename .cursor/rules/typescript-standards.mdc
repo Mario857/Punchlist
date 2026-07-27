@@ -1,5 +1,5 @@
 ---
-description: Airlock TypeScript style — typed consts over enums, interfaces with the z.infer exception, no any/as at IPC and subprocess boundaries, discriminated unions, naming
+description: Punchlist TypeScript style — typed consts over enums, interfaces with the z.infer exception, no any/as at IPC and subprocess boundaries, discriminated unions, naming
 alwaysApply: true
 ---
 

@@ -1,6 +1,6 @@
-# Airlock — Architecture and Implementation Plan
+# Punchlist — Architecture and Implementation Plan
 
-> Build Airlock as a standalone Electron app that ingests every comment on a GitHub PR into one filterable tree, resolves selected ones with a Cursor SDK agent in its own isolated git worktree in parallel, then lets you review each candidate patch and revise it three ways — hand-editing, a Cursor-style Cmd+K prompt scoped to selected lines, or answering a question the agent halted on — before squash-merging the approved ones onto a target branch.
+> Build Punchlist as a standalone Electron app that ingests every comment on a GitHub PR into one filterable tree, resolves selected ones with a Cursor SDK agent in its own isolated git worktree in parallel, then lets you review each candidate patch and revise it three ways — hand-editing, a Cursor-style Cmd+K prompt scoped to selected lines, or answering a question the agent halted on — before squash-merging the approved ones onto a target branch.
 
 **This file is the single source of truth for progress.** Work phase by phase, check items off in the checklist below as they complete, and update this document when a decision changes. The coding rules live in [AGENTS.md](AGENTS.md) and apply to every phase.
 
@@ -8,7 +8,7 @@
 
 ### Phase 0 — Standards first
 
-- [x] `agents-md` — Adapt cjenkalo/CLAUDE.md into AGENTS.md for Airlock: keep the stack-agnostic code rules, add the Electron process-boundary and trust-boundary sections, resolve the interface-vs-z.infer tension, swap formatNumber/BigNumber for formatDuration/formatBytes, and state i18n / precision / Next / ORM as explicitly not applicable
+- [x] `agents-md` — Adapt cjenkalo/CLAUDE.md into AGENTS.md for Punchlist: keep the stack-agnostic code rules, add the Electron process-boundary and trust-boundary sections, resolve the interface-vs-z.infer tension, swap formatNumber/BigNumber for formatDuration/formatBytes, and state i18n / precision / Next / ORM as explicitly not applicable
 - [x] `code-rules` — Port the four modular rules into `.cursor/rules/` adapted for Electron: core-principles, typescript-standards, react-patterns, state-management (renderer paths, TanStack-over-IPC, no Next.js specifics), each scoped narrower than AGENTS.md rather than duplicating it
 - [x] `lint-tooling` — Add ESLint flat config (typescript-eslint 8, eslint-plugin-react-hooks 7) + Prettier (semi, singleQuote, trailingComma all, printWidth 100); add lint script; reformat the semicolon-free scaffold once; enforce renderer boundaries mechanically (no-restricted-imports zones: screens cannot import other screens, modules and shared layers cannot import screens, shared layers cannot import modules; plus import/no-cycle across modules) and set up the `@renderer/*` and `@shared/*` path aliases in tsconfig + electron.vite so the zones have stable paths to match
 - [x] `tailwind-setup` — Add Tailwind v4 via @tailwindcss/vite plugin and `@import 'tailwindcss'`; port src/renderer/src/styles.css design tokens into a `@theme` block; add prettier-plugin-tailwindcss
@@ -43,7 +43,7 @@
 - [x] `worktree-reconcile` — Startup reconciliation: diff `git worktree list --porcelain` against persisted run state, tear down orphans, mark runs whose worktree vanished as broken, prune dead registrations; surface total sandbox disk usage with a manual clean-up-all action
 - [x] `sandbox-containment` — Build src/main/sandbox.ts: enable extensions.worktreeConfig and set an invalid remote.origin.pushurl per worktree; set worktree-scoped user.name/user.email to the user's identity; scrub GIT_AUTHOR__/GIT_COMMITTER__/EMAIL and GH_TOKEN/GITHUB_TOKEN from the agent env and point GH_CONFIG_DIR at an empty dir; settingSources empty; assert gated ops carry a confirmation
 - [x] `agent-runner` — Build src/main/agent.ts: Agent.create (never Agent.prompt) with local cwd = worktree, persist agentId for Agent.resume, stream events over IPC, cancel guarded by run.supports, guaranteed disposal, distinguish CursorAgentError from result.status error
-- [x] `prompt-builder` — Build src/main/prompt.ts: anchored comments get path/line/diffHunk context; unanchored comments get a locate-the-code-first instruction; both include the halt-and-ask protocol for genuine ambiguity and the instruction to write .airlock/summary.json with a draft commit subject and details
+- [x] `prompt-builder` — Build src/main/prompt.ts: anchored comments get path/line/diffHunk context; unanchored comments get a locate-the-code-first instruction; both include the halt-and-ask protocol for genuine ambiguity and the instruction to write .punchlist/summary.json with a draft commit subject and details
 - [x] `commit-identity` — Resolve the user's git identity from effective repo config and fail preflight if unset; author and committer both set to the user on every commit; no Co-authored-by trailer for the agent
 - [x] `commit-messages` — Assemble the squashed landing commit message from the agent's summary.json subject plus provenance (comment author, file/line, quoted comment body, PR and thread URLs); template fallback when summary is missing or malformed; editable in the landing preview
 - [x] `run-state-machine` — Build src/main/runState.ts: explicit state machine (queued/running/needsDecision/ready/revising/noActionNeeded/failed/approved/applied) with revision counter and trigger origin, persisted to the JSON store
@@ -71,7 +71,7 @@
 
 ### Phase 4 — Revise
 
-- [x] `decision-protocol` — Surface the question + options and send the reply through agent.send to continue. **Detection landed early, in phase 2**: the phase 2 prompt already instructs the agent to halt and write `.airlock/decision.json`, so without a watcher a halted run would simply hang until its timeout. `src/main/decision.ts` therefore ships with the run engine, and what remains here is the reply UI and the continuation path
+- [x] `decision-protocol` — Surface the question + options and send the reply through agent.send to continue. **Detection landed early, in phase 2**: the phase 2 prompt already instructs the agent to halt and write `.punchlist/decision.json`, so without a watcher a halted run would simply hang until its timeout. `src/main/decision.ts` therefore ships with the run engine, and what remains here is the reply UI and the continuation path
 - [x] `auto-mode` — Per-session auto mode toggle, off on every app start; pre-selects the recommended comment set, takes the heuristic tier silently, and auto-answers blocking questions with the agent's top option; never approves diffs, never crosses the landing gate or into the paid lane; capped auto-answers per run before parking for a human
 - [x] `auto-mode-visibility` — Record auto-decisions per run (what was chosen, what the alternatives were) and render them beside the diff in review; show the toggle state and a count of deferred decisions awaiting review
 - [x] `hand-edit-diff` — Editable modified side of Monaco DiffEditor, debounced write-back to the worktree file, re-diff and commit as a revision
@@ -157,12 +157,12 @@ Carried into phase 6: `executeLanding` already requires a `SandboxConfirmation` 
 
 - **`no-action-state` was already written but unreachable.** `shouldAutoEscalate` has always refused to escalate an auto-triggered empty diff, but every run was created with `trigger: manual`, so that branch was dead code. Threading the trigger through the queue is what made the rule true; an auto-triggered "LGTM, thanks" would otherwise have escalated at rising effort forever.
 - **Staleness gets a strong badge, auto-trigger does not.** The badge budget forbids a second always-visible strong badge, but a stale run is a trap rather than an attribute: `StateBadge` reads "Ready" while the patch is against a head that has moved, so muting it would hide the only thing wrong with a row that looks landable. It disappears on terminal states, where a landed or rejected run is history.
-- **Window bounds live in their own file**, not in the state store. They are rewritten on every drag, and sharing `airlock-state.json` would re-serialise every run record and transcript per frame.
+- **Window bounds live in their own file**, not in the state store. They are rewritten on every drag, and sharing `punchlist-state.json` would re-serialise every run record and transcript per frame.
 
 ### Phase 9 — Second opinion
 
 - [x] `opinion-model` — Define the verdict model in src/shared/opinion.ts: Zod-backed, with verdict (addresses/partial/misses/harmful), concerns as plain strings, and the run it belongs to; treated as an agent-written file like decision.json
-- [x] `opinion-prompt` — Build the reviewer prompt in src/main/prompt.ts: the original comment and the candidate diff, explicitly without the first agent's transcript or summary, plus the instruction to write .airlock/opinion.json and to change nothing
+- [x] `opinion-prompt` — Build the reviewer prompt in src/main/prompt.ts: the original comment and the candidate diff, explicitly without the first agent's transcript or summary, plus the instruction to write .punchlist/opinion.json and to change nothing
 - [x] `opinion-runner` — Run a fresh agent in the run's worktree, parse the verdict, and verify the patch is byte-identical afterwards; a reviewer that edited anything is itself a finding
 - [x] `opinion-ui` — Render the verdict and its concerns beside the diff alongside the guardrail flags and auto-decisions, and offer it per run and per batch; never blocking
 
@@ -186,21 +186,21 @@ The workflow is a **batch pipeline with a review gate**, not a conversation: eve
 
 You are not rebuilding Cursor. The AI editing is rented via `@cursor/sdk` (v1.0.24 on npm), which runs real Cursor agents against an arbitrary `cwd` — exactly what per-worktree isolation needs. What you build is the orchestration, review, and approval layer around it.
 
-## The name is the architecture
+## The name is the workflow
 
-Renamed from "PR Resolve", which described the wrong product. "Resolve" implies the tool resolves comments for you, when every structural decision here exists to keep that judgment yours — and in a tool that both detects merge conflicts and calls `resolveReviewThread`, the word was already carrying two other meanings.
+Renamed twice, each time because the name described the wrong thing. "PR Resolve" implied the tool resolves comments for you, when every structural decision here exists to keep that judgment yours — and in a tool that both detects merge conflicts and calls `resolveReviewThread`, the word was already carrying two other meanings. "Airlock" named the architecture accurately but collided with established security vendors, which is the wrong neighbourhood for something that runs on a work laptop.
 
-An airlock is a chamber with two doors that are never open at once. Work accumulates inside, gets inspected, and passes through on one deliberate action. That is precisely the sandbox → guardrails → confirmation gate → real repo flow below, so the metaphor is load-bearing rather than decorative, and it supplies consistent vocabulary:
+A punch list is the list of defects a reviewer walks a job recording: the things that must be fixed before the work is signed off. That is exactly what a PR's review comments are, and it names the workflow — itemise, work through, sign off — while the sandbox → guardrails → confirmation gate → real repo flow below stays the architecture underneath it. The name supplies the vocabulary:
 
-- scratch branches are `airlock/<pr>/<commentId>`
-- the agent's protocol directory is `.airlock/`, holding `decision.json` and `summary.json`
-- the confirmation gate is the **outer door**; landing is **cycling through**
+- scratch branches are `punchlist/<pr>/<commentId>`
+- the agent's protocol directory is `.punchlist/`, holding `decision.json` and `summary.json`
+- the confirmation gate is **sign-off**; landing an approved batch is **closing out the list**
 
 ## Approval model
 
 Nothing leaves the sandbox without an explicit, reviewed decision. This is an invariant the architecture enforces, not a policy the UI politely follows.
 
-**Sandbox** — throwaway worktrees under a scratch directory and their scratch branches (`airlock/<pr>/<commentId>`). Agents write here freely; commits here need no approval because nothing is reachable from a real branch and deleting the worktree erases it.
+**Sandbox** — throwaway worktrees under a scratch directory and their scratch branches (`punchlist/<pr>/<commentId>`). Agents write here freely; commits here need no approval because nothing is reachable from a real branch and deleting the worktree erases it.
 
 **Outside the sandbox** — the real repo's branches, the git remote, and the GitHub API. Every one of these requires your confirmation:
 
@@ -389,7 +389,7 @@ A typed `as const` object rather than an `enum`, per `typescript-standards.mdc`.
 
 ### Halt-and-ask protocol
 
-`src/main/prompt.ts` instructs the agent that when it cannot resolve an ambiguity, it must **not** guess — it writes `.airlock/decision.json` in its worktree and stops. (The same directory carries `summary.json`, the agent's draft commit message; see commit messages below.)
+`src/main/prompt.ts` instructs the agent that when it cannot resolve an ambiguity, it must **not** guess — it writes `.punchlist/decision.json` in its worktree and stops. (The same directory carries `summary.json`, the agent's draft commit message; see commit messages below.)
 
 ```json
 { "question": "...", "options": ["add a compat shim", "make it breaking"], "context": "..." }
@@ -397,7 +397,7 @@ A typed `as const` object rather than an `enum`, per `typescript-standards.mdc`.
 
 Options are ordered **best-first**, which is what lets auto mode take the top one meaningfully rather than arbitrarily.
 
-A file, not a parsed sentinel in the response text, because format compliance in prose is unreliable while a file either exists or does not. `.airlock/` is added once to the main repo's `.git/info/exclude`, which is shared across all worktrees via the common git dir — so the scratch directory never appears in `git status` or in any candidate diff, and the user's tracked `.gitignore` is left untouched.
+A file, not a parsed sentinel in the response text, because format compliance in prose is unreliable while a file either exists or does not. `.punchlist/` is added once to the main repo's `.git/info/exclude`, which is shared across all worktrees via the common git dir — so the scratch directory never appears in `git status` or in any candidate diff, and the user's tracked `.gitignore` is left untouched.
 
 When the file appears, the run transitions to `needsDecision` and the UI shows the question with a reply box. Your answer goes back through `agent.send(...)` on the **same** agent, so it retains everything it already worked out.
 
@@ -495,13 +495,13 @@ Each comment gets a full working checkout, so without a real policy this accumul
 
 ### Removing a worktree is three operations, not one
 
-`git worktree remove` deletes the directory and its registration but **leaves the scratch branch behind**. Cleaning up only the worktree would silently accumulate an `airlock/<pr>/<commentId>` branch per comment forever. Teardown is therefore:
+`git worktree remove` deletes the directory and its registration but **leaves the scratch branch behind**. Cleaning up only the worktree would silently accumulate an `punchlist/<pr>/<commentId>` branch per comment forever. Teardown is therefore:
 
 1. `git worktree remove <path>` — directory and registration
-2. `git branch -D airlock/<pr>/<commentId>` — the scratch branch, which step 1 does not touch
+2. `git branch -D punchlist/<pr>/<commentId>` — the scratch branch, which step 1 does not touch
 3. `git worktree prune` — sweep registrations whose directories vanished out of band
 
-The worktree-scoped `pushurl` config and the `.airlock/` scratch dir both live inside the worktree, so they go with step 1. The `.git/info/exclude` entry is shared and idempotent, so it stays.
+The worktree-scoped `pushurl` config and the `.punchlist/` scratch dir both live inside the worktree, so they go with step 1. The `.git/info/exclude` entry is shared and idempotent, so it stays.
 
 ### Git's refusal to remove dirty worktrees is a feature
 
@@ -553,7 +553,7 @@ There are two layers of commit, and only one of them is read by humans:
 - **Revision commits inside a worktree** are an internal audit trail that gets squashed away. Terse is fine: `revise: manual edit`, `continue after decision`.
 - **The squashed landing commit** is what appears in `git log` on the target branch. This is the one that needs to be good.
 
-The agent drafts it, because it already knows what it changed and a template cannot. On finishing it writes `.airlock/summary.json` as `{ subject, details }` — the same file-based convention as `decision.json`, for the same reason that parsing prose is unreliable, and inside the same already-excluded directory. A missing or malformed summary falls back to a template built from comment metadata; landing is never blocked on it.
+The agent drafts it, because it already knows what it changed and a template cannot. On finishing it writes `.punchlist/summary.json` as `{ subject, details }` — the same file-based convention as `decision.json`, for the same reason that parsing prose is unreliable, and inside the same already-excluded directory. A missing or malformed summary falls back to a template built from comment metadata; landing is never blocked on it.
 
 The assembled message pairs the agent's subject with provenance that makes the commit traceable back to its origin:
 
@@ -602,7 +602,7 @@ This makes the router a billing control, not just a quality one. **Every tier de
 
 Claude Code was evaluated as an alternative **agent backend for the app** and rejected. Anthropic moved programmatic usage (`claude -p` and the Agent SDK) off subscription pools onto a separate metered credit on 15 June 2026, then paused that change pending an update, so the policy is mid-revision. There is also no unlimited-model lane — all programmatic usage runs at API rates. **Cursor SDK only; no backend abstraction layer**, since building an interface to hedge against a worse option is cost without benefit.
 
-Note the distinction: that decision is about which SDK the _app_ invokes at runtime. It says nothing about which tool is used to _develop_ Airlock — interactive Claude Code sessions bill against the subscription as normal, and this project is developed with Claude Code.
+Note the distinction: that decision is about which SDK the _app_ invokes at runtime. It says nothing about which tool is used to _develop_ Punchlist — interactive Claude Code sessions bill against the subscription as normal, and this project is developed with Claude Code.
 
 ### Tiers resolve to models at runtime
 
@@ -741,7 +741,7 @@ Two whole categories exist here and not in a Next.js app, so they are additions 
 
 Stated explicitly in `AGENTS.md` so they are not reintroduced by reflex from the sibling project:
 
-- **i18n.** Airlock is a single-user English developer tool. Porting the "never hard-code user-facing strings" rule would mandate translation infrastructure for zero benefit.
+- **i18n.** Punchlist is a single-user English developer tool. Porting the "never hard-code user-facing strings" rule would mandate translation infrastructure for zero benefit.
 - **Arbitrary-precision numbers.** The source rule marks this opt-in for money; there is no money here, so native `number` is correct.
 - **Next.js, Prisma, and Supabase conventions** — no App Router, no ORM, no SQL. State is a JSON file.
 
@@ -759,7 +759,7 @@ Two smaller clarifications in the same vein: `src/main/ipc.ts` is not a barrel e
 
 - **Subprocess stdout** from `gh` — untyped by definition, deeply nested, and `author` can be null on deleted accounts.
 - **The persisted JSON state file** — written by an older version of the app after an upgrade.
-- **The decision file** `.airlock/decision.json` — written by an LLM, making it the least trustworthy input in the system. A malformed decision file must surface as a clean "agent halted incorrectly" state, never crash the main process.
+- **The decision file** `.punchlist/decision.json` — written by an LLM, making it the least trustworthy input in the system. A malformed decision file must surface as a clean "agent halted incorrectly" state, never crash the main process.
 
 ### State management, mapped to IPC
 
@@ -819,7 +819,7 @@ New main-process modules (all Node-side, secrets never cross IPC):
 - `src/main/worktree.ts` — create worktrees via `simple-git`, commit, diff, squash-merge, revert-to-revision, and the three-step teardown plus startup reconciliation
 - `src/main/agent.ts` — wrap `Agent.create({ local: { cwd: worktreePath } })`, `send` for follow-ups, `resume` by persisted `agentId`, stream, cancel, dispose
 - `src/main/runState.ts` — the run state machine and revision counter
-- `src/main/decision.ts` — watch for `.airlock/decision.json`, parse it, seed `.git/info/exclude`
+- `src/main/decision.ts` — watch for `.punchlist/decision.json`, parse it, seed `.git/info/exclude`
 - `src/main/sandbox.ts` — the trust boundary: worktree creation with `pushurl` containment, scrubbed agent environment, and the assertion that gated operations were confirmed
 - `src/main/guardrails.ts` — protected-path, secret-scan, and tier-versus-diff-size checks over a candidate patch and over the combined landing diff
 - `src/main/landing.ts` — build the integration result in a sandbox worktree, produce the preview payload, execute the landing only when handed a confirmation, and undo the most recent one
@@ -916,13 +916,13 @@ Reviewing twenty agent-written patches is genuinely tiring, and that is a design
 
 Everything above makes the app correct. This makes it an application rather than a development target, and two of its items are correctness rather than polish:
 
-**The single-instance lock is load-bearing.** State is one JSON file and one set of git worktrees. Two Airlock processes would both write `airlock-state.json` — last writer wins, silently — and both believe they own the same sandbox directories. That is not a rough edge, it is corruption, so the second launch focuses the existing window and exits.
+**The single-instance lock is load-bearing.** State is one JSON file and one set of git worktrees. Two Punchlist processes would both write `punchlist-state.json` — last writer wins, silently — and both believe they own the same sandbox directories. That is not a rough edge, it is corruption, so the second launch focuses the existing window and exits.
 
 **An Electron app without an Edit menu has no clipboard.** On macOS, Cmd+C/V/X/A are delivered through menu accelerators rather than by the web contents, so a packaged build with the default menu has no working copy or paste in *any* text field — the decision reply box, the follow-up prompt, the inline prompt, the PR URL field, the target branch. It reads as chrome and behaves as a bug.
 
 The rest is what makes the thing feel finished:
 
-- **Identity.** A name, an icon, a description, a bundle id and a category. The icon has to survive being 16 pixels wide in a dock, which rules out anything with fine detail — the airlock metaphor reduces well, since a hatch is a circle inside a frame.
+- **Identity.** A name, an icon, a description, a bundle id and a category. The icon has to survive being 16 pixels wide in a dock, which rules out anything with fine detail — the punch-list mark reduces well: a check above two ruled lines is an item signed off, and it survives 16 pixels.
 - **Failure that is survivable.** A renderer exception currently blanks the window with no way back. An error boundary that offers a reload, and a main-process handler for unhandled rejections, cost little and convert a dead app into a recoverable one.
 - **Window state**, clamped back onto a display that currently exists — restoring a window onto a monitor that has since been unplugged is a classic way to lose an app off-screen.
 - **Packaging** via electron-builder, deferred until now on purpose so it was never configured against a moving target.
@@ -947,7 +947,7 @@ It is therefore a fresh `Agent.create` in the run's worktree, not an `agent.send
 
 It is asked to inspect and report, and the prompt says so — but a prompt is a request, so the patch is re-read afterwards and compared. **A reviewer that modified anything is itself a finding**, surfaced rather than quietly reverted, because an agent ignoring an explicit instruction is worth knowing about regardless of what it wrote.
 
-The verdict goes to `.airlock/opinion.json`, the same file-based convention as `decision.json` and `summary.json`, for the same reason: format compliance in prose is unreliable, while a file either exists or does not. It is parsed with Zod and a malformed one degrades to "no opinion available" rather than crashing anything.
+The verdict goes to `.punchlist/opinion.json`, the same file-based convention as `decision.json` and `summary.json`, for the same reason: format compliance in prose is unreliable, while a file either exists or does not. It is parsed with Zod and a malformed one degrades to "no opinion available" rather than crashing anything.
 
 ### It advises; it never blocks
 
@@ -1007,7 +1007,7 @@ Rules are Zod-backed records in the store — scope, category, imperative rule t
 
 ### Export is an out-of-sandbox action
 
-Writing `.cursor/rules/learned-conventions.mdc` modifies your real repository, which puts it firmly outside the airlock. It therefore uses the machinery phase 5 already built: a preview of the exact file content, a type-level confirmation, and an audit entry. Global rules are written to a standalone user-level file that you then reference yourself, rather than the app editing `~/.claude/CLAUDE.md` in place — that file is yours.
+Writing `.cursor/rules/learned-conventions.mdc` modifies your real repository, which puts it firmly outside the sandbox. It therefore uses the machinery phase 5 already built: a preview of the exact file content, a type-level confirmation, and an audit entry. Global rules are written to a standalone user-level file that you then reference yourself, rather than the app editing `~/.claude/CLAUDE.md` in place — that file is yours.
 
 **One consistency point worth stating**, because it looks like a contradiction otherwise: the guardrail protected-path list includes `.cursor/rules/**`. That entry exists to stop an agent *resolving a comment* from rewriting its own guardrails. Convention export is a user-confirmed action initiated from the app, not an agent write, so it is a deliberate exception — and it is recorded in the audit log as one rather than quietly bypassing the check.
 

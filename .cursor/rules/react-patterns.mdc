@@ -1,5 +1,5 @@
 ---
-description: Airlock React 19 renderer patterns — colocated use<ComponentName> hooks, no logic or conditionals in JSX, exhaustive RunState switches, icons, file organization, accessibility
+description: Punchlist React 19 renderer patterns — colocated use<ComponentName> hooks, no logic or conditionals in JSX, exhaustive RunState switches, icons, file organization, accessibility
 globs: src/renderer/**/*.tsx,src/renderer/**/*.ts
 alwaysApply: false
 ---

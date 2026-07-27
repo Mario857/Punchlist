@@ -1,8 +1,8 @@
-# Airlock
+# Punchlist
 
 Desktop app that ingests every comment on a GitHub pull request, resolves the ones you pick using Cursor agents in isolated git worktrees, and holds the results behind a review gate until you approve them.
 
-The name is the architecture. An airlock is a chamber with two doors that are never open at once: work accumulates inside, gets inspected, and passes through on one deliberate action.
+The name is the workflow. A punch list is the list of defects a reviewer walks a job recording — the things that must be fixed before sign-off. That is what a PR's comments are, so that is how they are treated here: itemised, worked through one by one in a sandbox, and signed off through one deliberate action.
 
 ## What it actually does
 
@@ -29,13 +29,13 @@ Approving a resolution means *ready to land*, and nothing more. Landing is a sep
 ## Requirements
 
 - **macOS.** The build target is macOS; little is platform-specific by design, but nothing else is tested.
-- **The `gh` CLI, installed and authenticated.** Run `gh auth login` first. Airlock stores no GitHub credential of its own — `gh` owns the token, so there is nothing here to leak.
+- **The `gh` CLI, installed and authenticated.** Run `gh auth login` first. Punchlist stores no GitHub credential of its own — `gh` owns the token, so there is nothing here to leak.
 - **A Cursor API key**, from Cursor Dashboard → API Keys. Needed from the moment you run an agent. It is stored with Electron's `safeStorage` and never crosses into the UI process.
 - **A local clone** of each repository you want to work on. Discovery is global; resolution needs a worktree, so it needs a clone.
 
 ## Cost
 
-Airlock runs on your existing Cursor plan. Every tier defaults into the **free lane** — Auto and Cursor's first-party models, which are unlimited on paid plans and do not draw down your included dollar pool. Frontier models are never selected automatically: choosing one is an explicit, labelled action, and the UI marks those selections as pool-spending before anything runs.
+Punchlist runs on your existing Cursor plan. Every tier defaults into the **free lane** — Auto and Cursor's first-party models, which are unlimited on paid plans and do not draw down your included dollar pool. Frontier models are never selected automatically: choosing one is an explicit, labelled action, and the UI marks those selections as pool-spending before anything runs.
 
 So the default marginal cost of running this is zero, and any spend is something you deliberately asked for.
 
@@ -43,13 +43,13 @@ So the default marginal cost of running this is zero, and any spend is something
 
 ```bash
 bun install
-bun run dist      # produces release/Airlock-<version>.dmg
+bun run dist      # produces release/Punchlist-<version>.dmg
 ```
 
 **The build is unsigned.** There is no Apple Developer certificate for this project, so on first open macOS will refuse to launch it. Right-click the app and choose Open, then confirm — or clear the quarantine attribute yourself:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Airlock.app
+xattr -dr com.apple.quarantine /Applications/Punchlist.app
 ```
 
 That is a real security prompt doing its job, and you should be no more casual about it here than anywhere else. A tool whose entire premise is that nothing happens without explicit confirmation should not be coy about its own installation.

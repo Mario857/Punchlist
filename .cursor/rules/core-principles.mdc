@@ -1,5 +1,5 @@
 ---
-description: Airlock working style — pattern-following, magic numbers, simplicity, comments, security, Zod parse boundaries, and the verification gate
+description: Punchlist working style — pattern-following, magic numbers, simplicity, comments, security, Zod parse boundaries, and the verification gate
 alwaysApply: true
 ---
 
@@ -87,7 +87,7 @@ When refactoring or moving code, **preserve existing comments**. If restructurin
 - Build output: `out/`, `dist/`, `node_modules/`, `*.tsbuildinfo`
 - `.cursor/rules/**` — a run resolving a PR comment never rewrites its own rules
 
-This list is mirrored by `src/main/guardrails.ts`, which enforces the equivalent protected paths on agents working on *user* repos through Airlock. Keep the two consistent; do not conflate their scope.
+This list is mirrored by `src/main/guardrails.ts`, which enforces the equivalent protected paths on agents working on *user* repos through Punchlist. Keep the two consistent; do not conflate their scope.
 
 ## Security
 
@@ -103,7 +103,7 @@ Zod is required at exactly three places, all untrusted. Everywhere else, trust t
 
 1. **`gh` subprocess stdout** — untyped by definition; `author` is null on deleted accounts.
 2. **The persisted JSON store** — may have been written by an older version of the app.
-3. **`.airlock/decision.json` and `.airlock/summary.json`** — written by an LLM, the least trustworthy input in the system.
+3. **`.punchlist/decision.json` and `.punchlist/summary.json`** — written by an LLM, the least trustworthy input in the system.
 
 Malformed agent output must degrade to a clean state ("agent halted incorrectly", template commit message), never crash the main process.
 

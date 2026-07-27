@@ -1,5 +1,5 @@
 ---
-description: Airlock renderer state — TanStack Query over the IPC bridge for request/response data, Zustand for streamed run and queue state, useState for genuinely local, never server data in a global store
+description: Punchlist renderer state — TanStack Query over the IPC bridge for request/response data, Zustand for streamed run and queue state, useState for genuinely local, never server data in a global store
 globs: src/renderer/**/*.ts,src/renderer/**/*.tsx
 alwaysApply: false
 ---
