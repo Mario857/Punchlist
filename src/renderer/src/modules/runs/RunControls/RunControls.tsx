@@ -41,6 +41,8 @@ const ATTENTION_ICON_SIZE = 12;
 const ROW_ALERT_ICON_SIZE = 11;
 
 const ROW_CLASS = 'flex items-center gap-2';
+/** One row per block: the label leads, the controls follow, prose lives in titles. */
+const BLOCK_ROW_CLASS = 'flex flex-wrap items-center gap-x-3 gap-y-1.5';
 const TRAILING_GROUP_CLASS = 'ml-auto flex items-center gap-2';
 const META_CLASS = 'text-muted text-xs';
 const ALERT_CLASS = 'text-danger text-xs leading-relaxed';
@@ -49,7 +51,6 @@ const ACTIVE_RUN_ROW_CLASS = 'bg-surface-raised flex items-center gap-2 rounded-
 const ACTIVE_RUN_LABEL_CLASS = 'text-ink min-w-0 flex-1 truncate text-xs';
 const BLOCK_HEADING_CLASS = 'text-ink text-xs font-medium';
 const BLOCK_COLUMN_CLASS = 'flex flex-col gap-1.5';
-const BUTTON_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 
 export function RunControls({ prRef }: RunControlsProps) {
   const {
@@ -234,15 +235,18 @@ export function RunControls({ prRef }: RunControlsProps) {
   // Reviewing one run at a time stays the default, so neither of these is the loud
   // button in this card. Nothing here reaches the landing gate: a bulk approve only
   // ever moves records to approved, which is what the note beneath it says.
+  // One row, with the boundary copy as hover detail on the buttons it describes:
+  // warnings and errors still get their own visible lines below.
   const bulkReview = isBulkReviewVisible ? (
     <div className={BLOCK_COLUMN_CLASS}>
-      <p className={BLOCK_HEADING_CLASS}>{BULK_REVIEW_HEADING}</p>
-      <div className={BUTTON_ROW_CLASS}>
+      <div className={BLOCK_ROW_CLASS}>
+        <p className={BLOCK_HEADING_CLASS}>{BULK_REVIEW_HEADING}</p>
         <Button
           variant={BUTTON_VARIANT.SECONDARY}
           size={BUTTON_SIZE.SM}
           isDisabled={isBulkApproveDisabled}
           isLoading={isBulkApprovePending}
+          title={bulkApproveNote}
           onClick={onBulkApproveClick}
         >
           {bulkApproveLabel}
@@ -252,12 +256,12 @@ export function RunControls({ prRef }: RunControlsProps) {
           size={BUTTON_SIZE.SM}
           isDisabled={isBulkRejectDisabled}
           isLoading={isBulkRejectPending}
+          title={bulkApproveNote}
           onClick={onBulkRejectClick}
         >
           {bulkRejectLabel}
         </Button>
       </div>
-      <p className={META_CLASS}>{bulkApproveNote}</p>
       {bulkApproveExclusion}
       {bulkApproveError}
       {bulkRejectError}
@@ -268,6 +272,7 @@ export function RunControls({ prRef }: RunControlsProps) {
     secondOpinionReviewedMessage === null ? null : (
       <p className={META_CLASS}>{secondOpinionReviewedMessage}</p>
     );
+  const secondOpinionTitle = `${secondOpinionCostNote}\n\n${secondOpinionAdvisoryNote}`;
 
   const secondOpinionError =
     secondOpinionErrorMessage === null ? null : (
@@ -280,19 +285,20 @@ export function RunControls({ prRef }: RunControlsProps) {
   // agent per run, so it must not read as the obvious thing to press.
   const secondOpinionBatch = isSecondOpinionVisible ? (
     <div className={BLOCK_COLUMN_CLASS}>
-      <p className={BLOCK_HEADING_CLASS}>{SECOND_OPINION_HEADING}</p>
-      <Button
-        variant={BUTTON_VARIANT.SECONDARY}
-        size={BUTTON_SIZE.SM}
-        isDisabled={isSecondOpinionDisabled}
-        isLoading={isSecondOpinionPending}
-        onClick={onSecondOpinionClick}
-      >
-        {secondOpinionLabel}
-      </Button>
-      <p className={META_CLASS}>{secondOpinionCostNote}</p>
-      <p className={META_CLASS}>{secondOpinionAdvisoryNote}</p>
-      {secondOpinionReviewed}
+      <div className={BLOCK_ROW_CLASS}>
+        <p className={BLOCK_HEADING_CLASS}>{SECOND_OPINION_HEADING}</p>
+        <Button
+          variant={BUTTON_VARIANT.SECONDARY}
+          size={BUTTON_SIZE.SM}
+          isDisabled={isSecondOpinionDisabled}
+          isLoading={isSecondOpinionPending}
+          title={secondOpinionTitle}
+          onClick={onSecondOpinionClick}
+        >
+          {secondOpinionLabel}
+        </Button>
+        {secondOpinionReviewed}
+      </div>
       {secondOpinionError}
     </div>
   ) : null;
@@ -374,11 +380,7 @@ export function RunControls({ prRef }: RunControlsProps) {
         {poolSpendingNotice}
         {costUnknownNotice}
         {startError}
-        <AutoModeToggle
-          prRef={prRef}
-          onEnabled={onAutoModeEnabled}
-          isExplanationVisible={isExpanded}
-        />
+        <AutoModeToggle prRef={prRef} onEnabled={onAutoModeEnabled} />
         {activeRunList}
         {cancelError}
         {stopAllError}

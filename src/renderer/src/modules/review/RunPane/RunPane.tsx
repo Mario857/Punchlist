@@ -69,11 +69,14 @@ export function RunPane({ commentId }: RunPaneProps) {
           <FollowUpPrompt key={view.runId} runId={view.runId} />
         ) : null;
 
-        // Above the diff rather than under it: a flag is worth seeing before you start
-        // reading the patch, not after you have already scrolled it.
+        // A flag still waiting on you renders above the diff — it is worth seeing
+        // before you start reading — but once acknowledged the card is a record, and
+        // records live below the patch with the rest of the history.
         const guardrailFlags = view.hasGuardrailFlags ? (
           <GuardrailFlags key={view.runId} runId={view.runId} />
         ) : null;
+        const gatingFlags = view.hasUnacknowledgedGuardrailFlags ? guardrailFlags : null;
+        const acknowledgedFlags = view.hasUnacknowledgedGuardrailFlags ? null : guardrailFlags;
 
         // Under the patch and the prompt: the trail undoes a step you have already read
         // rather than being something to read first.
@@ -105,7 +108,7 @@ export function RunPane({ commentId }: RunPaneProps) {
             {/* First because it frames everything under it: what the agent says it
                 did is the claim the flags, opinions and diff are checked against. */}
             <RunSummary key={view.runId} runId={view.runId} />
-            {guardrailFlags}
+            {gatingFlags}
             {autoDecisions}
             {secondOpinion}
             <DiffReview
@@ -115,6 +118,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               isEditable={view.isPatchEditable}
             />
             {reviewDecision}
+            {acknowledgedFlags}
             {followUpPrompt}
             {revisionHistory}
           </div>

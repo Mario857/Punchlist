@@ -1,3 +1,4 @@
+import { hasUnacknowledgedFlags } from '@shared/guardrails';
 import type { AgentDecision, RunRecord } from '@shared/runs';
 import { FAILURE_REASON, RUN_STATE, type RunState } from '@shared/runState';
 import { assertNever } from '@renderer/lib/assertNever';
@@ -40,6 +41,13 @@ export type RunPaneView =
        * flag stays on screen because the record of what was accepted is the point.
        */
       hasGuardrailFlags: boolean;
+      /**
+       * Where the flag card renders. A flag still waiting on you gates the approval,
+       * so it belongs above the diff; once every flag is acknowledged the card is a
+       * record rather than a gate, and a record does not get to stand between you and
+       * the patch.
+       */
+      hasUnacknowledgedGuardrailFlags: boolean;
       /**
        * Where a second reading is worth a card: `ready` and `approved` can still ask
        * for one, and a decided or landed run keeps the verdict it already has, since
@@ -201,6 +209,10 @@ function toRevisionProgressLabel(run: RunRecord): string {
 
 function toView(run: RunRecord): RunPaneView {
   const hasGuardrailFlags = run.guardrailFlags.length > NO_GUARDRAIL_FLAGS;
+  const hasUnacknowledgedGuardrailFlags = hasUnacknowledgedFlags(
+    run.guardrailFlags,
+    run.acknowledgedGuardrailIds,
+  );
   const hasSecondOpinion = isDefined(run.secondOpinion);
 
   switch (run.state) {
@@ -235,6 +247,7 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
+        hasUnacknowledgedGuardrailFlags,
         // The patch is moving, and a verdict is about the patch that was read.
         isSecondOpinionAvailable: false,
         revisionProgressLabel: toRevisionProgressLabel(run),
@@ -248,6 +261,7 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
+        hasUnacknowledgedGuardrailFlags,
         isSecondOpinionAvailable: true,
         revisionProgressLabel: null,
         isPatchEditable: true,
@@ -262,6 +276,7 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
+        hasUnacknowledgedGuardrailFlags,
         // Approval is revocable up to the landing gate, so a second reading can still
         // change the outcome here.
         isSecondOpinionAvailable: true,
@@ -280,6 +295,7 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
+        hasUnacknowledgedGuardrailFlags,
         // Kept where one exists, dropped where none does: a turned-down run is not
         // worth a fresh agent, but the reading that informed the rejection is history
         // worth keeping on screen.
@@ -295,6 +311,7 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
+        hasUnacknowledgedGuardrailFlags,
         // Landed: the verdict stays readable as part of the record, and there is
         // nothing left for a new one to change.
         isSecondOpinionAvailable: hasSecondOpinion,

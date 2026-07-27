@@ -20,6 +20,8 @@ export interface ToggleProps {
   label: string;
   isLabelHidden?: boolean;
   isDisabled?: boolean;
+  /** Hover detail for copy too long to sit beside the switch. */
+  title?: string;
   size?: ToggleSize;
   className?: string;
   ref?: Ref<HTMLButtonElement>;
@@ -57,6 +59,7 @@ export function Toggle({
   label,
   isLabelHidden = false,
   isDisabled = false,
+  title,
   size = TOGGLE_SIZE.MD,
   className,
   ref,
@@ -76,6 +79,7 @@ export function Toggle({
 
   return (
     <button
+      title={title}
       ref={ref}
       type="button"
       role="switch"
