@@ -9,6 +9,7 @@ import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUp
 import { AutoDecisions } from '@renderer/modules/review/AutoDecisions/AutoDecisions';
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
+import { RunSummary } from '@renderer/modules/review/RunSummary/RunSummary';
 import { ReviewDecision } from '@renderer/modules/review/ReviewDecision/ReviewDecision';
 import { SecondOpinion } from '@renderer/modules/review/SecondOpinion/SecondOpinion';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
@@ -101,6 +102,9 @@ export function RunPane({ commentId }: RunPaneProps) {
 
         return (
           <div className={COLUMN_CLASS}>
+            {/* First because it frames everything under it: what the agent says it
+                did is the claim the flags, opinions and diff are checked against. */}
+            <RunSummary key={view.runId} runId={view.runId} />
             {guardrailFlags}
             {autoDecisions}
             {secondOpinion}

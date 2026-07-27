@@ -102,7 +102,7 @@ ${FENCE_CLOSE}
 This is the draft commit message for your change. You know what you changed; a template does not.
 
 - \`subject\`: imperative mood ("Add", not "Added" or "Adds"), no trailing period, under ${COMMIT_SUBJECT_MAX_LENGTH} characters.
-- \`details\`: what changed and why, in prose. Call out anything a reviewer should look at twice. Use \`null\` if the subject genuinely says everything.
+- \`details\`: the overview the reviewer reads before the diff. State what the code did before, what it does now, and any consequence that does not show in the diff itself — callers affected, behaviour at edges, anything you deliberately left alone. Call out whatever deserves a second look. Use \`null\` only if the subject genuinely says everything.
 
 If you concluded that no code change was warranted, do not write this file — explain in your final message instead.
 
