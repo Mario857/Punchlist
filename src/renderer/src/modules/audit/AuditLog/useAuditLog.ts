@@ -167,6 +167,14 @@ function toActionPresentation(action: AuditAction): AuditActionPresentation {
         tone: BADGE_TONE.INFO,
         isOutsideSandbox: true,
       };
+    case AUDIT_ACTION.TARGET_BRANCH_UPDATED:
+      return {
+        label: 'Branch fast-forwarded',
+        explanation:
+          'The local target branch was fast-forwarded to the reviewed result. Nothing was pushed — the summary records the tip it moved from, which is what a manual reset needs.',
+        tone: BADGE_TONE.SUCCESS,
+        isOutsideSandbox: true,
+      };
     case AUDIT_ACTION.LANDING_UNDONE:
       return {
         label: 'Landing undone',

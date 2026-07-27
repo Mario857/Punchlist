@@ -80,7 +80,6 @@ export const queryKeys = {
    * Keying this by PR would keep offering an undo for a landing that a later landing
    * somewhere else has already superseded.
    */
-  undoableLanding: () => createQueryKey(QUERY_DOMAIN.LANDING_UNDOABLE),
   /**
    * Unkeyed by repo on purpose: distillation reads the whole evidence corpus at once
    * and a rule promotes to global on the strength of the repos it recurred in, so

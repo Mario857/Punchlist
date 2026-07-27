@@ -7,12 +7,9 @@ import { LandingCombinedDiff } from '@renderer/modules/landing/LandingPreview/co
 import { LandingCommitList } from '@renderer/modules/landing/LandingPreview/components/LandingCommitList';
 import { LandingConfirmBar } from '@renderer/modules/landing/LandingPreview/components/LandingConfirmBar';
 import { LandingConflictList } from '@renderer/modules/landing/LandingPreview/components/LandingConflictList';
-import { LandingGuardrailList } from '@renderer/modules/landing/LandingPreview/components/LandingGuardrailList';
 import { LandingTargetCard } from '@renderer/modules/landing/LandingPreview/components/LandingTargetCard';
-import { LandingThreadList } from '@renderer/modules/landing/LandingPreview/components/LandingThreadList';
 import { LANDING_VIEW_KIND } from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
 import { useLandingPreview } from '@renderer/modules/landing/LandingPreview/useLandingPreview';
-import { LandingUndo } from '@renderer/modules/landing/LandingUndo/LandingUndo';
 
 export interface LandingPreviewProps {
   /** Null before a PR is selected: the gate then has nothing to describe. */
@@ -88,12 +85,6 @@ export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
         const conflicts =
           view.conflicts === null ? null : <LandingConflictList view={view.conflicts} />;
 
-        // Flags sit above the diff for the same reason they do in the review pane: worth
-        // seeing before you start reading the patch, not after you have scrolled it.
-        const guardrails = view.guardrails.hasFlags ? (
-          <LandingGuardrailList view={view.guardrails} />
-        ) : null;
-
         // Absent entirely while a conflict stands — the gate is not offered, rather than
         // offered and refused.
         const confirm = view.confirm === null ? null : <LandingConfirmBar view={view.confirm} />;
@@ -103,9 +94,7 @@ export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
             <LandingTargetCard view={view.target} />
             {conflicts}
             <LandingCommitList view={view.commits} />
-            {guardrails}
             <LandingCombinedDiff view={view.combinedDiff} />
-            <LandingThreadList view={view.threads} />
             {confirm}
           </div>
         );
@@ -122,10 +111,6 @@ export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
         <p className={EXPLANATION_CLASS}>{explanation}</p>
       </header>
       {content}
-      {/* Outside the view switch: an undo is offered on the strength of the last
-          landing, not of whatever preview happens to be assembled — including right
-          after a landing, when the preview has emptied out because it succeeded. */}
-      <LandingUndo prRef={prRef} />
     </section>
   );
 }

@@ -56,10 +56,12 @@ export const DEFAULT_WATCHER_STATE: WatcherState = watcherStateSchema.parse({});
 export interface PrStatus {
   updatedAt: string;
   headSha: string;
-  /**
-   * The branch this PR is open against. `gh search prs --json` cannot return it, so
-   * it rides along on this query — which is also the only honest default for a
-   * landing target: not every repository merges into `main`.
-   */
+  /** The branch this PR is open against. `gh search prs --json` cannot return it. */
   baseRefName: string;
+  /**
+   * The PR's own branch, which is the honest default for a landing target: a local
+   * landing puts the commits on the branch the PR is from, so the fixes join the PR
+   * when the user pushes.
+   */
+  headRefName: string;
 }

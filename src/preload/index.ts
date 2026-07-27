@@ -14,10 +14,12 @@ import type {
 import type {
   AssembleLandingRequest,
   ExecuteLandingRequest,
+  PushBranchRequest,
+  PushBranchResult,
+  ResolveLandedThreadsRequest,
+  ResolveLandedThreadsResult,
   LandingPreview,
   LandingResult,
-  UndoLandingRequest,
-  UndoableLanding,
 } from '@shared/landing';
 import type { ModelCatalogEntry } from '@shared/models';
 import type {
@@ -132,10 +134,12 @@ const api: PunchlistApi = {
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_ASSEMBLE, request),
     execute: (request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>> =>
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_EXECUTE, request),
-    undoable: (): Promise<IpcResult<UndoableLanding | null>> =>
-      ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDOABLE),
-    undo: (request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>> =>
-      ipcRenderer.invoke(IPC_CHANNEL.LANDING_UNDO, request),
+    pushBranch: (request: PushBranchRequest): Promise<IpcResult<PushBranchResult>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_PUSH_BRANCH, request),
+    resolveThreads: (
+      request: ResolveLandedThreadsRequest,
+    ): Promise<IpcResult<ResolveLandedThreadsResult>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_RESOLVE_THREADS, request),
   },
   conventions: {
     list: (): Promise<IpcResult<ConventionRule[]>> =>

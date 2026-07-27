@@ -14,6 +14,8 @@ export const AUDIT_ACTION = {
   THREAD_UNRESOLVED: 'threadUnresolved',
   REPLY_POSTED: 'replyPosted',
   LANDING_UNDONE: 'landingUndone',
+  /** The local target branch fast-forwarded to the assembled result. */
+  TARGET_BRANCH_UPDATED: 'targetBranchUpdated',
   CONVENTIONS_EXPORTED: 'conventionsExported',
 } as const;
 

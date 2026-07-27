@@ -19,10 +19,9 @@ import { setLandingInProgress } from './automation';
 import {
   assembleLanding,
   executeLanding,
-  findUndoableLanding,
   LANDING_GATE_ACTION,
-  undoLanding,
-  UNDO_LANDING_GATE_ACTION,
+  pushTargetBranch,
+  resolveLandedThreads,
 } from './landing';
 import { confirmSandboxExit, SANDBOX_EXIT_ACTION } from './sandbox';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
@@ -118,16 +117,21 @@ const landingCommitPlanSchema = z.object({
   body: z.string(),
 });
 
+const pushBranchPayloadSchema = z.object({
+  prRef: prRefSchema,
+  targetBranch: z.string().min(1),
+  isConfirmedByUser: z.boolean(),
+});
+
+const resolveLandedThreadsPayloadSchema = z.object({
+  prRef: prRefSchema,
+  isConfirmedByUser: z.boolean(),
+});
+
 const executeLandingPayloadSchema = z.object({
   prRef: prRefSchema,
   targetBranch: z.string().min(MIN_BRANCH_NAME_LENGTH),
   commits: z.array(landingCommitPlanSchema),
-  replyText: z.string().nullable(),
-  isConfirmedByUser: z.boolean(),
-});
-
-const undoLandingPayloadSchema = z.object({
-  landingId: z.string(),
   isConfirmedByUser: z.boolean(),
 });
 
@@ -348,17 +352,27 @@ export function registerIpcHandlers(): void {
       ),
     ),
   );
-  registerHandler(IPC_CHANNEL.LANDING_UNDOABLE, noPayloadSchema, () => findUndoableLanding());
-  registerHandler(IPC_CHANNEL.LANDING_UNDO, undoLandingPayloadSchema, (request) =>
-    withLandingPaused(() =>
-      undoLanding(
-        request,
+
+  registerHandler(IPC_CHANNEL.LANDING_PUSH_BRANCH, pushBranchPayloadSchema, (request) =>
+    pushTargetBranch(
+      { prRef: request.prRef, targetBranch: request.targetBranch },
+      confirmSandboxExit({
+        action: SANDBOX_EXIT_ACTION.PUSH_BRANCH,
+        isConfirmedByUser: request.isConfirmedByUser,
+      }),
+    ),
+  );
+  registerHandler(
+    IPC_CHANNEL.LANDING_RESOLVE_THREADS,
+    resolveLandedThreadsPayloadSchema,
+    (request) =>
+      resolveLandedThreads(
+        request.prRef,
         confirmSandboxExit({
-          action: UNDO_LANDING_GATE_ACTION,
+          action: SANDBOX_EXIT_ACTION.RESOLVE_REVIEW_THREAD,
           isConfirmedByUser: request.isConfirmedByUser,
         }),
       ),
-    ),
   );
 
   registerHandler(IPC_CHANNEL.CONVENTIONS_LIST, noPayloadSchema, () => getConventionRules());

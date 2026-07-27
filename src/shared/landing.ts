@@ -1,4 +1,3 @@
-import type { GuardrailFlag } from './guardrails';
 import type { PrRef } from './discovery';
 import type { CandidatePatchFile } from './runs';
 
@@ -26,11 +25,6 @@ export interface LandingConflict {
   paths: string[];
 }
 
-export interface LandingThread {
-  threadId: string;
-  url: string;
-}
-
 /**
  * Exactly what confirming would do. Assembled by actually performing the merges in a
  * sandbox worktree, so conflicts are real findings rather than predictions — and so
@@ -38,19 +32,18 @@ export interface LandingThread {
  */
 export interface LandingPreview {
   prRef: PrRef;
-  /** Never pushed to directly; the integration branch is pushed as its own branch. */
+  /**
+   * The local branch the commits land on — normally the PR's own branch. Landing
+   * fast-forwards it and stops: nothing is pushed, no thread is resolved, no comment
+   * is posted. Publishing the result is the user's own git flow.
+   */
   targetBranch: string;
-  remoteName: string;
   integrationBranchName: string;
   commits: LandingCommitPlan[];
-  /** The combined diff, which the guardrails run over a second time. */
+  /** The combined diff — every approved patch merged, read as one artifact. */
   combinedFiles: CandidatePatchFile[];
-  guardrailFlags: GuardrailFlag[];
   /** Non-empty means the landing cannot proceed until each is re-run or dropped. */
   conflicts: LandingConflict[];
-  threadsToResolve: LandingThread[];
-  /** Null when no reply will be posted, which is the default. */
-  replyText: string | null;
 }
 
 export interface AssembleLandingRequest {
@@ -58,39 +51,15 @@ export interface AssembleLandingRequest {
   targetBranch: string;
 }
 
-/**
- * What a landing actually did. Returned so the UI can report it without re-reading
- * the audit log, and shaped to be exactly what an undo needs to reverse.
- */
+/** What a landing actually did, returned so the UI can report it without re-reading the audit log. */
 export interface LandingResult {
   landingId: string;
-  integrationBranchName: string;
-  remoteName: string;
-  resolvedThreadIds: string[];
-  /** A posted reply cannot be unposted, so this is a fact, not a reversible step. */
-  isReplyPosted: boolean;
+  targetBranch: string;
+  /** The tip the branch was on before, kept so a manual `git reset` has its argument. */
+  previousRevision: string;
+  landedRevision: string;
+  commitCount: number;
   runIds: string[];
-}
-
-/**
- * Undo is offered only while this is the most recent landing. Once work has been
- * built on top of it, unwinding is a git operation to perform deliberately rather
- * than through a button.
- */
-export interface UndoableLanding {
-  landingId: string;
-  at: string;
-  integrationBranchName: string;
-  remoteName: string;
-  resolvedThreadIds: string[];
-  isReplyPosted: boolean;
-  runIds: string[];
-}
-
-export interface UndoLandingRequest {
-  landingId: string;
-  /** Undo deletes a pushed branch and unresolves threads, so it is itself gated. */
-  isConfirmedByUser: boolean;
 }
 
 /**
@@ -102,11 +71,31 @@ export interface ExecuteLandingRequest {
   prRef: PrRef;
   targetBranch: string;
   commits: LandingCommitPlan[];
-  replyText: string | null;
   /**
    * The confirmation itself. Main mints the type-level `SandboxConfirmation` from
-   * this, so no path can push, resolve a thread or post a reply without the user
-   * having said so at this exact step.
+   * this, so no path can move a real branch without the user having said so at this
+   * exact step.
    */
   isConfirmedByUser: boolean;
+}
+
+export interface PushBranchRequest {
+  prRef: PrRef;
+  targetBranch: string;
+  /** Pushing publishes: the click on the labelled button is this consent. */
+  isConfirmedByUser: boolean;
+}
+
+export interface PushBranchResult {
+  branchName: string;
+  remoteName: string;
+}
+
+export interface ResolveLandedThreadsRequest {
+  prRef: PrRef;
+  isConfirmedByUser: boolean;
+}
+
+export interface ResolveLandedThreadsResult {
+  resolvedThreadIds: string[];
 }

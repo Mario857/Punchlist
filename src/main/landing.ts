@@ -2,20 +2,9 @@ import { mkdir, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { app } from 'electron';
 import { simpleGit, type SimpleGit } from 'simple-git';
-import {
-  appendAuditEntry,
-  createLandingId,
-  listAuditEntries,
-  listLandingAuditEntries,
-} from '@main/audit';
+import { appendAuditEntry, createLandingId } from '@main/audit';
 import { buildLandingCommitMessage } from '@main/commitMessage';
-import {
-  fetchPrComments,
-  postReviewThreadReply,
-  resolveReviewThread,
-  unresolveReviewThread,
-} from '@main/github';
-import { inspectCandidatePatch } from '@main/guardrails';
+import { fetchPrComments, resolveReviewThread } from '@main/github';
 import { requireRun } from '@main/run';
 import { transitionRun } from '@main/runState';
 import {
@@ -27,18 +16,13 @@ import {
   type SandboxConfirmation,
   type SandboxExitAction,
 } from '@main/sandbox';
-import { getRunById, getRuns } from '@main/store';
+import { resolveLocalRepoPath } from '@main/discovery';
+import { getRuns } from '@main/store';
 import { commitWorktree, revertToRevision } from '@main/worktree';
-import { AUDIT_ACTION, type AuditEntry } from '@shared/audit';
-import {
-  COMMENT_KIND,
-  isInlineThread,
-  type PrComment,
-  type UnanchoredComment,
-} from '@shared/comments';
+import { AUDIT_ACTION } from '@shared/audit';
+import { isInlineThread, type PrComment } from '@shared/comments';
 import { normalizeRemoteUrl, prRefKey, type PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
-import type { GuardrailFlag } from '@shared/guardrails';
 import type {
   AssembleLandingRequest,
   ExecuteLandingRequest,
@@ -46,11 +30,8 @@ import type {
   LandingConflict,
   LandingPreview,
   LandingResult,
-  LandingThread,
-  UndoLandingRequest,
-  UndoableLanding,
 } from '@shared/landing';
-import { MODEL_TIER, RUN_STATE, type ModelTier } from '@shared/runState';
+import { RUN_STATE } from '@shared/runState';
 import type { CandidatePatchFile, RunRecord } from '@shared/runs';
 
 /**
@@ -89,28 +70,22 @@ const WORKTREE_REMOVE_ARGS = ['worktree', 'remove'] as const;
 const WORKTREE_PRUNE_ARGS = ['worktree', 'prune'] as const;
 const BRANCH_DELETE_ARGS = ['branch', '-D'] as const;
 const MERGE_SQUASH_ARGS = ['merge', '--squash'] as const;
+const MERGE_FF_ONLY_ARGS = ['merge', '--ff-only'] as const;
+const CURRENT_BRANCH_ARGS = ['--abbrev-ref', 'HEAD'] as const;
+/**
+ * `git fetch . <src>:<dst>` fast-forwards a local branch that is not checked out,
+ * touching no working tree, and refuses a non-fast-forward without any flag needed.
+ */
+const LOCAL_FETCH_ARGS = ['fetch', '.'] as const;
 const DIFF_NAME_ONLY_ARGS = ['diff', '--name-only', '-z'] as const;
 /** `U` is git's status letter for an unmerged path, which is what a conflict leaves behind. */
 const UNMERGED_PATHS_ARGS = ['diff', '--name-only', '--diff-filter=U', '-z'] as const;
 const PATHSPEC_TERMINATOR = '--';
 
-/**
- * Both sides of the refspec are fully qualified so nothing else can decide what this
- * push means: `push.default`, a configured `remote.<name>.push` refspec or an
- * abbreviated name could otherwise send a different ref than the one assembled here.
- * The *target* branch never appears on either side — landing pushes the integration
- * branch as its own branch, which is what makes the result reviewable as a PR and
- * reversible by deleting it.
- */
-const PUSH_ARGS = ['push'] as const;
-const PUSH_DELETE_FLAG = '--delete';
 const BRANCH_REF_PREFIX = 'refs/heads/';
 const REFSPEC_SEPARATOR = ':';
-/** Read-only, so it needs no confirmation: it only asks whether the branch is still there. */
-const LS_REMOTE_HEADS_ARGS = ['ls-remote', '--heads'] as const;
 
 const DEFAULT_REMOTE_NAME = 'origin';
-const FETCH_HEAD_REVISION = 'FETCH_HEAD';
 const HEAD_REVISION = 'HEAD';
 const REVISION_PATH_SEPARATOR = ':';
 
@@ -127,26 +102,6 @@ const NO_ENTRIES = 0;
  */
 const PR_URL_PREFIX = 'https://github.com/';
 const PR_URL_INFIX = '/pull/';
-
-/**
- * The combined diff belongs to no single comment, so the anchor check — "did this
- * patch stray from the file *its* comment is about" — has nothing to compare against.
- * An unanchored comment is exactly how `inspectCandidatePatch` expresses "that check
- * does not apply", so the combined diff is inspected as one. This value is local to a
- * guardrail pass: it is never persisted, rendered, or mistaken for a real remark.
- */
-const COMBINED_DIFF_AUTHOR_LOGIN = 'punchlist';
-
-/**
- * Widest wins. The combined diff legitimately contains every approved run's work, so
- * measuring it against the narrowest tier involved would flag every multi-comment
- * landing and train the flag away.
- */
-const TIER_BREADTH_ORDER: readonly ModelTier[] = [
-  MODEL_TIER.MECHANICAL,
-  MODEL_TIER.STANDARD,
-  MODEL_TIER.COMPLEX,
-];
 
 const NOTHING_APPROVED_MESSAGE =
   'No resolution on this pull request is approved, so there is nothing to land.';
@@ -166,44 +121,27 @@ const NO_INTEGRATION_BRANCH_MESSAGE =
   'This pull request has no assembled integration branch, so a conflicting comment has nothing to be re-run against.';
 const NO_INTEGRATION_BRANCH_REMEDIATION =
   'Assemble the landing preview first, then re-run the conflicting comment.';
-const NOT_LATEST_LANDING_MESSAGE =
-  'That landing is no longer the most recent one, so undoing it here could unwind work built on top of it.';
-const NOT_LATEST_LANDING_REMEDIATION =
-  'Delete the branch and unresolve the threads by hand if that is really what you want.';
-const UNDO_NO_RUNS_MESSAGE =
-  'Every run this landing covered has been forgotten, so the clone its branch was pushed from is unknown.';
-const UNDO_NO_RUNS_REMEDIATION =
-  'Delete the pushed branch and unresolve the threads by hand, using the audit log as the record.';
 
 /**
- * The action whose confirmation opens the landing gate, and the one that opens the undo
- * gate. Exported so the IPC layer mints the token the entry point actually asserts —
- * a mismatch would be a runtime refusal rather than a compile error, since every
- * confirmation has the same type.
- *
- * Undo is gated on `pushBranch` because deleting a branch on the remote *is* a push:
- * `git push --delete` is the operation, and it is the destructive half of an undo.
+ * The action whose confirmation opens the landing gate. Exported so the IPC layer
+ * mints the token the entry point actually asserts — a mismatch would be a runtime
+ * refusal rather than a compile error, since every confirmation has the same type.
  */
 export const LANDING_GATE_ACTION: SandboxExitAction = SANDBOX_EXIT_ACTION.COMMIT_INTEGRATION_BRANCH;
-export const UNDO_LANDING_GATE_ACTION: SandboxExitAction = SANDBOX_EXIT_ACTION.PUSH_BRANCH;
 
 export interface PreparedLanding {
-  /**
-   * Minted here so every audit entry this landing writes shares one id, and an undo can
-   * replay exactly it.
-   */
+  /** Minted here so every audit entry this landing writes shares one id. */
   landingId: string;
   prRef: PrRef;
   repoPath: string;
-  remoteName: string;
   targetBranch: string;
   integrationBranchName: string;
   integrationWorktreePath: string;
-  /** The tip of the assembled integration branch, which is what the landing publishes. */
+  /** The tip the target branch was on, kept so a manual `git reset` has its argument. */
+  baseRevision: string;
+  /** The tip of the assembled integration branch, which is what lands on the target. */
   headRevision: string;
   commits: LandingCommitPlan[];
-  threadsToResolve: LandingThread[];
-  replyText: string | null;
   /** Every run whose work is in the branch, so the landing can be traced to its patches. */
   runIds: string[];
 }
@@ -219,7 +157,6 @@ interface AssembledIntegration {
   prRef: PrRef;
   targetBranch: string;
   repoPath: string;
-  remoteName: string;
   branchName: string;
   worktreePath: string;
   baseRevision: string;
@@ -227,8 +164,6 @@ interface AssembledIntegration {
   commits: LandingCommitPlan[];
   conflicts: LandingConflict[];
   combinedFiles: CandidatePatchFile[];
-  guardrailFlags: GuardrailFlag[];
-  threadsToResolve: LandingThread[];
   runIds: string[];
 }
 
@@ -369,25 +304,6 @@ function resolveCommitPlan(
   return { ...planned, runId: run.id, commentId: run.commentId };
 }
 
-function resolveCombinedTier(runs: readonly RunRecord[]): ModelTier {
-  return runs.reduce<ModelTier>((widest, run) => {
-    const isWider = TIER_BREADTH_ORDER.indexOf(run.tier) > TIER_BREADTH_ORDER.indexOf(widest);
-    return isWider ? run.tier : widest;
-  }, MODEL_TIER.MECHANICAL);
-}
-
-function toCombinedDiffSubject(prRef: PrRef): UnanchoredComment {
-  return {
-    kind: COMMENT_KIND.CONVERSATION,
-    id: prRefKey(prRef),
-    body: EMPTY_STRING,
-    author: { login: COMBINED_DIFF_AUTHOR_LOGIN, isBot: false },
-    createdAt: new Date().toISOString(),
-    url: buildPrUrl(prRef),
-    replies: [],
-  };
-}
-
 async function deleteBranchIfPresent(git: SimpleGit, branchName: string): Promise<void> {
   const branches = await git.branchLocal();
   if (!branches.all.includes(branchName)) return;
@@ -508,37 +424,20 @@ async function readCombinedFiles(
 }
 
 /**
- * The second guardrail pass. A patch that was fine on its own can combine badly, and
- * the combined diff is a different artifact — more files, more added lines, and
- * whatever the overlap of two patches produced — which is why `inspectCandidatePatch`
- * takes no per-run assumption.
+ * Resolved as a fully qualified local head, so an ambiguous name — a tag, a remote
+ * branch with the same name — can neither be landed on nor mask that the local branch
+ * simply does not exist.
  */
-function inspectCombinedDiff(
-  prRef: PrRef,
-  runs: readonly RunRecord[],
-  files: readonly CandidatePatchFile[],
-): GuardrailFlag[] {
-  return inspectCandidatePatch({
-    // The combined patch belongs to the landing rather than to any one run, so it is
-    // identified by the PR.
-    patch: { runId: prRefKey(prRef), files: [...files], isEmpty: files.length === NO_ENTRIES },
-    comment: toCombinedDiffSubject(prRef),
-    tier: resolveCombinedTier(runs),
-  });
-}
-
-/**
- * Only inline threads carry a `PRRT_`-prefixed thread node id and can be resolved
- * through the API, so review bodies and conversation comments contribute nothing here
- * rather than a fabricated id.
- */
-function toLandingThreads(comments: readonly PrComment[]): LandingThread[] {
-  const threads = new Map<string, LandingThread>();
-  for (const comment of comments) {
-    if (!isInlineThread(comment)) continue;
-    threads.set(comment.threadId, { threadId: comment.threadId, url: comment.url });
+async function resolveLocalBranchRevision(git: SimpleGit, branchName: string): Promise<string> {
+  try {
+    return (await git.revparse([toBranchRef(branchName)])).trim();
+  } catch {
+    throw new AppError(
+      APP_ERROR_KIND.NOT_FOUND,
+      `The branch "${branchName}" does not exist in this clone, so there is nothing to land on.`,
+      'Check out the pull request branch locally, or set the target branch to one that exists.',
+    );
   }
-  return [...threads.values()];
 }
 
 async function assembleIntegration(options: AssembleOptions): Promise<AssembledIntegration> {
@@ -559,13 +458,10 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
   const identity = await resolveGitIdentity(repoPath);
 
   const git = simpleGit(repoPath);
-  const remoteName = await resolveRemoteName(git, prRef.repoKey);
-  // The target is read from the remote rather than from the local checkout, so the
-  // preview is assembled against what the landing would really merge into. Fetching is
-  // read-only, so it is not a gated action.
-  await git.fetch([remoteName, targetBranch]);
-  // FETCH_HEAD is per-repository state, so this read belongs to the fetch above.
-  const baseRevision = (await git.revparse([FETCH_HEAD_REVISION])).trim();
+  // The base is the *local* branch, deliberately: the landing fast-forwards that branch
+  // and nothing else, so it must be assembled on exactly the tip it will move —
+  // including any local commits the remote has never seen.
+  const baseRevision = await resolveLocalBranchRevision(git, targetBranch);
 
   const branchName = buildIntegrationBranchName(prRef);
   const worktreePath = buildIntegrationWorktreePath(prRef);
@@ -583,7 +479,6 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
 
   const commits: LandingCommitPlan[] = [];
   const conflicts: LandingConflict[] = [];
-  const mergedComments: PrComment[] = [];
   const runIds: string[] = [];
 
   for (const run of runs) {
@@ -594,10 +489,8 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
       continue;
     }
 
-    // A clean merge puts this run's work in the branch whether or not it added
-    // anything new, so its thread is resolvable either way; a merge that changed
-    // nothing produces no commit, and inventing an empty one would make the history lie.
-    mergedComments.push(comment);
+    // A merge that changed nothing produces no commit, and inventing an empty one
+    // would make the history lie.
     runIds.push(run.id);
     const plan = resolveCommitPlan(run, comment, prUrl, plannedCommits);
     const commit = await commitWorktree(worktreePath, toCommitMessage(plan));
@@ -613,7 +506,6 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
     prRef,
     targetBranch,
     repoPath,
-    remoteName,
     branchName,
     worktreePath,
     baseRevision,
@@ -621,8 +513,6 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
     commits,
     conflicts,
     combinedFiles,
-    guardrailFlags: inspectCombinedDiff(prRef, runs, combinedFiles),
-    threadsToResolve: toLandingThreads(mergedComments),
     runIds,
   };
 }
@@ -642,17 +532,11 @@ export async function assembleLanding(request: AssembleLandingRequest): Promise<
 
   return {
     prRef: assembled.prRef,
-    // Recorded, never pushed to: landing pushes the integration branch as its own
-    // branch so the result is reviewable as a PR and reversible.
     targetBranch: assembled.targetBranch,
-    remoteName: assembled.remoteName,
     integrationBranchName: assembled.branchName,
     commits: assembled.commits,
     combinedFiles: assembled.combinedFiles,
-    guardrailFlags: assembled.guardrailFlags,
     conflicts: assembled.conflicts,
-    threadsToResolve: assembled.threadsToResolve,
-    replyText: null,
   };
 }
 
@@ -723,14 +607,12 @@ async function prepareLanding(
     landingId: createLandingId(),
     prRef: assembled.prRef,
     repoPath: assembled.repoPath,
-    remoteName: assembled.remoteName,
     targetBranch: assembled.targetBranch,
     integrationBranchName: assembled.branchName,
     integrationWorktreePath: assembled.worktreePath,
+    baseRevision: assembled.baseRevision,
     headRevision: assembled.headRevision,
     commits: assembled.commits,
-    threadsToResolve: assembled.threadsToResolve,
-    replyText: request.replyText,
     runIds: assembled.runIds,
   };
 }
@@ -789,85 +671,54 @@ async function publishIntegrationBranch(
 }
 
 /**
- * Pushed from the real clone rather than from the worktree, because the worktree-scoped
- * invalid `pushurl` is containment and the clone is where the user's own credentials
- * apply.
- *
- * Never `--force` and never `--force-with-lease`, here or as a fallback: a rejected push
- * means the remote branch holds commits this landing does not contain, which is a state
- * to look at rather than to overwrite.
+ * The one step that touches a real branch. `--ff-only` in the user's own checkout when
+ * the target is the current branch — git updates branch, index and working tree
+ * coherently, and refuses if uncommitted changes overlap. When the target is not
+ * checked out, `git fetch . <integration>:<target>` moves the ref alone, and refuses
+ * anything that is not a fast-forward. Never `--force` in either shape: a refusal
+ * means the branch holds commits this landing was not assembled on, which is a state
+ * to look at rather than overwrite.
  */
-async function pushIntegrationBranch(
+async function fastForwardTargetBranch(
   prepared: PreparedLanding,
   gate: SandboxConfirmation,
 ): Promise<void> {
-  // The push is performed here rather than by a callee, so the gate token is what
-  // authorises it directly and there is no derived one to hand anybody.
-  assertSandboxConfirmation(gate, LANDING_GATE_ACTION);
+  const confirmation = deriveGatedConfirmation(
+    gate,
+    LANDING_GATE_ACTION,
+    SANDBOX_EXIT_ACTION.UPDATE_TARGET_BRANCH,
+  );
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.UPDATE_TARGET_BRANCH);
 
-  const ref = toBranchRef(prepared.integrationBranchName);
-  await simpleGit(prepared.repoPath).raw([
-    ...PUSH_ARGS,
-    prepared.remoteName,
-    `${ref}${REFSPEC_SEPARATOR}${ref}`,
+  const git = simpleGit(prepared.repoPath);
+  const currentBranch = (await git.revparse([...CURRENT_BRANCH_ARGS])).trim();
+
+  if (currentBranch === prepared.targetBranch) {
+    await git.raw([...MERGE_FF_ONLY_ARGS, toBranchRef(prepared.integrationBranchName)]);
+    return;
+  }
+
+  await git.raw([
+    ...LOCAL_FETCH_ARGS,
+    `${toBranchRef(prepared.integrationBranchName)}${REFSPEC_SEPARATOR}${toBranchRef(prepared.targetBranch)}`,
   ]);
 }
 
 /**
- * One thread at a time, and the first failure stops the landing rather than being
- * collected: an error here is a real GitHub failure, and pressing on would pile more
- * half-finished work onto a landing that already needs looking at. What already
- * succeeded stays in the audit log, which is what makes the result recoverable — undo
- * replays exactly the threads that were recorded as resolved.
+ * The integration branch was the vehicle, and after a successful fast-forward the
+ * target branch holds everything it held — leaving it behind would accumulate one
+ * spent `punchlist/` branch per landing.
  */
-async function resolveLandingThreads(
-  prepared: PreparedLanding,
-  gate: SandboxConfirmation,
-): Promise<string[]> {
-  const confirmation = deriveGatedConfirmation(
-    gate,
-    LANDING_GATE_ACTION,
-    SANDBOX_EXIT_ACTION.RESOLVE_REVIEW_THREAD,
-  );
-
-  const resolvedThreadIds: string[] = [];
-  for (const thread of prepared.threadsToResolve) {
-    await resolveReviewThread(thread.threadId, confirmation, prepared.landingId);
-    resolvedThreadIds.push(thread.threadId);
+async function removeIntegrationBranch(prepared: PreparedLanding): Promise<void> {
+  try {
+    await simpleGit(prepared.repoPath).raw([...BRANCH_DELETE_ARGS, prepared.integrationBranchName]);
+  } catch (error: unknown) {
+    // A leftover branch is clutter, not damage, so it must not fail the landing.
+    console.warn(
+      `${LANDING_LOG_SCOPE} could not delete the integration branch`,
+      error instanceof Error ? error.name : 'unknown',
+    );
   }
-  return resolvedThreadIds;
-}
-
-/**
- * The reply is posted to each thread the landing resolved, because a reply on GitHub
- * belongs to a thread: one note saying where a remark was addressed is what each
- * reviewer needs to see under their own comment.
- *
- * A landing whose comments carry no resolvable thread therefore has nowhere to post,
- * and reports that it posted nothing rather than inventing a place to put it.
- *
- * **A posted reply cannot be unposted.** GitHub only lets a comment be followed by
- * another comment, so this step has no counterpart in `undoLanding` and the returned
- * flag is a fact rather than a reversible step.
- */
-async function postLandingReply(
-  prepared: PreparedLanding,
-  resolvedThreadIds: readonly string[],
-  gate: SandboxConfirmation,
-): Promise<boolean> {
-  const body = prepared.replyText === null ? EMPTY_STRING : prepared.replyText.trim();
-  if (body.length === NO_ENTRIES || resolvedThreadIds.length === NO_ENTRIES) return false;
-
-  const confirmation = deriveGatedConfirmation(
-    gate,
-    LANDING_GATE_ACTION,
-    SANDBOX_EXIT_ACTION.POST_REPLY,
-  );
-
-  for (const threadId of resolvedThreadIds) {
-    await postReviewThreadReply(threadId, body, confirmation, prepared.landingId);
-  }
-  return true;
 }
 
 /**
@@ -882,19 +733,15 @@ function markRunsApplied(runIds: readonly string[]): void {
 }
 
 /**
- * The gated entry point, and the only path in the app that reaches the real repository.
- * It takes a `SandboxConfirmation` at the type level because a branded token that cannot
+ * The gated entry point, and the only path in the app that reaches a real branch. It
+ * takes a `SandboxConfirmation` at the type level because a branded token that cannot
  * be written as a literal is the only version of "the user said so" a later caller
  * cannot forget.
  *
- * Each step is audited **after** it succeeds, never before: undo replays the landing
- * from these entries, so an entry for something that did not happen would make it try to
- * reverse an action nobody took. For the same reason nothing is un-recorded when a later
- * step fails — a partial landing that is honestly recorded is recoverable through undo,
- * one that is tidied out of the log is not.
- *
- * `resolveReviewThread` and `postReviewThreadReply` are handed this landing's id and
- * write their own entries against it, which is what that parameter is for.
+ * Everything stays on this machine: the target branch is fast-forwarded to the
+ * reviewed result and that is all. Nothing is pushed, no thread is resolved, no
+ * comment is posted — publishing the result is the user's own git flow, which is
+ * exactly where they said they wanted it.
  */
 export async function executeLanding(
   request: ExecuteLandingRequest,
@@ -903,243 +750,100 @@ export async function executeLanding(
   const prepared = await prepareLanding(request, confirmation);
 
   await publishIntegrationBranch(prepared, confirmation);
+  await fastForwardTargetBranch(prepared, confirmation);
   await appendAuditEntry({
-    action: AUDIT_ACTION.INTEGRATION_BRANCH_PUBLISHED,
+    action: AUDIT_ACTION.TARGET_BRANCH_UPDATED,
     prRef: prepared.prRef,
-    summary: `Published ${prepared.integrationBranchName} with ${prepared.commits.length} commit(s)`,
+    // The previous tip is the audit's most load-bearing fact: it is the argument a
+    // manual `git reset` needs if the landing is ever unwanted.
+    summary: `Fast-forwarded ${prepared.targetBranch} from ${prepared.baseRevision} to ${prepared.headRevision} (${prepared.commits.length} commit(s))`,
     runIds: prepared.runIds,
-    branchName: prepared.integrationBranchName,
+    branchName: prepared.targetBranch,
     landingId: prepared.landingId,
   });
 
-  await pushIntegrationBranch(prepared, confirmation);
-  await appendAuditEntry({
-    action: AUDIT_ACTION.BRANCH_PUSHED,
-    prRef: prepared.prRef,
-    // Names the branch and the remote, never the target branch it will be reviewed
-    // against and never a line of what it contains.
-    summary: `Pushed ${prepared.integrationBranchName} to ${prepared.remoteName}`,
-    runIds: prepared.runIds,
-    branchName: prepared.integrationBranchName,
-    remoteName: prepared.remoteName,
-    landingId: prepared.landingId,
-  });
-
-  const resolvedThreadIds = await resolveLandingThreads(prepared, confirmation);
-  const isReplyPosted = await postLandingReply(prepared, resolvedThreadIds, confirmation);
-
+  await removeIntegrationBranch(prepared);
   markRunsApplied(prepared.runIds);
 
   return {
     landingId: prepared.landingId,
-    integrationBranchName: prepared.integrationBranchName,
-    remoteName: prepared.remoteName,
-    resolvedThreadIds,
-    isReplyPosted,
+    targetBranch: prepared.targetBranch,
+    previousRevision: prepared.baseRevision,
+    landedRevision: prepared.headRevision,
+    commitCount: prepared.commits.length,
     runIds: prepared.runIds,
   };
 }
 
-function collectThreadIds(entries: readonly AuditEntry[], action: AuditEntry['action']): string[] {
-  return entries.filter((entry) => entry.action === action).flatMap((entry) => entry.threadIds);
-}
+const NOTHING_LANDED_MESSAGE =
+  'No landed run covers this pull request, so there is no thread to resolve.';
+const NOTHING_LANDED_REMEDIATION = 'Land at least one approved resolution first.';
 
 /**
- * One landing's entries — newest first, as the log returns them — read back as the
- * record an undo replays in reverse. Null means there is nothing an undo may reverse:
- *
- * - It has already been undone. The log is append-only, so the `LANDING_UNDONE` entry
- *   stands next to the entries it reversed rather than removing them, and it is exactly
- *   how a spent landing is recognised.
- * - Nothing reached the remote. A landing that failed before its push left a local
- *   branch and nothing else, and a button offering to undo it would be a lie.
- *
- * The *oldest* push of the group is the landing's own: an undo records its branch
- * deletion as a push too, because `git push --delete` is what it does.
+ * Pushes the target branch to its remote counterpart — on demand, never as part of a
+ * landing. Fully qualified on both sides so `push.default` and configured refspecs
+ * cannot reinterpret it, and never forced: a rejection means the remote moved, which
+ * is a state to look at.
  */
-function toUndoableLanding(
-  landingId: string,
-  entries: readonly AuditEntry[],
-): UndoableLanding | null {
-  if (entries.some((entry) => entry.action === AUDIT_ACTION.LANDING_UNDONE)) return null;
-
-  const pushed = entries.findLast((entry) => entry.action === AUDIT_ACTION.BRANCH_PUSHED);
-  if (pushed === undefined) return null;
-  if (pushed.branchName === null || pushed.remoteName === null) return null;
-
-  // Threads an interrupted undo already brought back are dropped, so a retry unresolves
-  // what is still resolved instead of replaying the whole list.
-  const alreadyUnresolved = new Set(collectThreadIds(entries, AUDIT_ACTION.THREAD_UNRESOLVED));
-  const resolvedThreadIds = [
-    ...new Set(collectThreadIds(entries, AUDIT_ACTION.THREAD_RESOLVED)),
-  ].filter((threadId) => !alreadyUnresolved.has(threadId));
-
-  return {
-    landingId,
-    at: pushed.at,
-    integrationBranchName: pushed.branchName,
-    remoteName: pushed.remoteName,
-    resolvedThreadIds,
-    isReplyPosted: entries.some((entry) => entry.action === AUDIT_ACTION.REPLY_POSTED),
-    runIds: pushed.runIds,
-  };
-}
-
-/**
- * Undo is offered only while this is the most recent landing. Once another landing has
- * happened — or work has been built on top of that branch — unwinding it is a git
- * operation to perform deliberately rather than through a button, so the newest landing
- * id in the log is the only one this ever returns.
- */
-export async function findUndoableLanding(): Promise<UndoableLanding | null> {
-  const entries = await listAuditEntries();
-  const latest = entries.find((entry) => entry.landingId !== null);
-  if (latest === undefined || latest.landingId === null) return null;
-
-  return toUndoableLanding(latest.landingId, await listLandingAuditEntries(latest.landingId));
-}
-
-/**
- * A run record can be forgotten while its landing stays in the log, and an undo that
- * refused over a dismissed run would leave a branch on the remote that nothing else
- * deletes. So the missing ones are skipped and the branch is still removed.
- */
-function listLandedRuns(runIds: readonly string[]): RunRecord[] {
-  return runIds.map((runId) => getRunById(runId)).filter((run): run is RunRecord => run !== null);
-}
-
-/** Whether the branch this landing pushed is still on the remote. */
-async function hasRemoteBranch(repoPath: string, landing: UndoableLanding): Promise<boolean> {
-  const output = await simpleGit(repoPath).raw([
-    ...LS_REMOTE_HEADS_ARGS,
-    landing.remoteName,
-    toBranchRef(landing.integrationBranchName),
-  ]);
-  return output.trim().length > NO_ENTRIES;
-}
-
-/**
- * A deletion, never a force-push: the branch this landing created is removed whole
- * rather than rewritten, which is the only reason "reversible by deleting a branch"
- * holds without ever forcing anything.
- *
- * The local branch is deliberately left alone. The audit record authorises undoing what
- * the landing did *outside* the sandbox, and the commits are still the user's to keep or
- * delete themselves.
- *
- * False means the remote branch was already gone — an undo that was interrupted after
- * this step, or a branch deleted by hand — so there was nothing to delete and nothing to
- * record. Checked rather than discovered through a failed push, since undo is also the
- * recovery path for a partial landing and has to be safe to retry.
- */
-async function deletePushedBranch(
-  repoPath: string,
-  landing: UndoableLanding,
-  gate: SandboxConfirmation,
-): Promise<boolean> {
-  // The undo gate *is* the push confirmation, since deleting a remote branch is a push.
-  assertSandboxConfirmation(gate, UNDO_LANDING_GATE_ACTION);
-  if (!(await hasRemoteBranch(repoPath, landing))) return false;
-
-  await simpleGit(repoPath).raw([
-    ...PUSH_ARGS,
-    landing.remoteName,
-    PUSH_DELETE_FLAG,
-    toBranchRef(landing.integrationBranchName),
-  ]);
-  return true;
-}
-
-/**
- * Back to `approved`, which is where the runs were when the landing gate opened.
- *
- * Written through the store rather than through `transitionRun`, because the transition
- * table has no `applied → approved` edge: it was written when landed work really was
- * final, and undo is precisely that edge. This is the one place in the app a run's state
- * moves without the machine's blessing, and the durable fix is that edge in
- * `runState.ts` — after which this becomes a `transitionRun` call like every other.
- */
-function returnRunsToApproved(runs: readonly RunRecord[]): void {
-  for (const run of runs) {
-    // Only the runs this landing actually marked applied. One that failed before the
-    // state change is already approved, and a later re-approval is not undo's to touch.
-    if (run.state !== RUN_STATE.APPLIED) continue;
-    transitionRun(run, RUN_STATE.APPROVED);
-  }
-}
-
-/**
- * The reverse of a landing, replayed from its own audit record: delete the branch that
- * was pushed, unresolve every thread the landing resolved, return those runs to
- * `approved`. It costs no extra bookkeeping because `unresolveReviewThread` takes the
- * same `PRRT_` thread node id `resolveReviewThread` consumed, which the record holds.
- *
- * Two limits are honest rather than papered over. **A posted reply is not unposted** —
- * GitHub allows only a further comment, so `isReplyPosted` travels back to the caller as
- * a fact to state. And **only the most recent landing may be undone**, refused below
- * rather than trusted from the caller.
- *
- * The undo appends its own entry rather than editing the ones it reverses; the log is
- * append-only, and a history that quietly loses a push is worse than one that records
- * both the push and its reversal.
- */
-export async function undoLanding(
-  request: UndoLandingRequest,
+export async function pushTargetBranch(
+  request: { prRef: PrRef; targetBranch: string },
   confirmation: SandboxConfirmation,
-): Promise<UndoableLanding> {
-  assertSandboxConfirmation(confirmation, UNDO_LANDING_GATE_ACTION);
+): Promise<{ branchName: string; remoteName: string }> {
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.PUSH_BRANCH);
 
-  const undoable = await findUndoableLanding();
-  if (undoable === null || undoable.landingId !== request.landingId) {
+  const repoPath = resolveLocalRepoPath(request.prRef.repoKey);
+  if (repoPath === null) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, MIXED_CLONE_MESSAGE, MIXED_CLONE_REMEDIATION);
+  }
+  const git = simpleGit(repoPath);
+  const remoteName = await resolveRemoteName(git, request.prRef.repoKey);
+  const ref = toBranchRef(request.targetBranch);
+  await git.raw(['push', remoteName, `${ref}${REFSPEC_SEPARATOR}${ref}`]);
+
+  await appendAuditEntry({
+    action: AUDIT_ACTION.BRANCH_PUSHED,
+    prRef: request.prRef,
+    summary: `Pushed ${request.targetBranch} to ${remoteName}`,
+    branchName: request.targetBranch,
+    remoteName,
+  });
+
+  return { branchName: request.targetBranch, remoteName };
+}
+
+/**
+ * Resolves the review threads of every comment a *landed* run addressed. Derived from
+ * the applied runs and a fresh comment fetch rather than remembered from the landing,
+ * so it can run any time after — including after several landings — and never touches
+ * a thread that is already resolved.
+ */
+export async function resolveLandedThreads(
+  prRef: PrRef,
+  confirmation: SandboxConfirmation,
+): Promise<{ resolvedThreadIds: string[] }> {
+  assertSandboxConfirmation(confirmation, SANDBOX_EXIT_ACTION.RESOLVE_REVIEW_THREAD);
+
+  const appliedCommentIds = new Set(
+    getRuns()
+      .filter((run) => prRefKey(run.prRef) === prRefKey(prRef) && run.state === RUN_STATE.APPLIED)
+      .map((run) => run.commentId),
+  );
+  if (appliedCommentIds.size === NO_ENTRIES) {
     throw new AppError(
       APP_ERROR_KIND.NOT_FOUND,
-      NOT_LATEST_LANDING_MESSAGE,
-      NOT_LATEST_LANDING_REMEDIATION,
+      NOTHING_LANDED_MESSAGE,
+      NOTHING_LANDED_REMEDIATION,
     );
   }
 
-  // The clone the branch was pushed from is not in the log — it holds actions, not
-  // paths — so it comes from the runs the landing covered, which all share one.
-  const runs = listLandedRuns(undoable.runIds);
-  const [firstRun] = runs;
-  if (firstRun === undefined) {
-    throw new AppError(APP_ERROR_KIND.NOT_FOUND, UNDO_NO_RUNS_MESSAGE, UNDO_NO_RUNS_REMEDIATION);
+  const comments = await fetchPrComments(prRef);
+  const resolvedThreadIds: string[] = [];
+  for (const comment of comments) {
+    if (!isInlineThread(comment)) continue;
+    if (!appliedCommentIds.has(comment.id)) continue;
+    if (comment.isResolved) continue;
+    await resolveReviewThread(comment.threadId, confirmation);
+    resolvedThreadIds.push(comment.threadId);
   }
-
-  const isBranchDeleted = await deletePushedBranch(firstRun.repoPath, undoable, confirmation);
-  if (isBranchDeleted) {
-    await appendAuditEntry({
-      action: AUDIT_ACTION.BRANCH_PUSHED,
-      prRef: firstRun.prRef,
-      summary: `Deleted ${undoable.integrationBranchName} on ${undoable.remoteName}`,
-      runIds: undoable.runIds,
-      branchName: undoable.integrationBranchName,
-      remoteName: undoable.remoteName,
-      landingId: undoable.landingId,
-    });
-  }
-
-  const unresolveConfirmation = deriveGatedConfirmation(
-    confirmation,
-    UNDO_LANDING_GATE_ACTION,
-    SANDBOX_EXIT_ACTION.UNRESOLVE_REVIEW_THREAD,
-  );
-  for (const threadId of undoable.resolvedThreadIds) {
-    await unresolveReviewThread(threadId, unresolveConfirmation, undoable.landingId);
-  }
-
-  returnRunsToApproved(runs);
-
-  await appendAuditEntry({
-    action: AUDIT_ACTION.LANDING_UNDONE,
-    prRef: firstRun.prRef,
-    summary: `Undid ${undoable.landingId}: ${undoable.integrationBranchName} deleted on ${undoable.remoteName}, ${undoable.resolvedThreadIds.length} thread(s) unresolved`,
-    runIds: undoable.runIds,
-    threadIds: undoable.resolvedThreadIds,
-    branchName: undoable.integrationBranchName,
-    remoteName: undoable.remoteName,
-    landingId: undoable.landingId,
-  });
-
-  return undoable;
+  return { resolvedThreadIds };
 }

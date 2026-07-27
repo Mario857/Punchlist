@@ -190,12 +190,13 @@ export function useWorkspace(): UseWorkspaceResult {
   const runStateByCommentId = useRunStateByCommentId();
   const { prStatus } = useQueryPrStatus(selectedPr);
 
-  // An edit you made for this PR wins; otherwise the branch the PR is actually open
-  // against, which is the only defensible default.
+  // An edit you made for this PR wins; otherwise the PR's own branch — a local
+  // landing puts the commits where the PR is from, so pushing that branch is what
+  // updates the PR.
   const targetBranch =
     selectedPr === null
       ? FALLBACK_TARGET_BRANCH
-      : (targetBranchByPr[prRefKey(selectedPr)] ?? prStatus?.baseRefName ?? FALLBACK_TARGET_BRANCH);
+      : (targetBranchByPr[prRefKey(selectedPr)] ?? prStatus?.headRefName ?? FALLBACK_TARGET_BRANCH);
 
   const commentTreeRef = useRef<CommentTreeNavigationHandle>(null);
   const diffPaneRef = useRef<HTMLDivElement>(null);

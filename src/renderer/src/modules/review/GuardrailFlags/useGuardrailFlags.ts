@@ -39,12 +39,10 @@ const HEADING = 'Flagged';
 /**
  * Deliberately not error copy, and deliberately not a gate. A review comment can
  * legitimately ask for a change that touches a flagged file, so the patch is shown with
- * its findings beside it — the reviewer reads both and decides. The landing preview
- * recomputes its own findings over the combined diff, and that confirmation is the one
- * that counts.
+ * its findings beside it — the reviewer reads both and decides.
  */
 const EXPLANATION =
-  'None of these block anything and none of them mean something went wrong. They are the things worth reading the patch with — the landing preview re-runs its own checks before anything leaves the sandbox.';
+  'None of these block anything and none of them mean something went wrong. They are the things worth reading the patch with.';
 
 const PROTECTED_PATH_LABEL = 'Protected path';
 const PROTECTED_PATH_REASON =

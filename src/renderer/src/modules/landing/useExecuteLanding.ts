@@ -18,9 +18,8 @@ interface UseExecuteLandingResult {
 }
 
 /**
- * The only mutation in the app that reaches outside the sandbox. Nothing here is
- * optimistic — a push, a resolved thread and a posted reply are facts main reports,
- * never states the UI shows ahead of it.
+ * Nothing here is optimistic — a moved branch is a fact main reports, never a state
+ * the UI shows ahead of it.
  */
 export function useExecuteLanding(): UseExecuteLandingResult {
   const queryClient = useQueryClient();
@@ -28,14 +27,11 @@ export function useExecuteLanding(): UseExecuteLandingResult {
   const { mutate, data, isPending, error } = useMutation({
     mutationFn: async (request: ExecuteLandingRequest) =>
       unwrapIpcResult(await requireBridge().landing.execute(request)),
-    // onSettled rather than onSuccess: publishing, pushing, resolving and replying run
-    // in sequence and are not atomic, so a failure halfway through has still changed the
-    // remote, the threads and the runs. Refreshing only on success would leave the screen
-    // describing a repository state that no longer exists — and would hide the undo that
-    // a partially completed landing may now have made available.
+    // onSettled rather than onSuccess: a failure after the fast-forward has still
+    // moved the branch and applied the runs, so refreshing only on success would leave
+    // the screen describing a repository state that no longer exists.
     onSettled: (_result, _error, request) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.auditLog() });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.undoableLanding() });
       void queryClient.invalidateQueries({ queryKey: queryKeys.landingPreviews() });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.prComments(request.prRef.repoKey, request.prRef.number),
@@ -44,8 +40,8 @@ export function useExecuteLanding(): UseExecuteLandingResult {
         queryKey: runsQueryKeys.list(request.prRef.repoKey, request.prRef.number),
       });
     },
-    // The request carries commit bodies and the reply text, so only the failure is
-    // logged — never the payload.
+    // The request carries commit bodies, so only the failure is logged — never the
+    // payload.
     onError: (mutationError) => logError(mutationError, 'useExecuteLanding'),
   });
 

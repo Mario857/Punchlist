@@ -69,6 +69,63 @@ export function LandingConfirmBar({ view }: Props) {
       </div>
     );
 
+  const publishView = view.publish;
+  const publish = (() => {
+    if (publishView === null) return null;
+
+    const pushed =
+      publishView.pushedLabel === null ? null : (
+        <p role="status" className={SUCCESS_CLASS}>
+          {publishView.pushedLabel}
+        </p>
+      );
+    const pushError =
+      publishView.pushErrorMessage === null ? null : (
+        <p role="alert" className={ERROR_CLASS}>
+          {publishView.pushErrorMessage}
+        </p>
+      );
+    const resolved =
+      publishView.resolvedLabel === null ? null : (
+        <p role="status" className={SUCCESS_CLASS}>
+          {publishView.resolvedLabel}
+        </p>
+      );
+    const resolveError =
+      publishView.resolveErrorMessage === null ? null : (
+        <p role="alert" className={ERROR_CLASS}>
+          {publishView.resolveErrorMessage}
+        </p>
+      );
+
+    return (
+      <div className={COLUMN_CLASS}>
+        <div className={ACTION_ROW_CLASS}>
+          <Button
+            variant={BUTTON_VARIANT.SECONDARY}
+            size={BUTTON_SIZE.SM}
+            isLoading={publishView.isPushPending}
+            onClick={publishView.onPushClick}
+          >
+            {publishView.pushLabel}
+          </Button>
+          <Button
+            variant={BUTTON_VARIANT.SECONDARY}
+            size={BUTTON_SIZE.SM}
+            isLoading={publishView.isResolvePending}
+            onClick={publishView.onResolveClick}
+          >
+            {publishView.resolveLabel}
+          </Button>
+        </div>
+        {pushed}
+        {pushError}
+        {resolved}
+        {resolveError}
+      </div>
+    );
+  })();
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={COLUMN_CLASS}>
       <h3 className={HEADING_CLASS}>{view.heading}</h3>
@@ -76,6 +133,7 @@ export function LandingConfirmBar({ view }: Props) {
       {blocker}
       {pending}
       {success}
+      {publish}
       {failure}
       <div className={ACTION_ROW_CLASS}>
         <Button

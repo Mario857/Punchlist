@@ -35,7 +35,7 @@ const TARGET_BRANCH_INPUT_ID = 'workspace-target-branch';
 const TARGET_BRANCH_LABEL = 'Target branch';
 /** Says where a landing would go, not that anything has gone there. */
 const TARGET_BRANCH_TITLE =
-  'Where an approved batch would land. Defaults to the branch this pull request is open against; the integration branch is pushed as its own branch, and this one is never pushed to directly.';
+  'The local branch an approved batch lands on. Defaults to the pull request\u2019s own branch: the commits join it locally, and nothing is pushed until you say so.';
 const OPEN_LANDING_LABEL = 'Review landing';
 const CLOSE_LANDING_LABEL = 'Back to comments';
 const TARGET_BRANCH_INPUT_CLASS =

@@ -12,10 +12,12 @@ import type {
 import type {
   AssembleLandingRequest,
   ExecuteLandingRequest,
+  PushBranchRequest,
+  PushBranchResult,
+  ResolveLandedThreadsRequest,
+  ResolveLandedThreadsResult,
   LandingPreview,
   LandingResult,
-  UndoLandingRequest,
-  UndoableLanding,
 } from './landing';
 import type { ModelCatalogEntry } from './models';
 import type {
@@ -77,8 +79,8 @@ export const IPC_CHANNEL = {
   RUNS_REJECT: 'runs:reject',
   LANDING_ASSEMBLE: 'landing:assemble',
   LANDING_EXECUTE: 'landing:execute',
-  LANDING_UNDOABLE: 'landing:undoable',
-  LANDING_UNDO: 'landing:undo',
+  LANDING_PUSH_BRANCH: 'landing:pushBranch',
+  LANDING_RESOLVE_THREADS: 'landing:resolveThreads',
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
   RUNS_SECOND_OPINION: 'runs:secondOpinion',
   AUDIT_LIST: 'audit:list',
@@ -252,15 +254,17 @@ export interface LandingApi {
    */
   assemble(request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>>;
   /**
-   * The only path out of the sandbox. Publishes the integration branch, pushes it,
-   * resolves the review threads and optionally posts a reply — each audited. The
-   * target branch is never pushed to directly and nothing is ever force-pushed.
+   * The only path that reaches a real branch. Fast-forwards the local target branch
+   * to the assembled result — audited, never forced — and stops there: nothing is
+   * pushed, no thread is resolved, no comment is posted.
    */
   execute(request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>>;
-  /** The most recent landing, while it is still the one an undo may reverse. */
-  undoable(): Promise<IpcResult<UndoableLanding | null>>;
-  /** Deletes the pushed branch and unresolves the threads. A reply stays posted. */
-  undo(request: UndoLandingRequest): Promise<IpcResult<UndoableLanding>>;
+  /** Pushes the target branch to its remote — on demand, never as part of a landing. */
+  pushBranch(request: PushBranchRequest): Promise<IpcResult<PushBranchResult>>;
+  /** Resolves the threads of every comment a landed run addressed, skipping resolved ones. */
+  resolveThreads(
+    request: ResolveLandedThreadsRequest,
+  ): Promise<IpcResult<ResolveLandedThreadsResult>>;
 }
 
 export interface ConventionsApi {

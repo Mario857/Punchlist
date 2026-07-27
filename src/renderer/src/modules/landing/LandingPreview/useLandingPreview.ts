@@ -1,26 +1,28 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
-import type { GuardrailFlag } from '@shared/guardrails';
-import type {
-  AssembleLandingRequest,
-  LandingCommitPlan,
-  LandingConflict,
-  LandingThread,
-} from '@shared/landing';
+import type { AssembleLandingRequest, LandingCommitPlan, LandingConflict } from '@shared/landing';
 import { keyBy } from '@renderer/lib/collections';
 import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import { useExecuteLanding } from '@renderer/modules/landing/useExecuteLanding';
+import {
+  useExecutePushBranch,
+  useExecuteResolveThreads,
+} from '@renderer/modules/landing/useExecutePublish';
 import { useQueryLandingPreview } from '@renderer/modules/landing/useQueryLandingPreview';
 import { useExecuteRerunConflicted } from '@renderer/modules/runs/useQueryRuns';
 import {
   ASSEMBLE_ERROR_FALLBACK,
   ASSEMBLING_LABEL,
   buildConfirmLabel,
+  buildPushLabel,
+  buildPushedLabel,
+  buildResolvedLabel,
+  RESOLVE_LABEL,
+  type LandingPublishView,
   buildConflictPathsLabel,
-  buildGuardrailStatusLabel,
   buildLandingSuccessLabel,
   COMBINED_DIFF_EMPTY_LABEL,
   COMBINED_DIFF_EXPLANATION,
@@ -36,39 +38,28 @@ import {
   CONFIRM_HEADING,
   CONFLICTS_EXPLANATION,
   CONFLICTS_HEADING,
-  GUARDRAILS_EXPLANATION,
-  GUARDRAILS_HEADING,
   LANDING_ERROR_FALLBACK,
   LANDING_EXPLANATION,
   LANDING_FAILURE_AUDIT_NOTICE,
-  LANDING_GUARDRAIL_KIND_LABEL,
   LANDING_HEADING,
   LANDING_PARTIAL_FAILURE_NOTICE,
   LANDING_PENDING_LABEL,
   LANDING_VIEW_KIND,
-  NO_REPLY_LABEL,
   NOTHING_TO_LAND_BLOCKER,
   NOTHING_TO_PREVIEW_LABEL,
   REASSEMBLE_LABEL,
   RERUN_CONFLICT_LABEL_PREFIX,
   RERUN_CONFLICT_LABEL_SUFFIX,
-  REPLY_HEADING,
   RETRY_LABEL,
   TARGET_BRANCH_LABEL,
   TARGET_EXPLANATION,
   TARGET_HEADING,
-  TARGET_INTEGRATION_BRANCH_LABEL,
   TARGET_ITEM_KEY,
   TARGET_PULL_REQUEST_LABEL,
-  TARGET_REMOTE_LABEL,
-  THREADS_EMPTY_LABEL,
-  THREADS_EXPLANATION,
-  THREADS_HEADING,
   toCommentSummary,
   type LandingCommitItem,
   type LandingConflictItem,
   type LandingFailureView,
-  type LandingGuardrailItem,
   type LandingView,
 } from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
 
@@ -97,12 +88,17 @@ interface LandingCommitMessageDraft {
  * step where the user clicked and nowhere a default could carry it.
  */
 const IS_CONFIRMED_BY_USER = true;
+const PUSH_ERROR_FALLBACK = 'The push failed.';
+const RESOLVE_ERROR_FALLBACK = 'Resolving the threads failed.';
+
+function toActionErrorMessage(error: unknown, fallback: string): string | null {
+  if (!isDefined(error)) return null;
+  return isIpcError(error) ? error.message : fallback;
+}
 
 /** Stable identities, so an absent preview does not rebuild every list each render. */
 const NO_DRAFTS: ReadonlyMap<string, LandingCommitMessageDraft> = new Map();
 const NO_COMMIT_PLANS: readonly LandingCommitPlan[] = [];
-const NO_GUARDRAIL_FLAGS: readonly GuardrailFlag[] = [];
-const NO_THREADS: readonly LandingThread[] = [];
 const NO_CONFLICTS: readonly LandingConflict[] = [];
 const NO_COMMENTS: readonly PrComment[] = [];
 
@@ -150,11 +146,7 @@ export function useLandingPreview({
   );
 
   const commitPlans = isDefined(landingPreview) ? landingPreview.commits : NO_COMMIT_PLANS;
-  const guardrailFlags = isDefined(landingPreview)
-    ? landingPreview.guardrailFlags
-    : NO_GUARDRAIL_FLAGS;
   const conflicts = isDefined(landingPreview) ? landingPreview.conflicts : NO_CONFLICTS;
-  const threads = isDefined(landingPreview) ? landingPreview.threadsToResolve : NO_THREADS;
 
   /**
    * The plans with the hand-edited messages applied. This array is exactly the shape
@@ -209,15 +201,6 @@ export function useLandingPreview({
     [commentsById, commits],
   );
 
-  const guardrailItems = useMemo<LandingGuardrailItem[]>(
-    () =>
-      guardrailFlags.map((flag) => {
-        const kindLabel = LANDING_GUARDRAIL_KIND_LABEL[flag.kind];
-        return { id: flag.id, kindLabel, path: flag.path, detail: flag.detail };
-      }),
-    [guardrailFlags],
-  );
-
   const { rerunConflicted, isRerunConflictedPending } = useExecuteRerunConflicted();
 
   const conflictItems = useMemo<LandingConflictItem[]>(
@@ -241,6 +224,37 @@ export function useLandingPreview({
   );
 
   const { executeLanding, landingResult, isLandingExecuting, landingError } = useExecuteLanding();
+  const { pushBranch, pushBranchResult, isPushBranchPending, pushBranchError } =
+    useExecutePushBranch();
+  const { resolveThreads, resolveThreadsResult, isResolveThreadsPending, resolveThreadsError } =
+    useExecuteResolveThreads();
+
+  // The follow-ups exist only once a landing has put commits on the branch: pushing
+  // and resolving are their own decisions, taken by their own labelled buttons.
+  const publish = ((): LandingPublishView | null => {
+    if (!isDefined(landingResult) || prRef === null) return null;
+    return {
+      pushLabel: buildPushLabel(landingResult.targetBranch),
+      isPushPending: isPushBranchPending,
+      pushedLabel: isDefined(pushBranchResult)
+        ? buildPushedLabel(pushBranchResult.branchName, pushBranchResult.remoteName)
+        : null,
+      pushErrorMessage: toActionErrorMessage(pushBranchError, PUSH_ERROR_FALLBACK),
+      onPushClick: () =>
+        pushBranch({
+          prRef,
+          targetBranch: landingResult.targetBranch,
+          isConfirmedByUser: IS_CONFIRMED_BY_USER,
+        }),
+      resolveLabel: RESOLVE_LABEL,
+      isResolvePending: isResolveThreadsPending,
+      resolvedLabel: isDefined(resolveThreadsResult)
+        ? buildResolvedLabel(resolveThreadsResult.resolvedThreadIds.length)
+        : null,
+      resolveErrorMessage: toActionErrorMessage(resolveThreadsError, RESOLVE_ERROR_FALLBACK),
+      onResolveClick: () => resolveThreads({ prRef, isConfirmedByUser: IS_CONFIRMED_BY_USER }),
+    };
+  })();
 
   /**
    * The PR and target come off the assembled preview rather than off the props: what
@@ -253,7 +267,6 @@ export function useLandingPreview({
       prRef: landingPreview.prRef,
       targetBranch: landingPreview.targetBranch,
       commits,
-      replyText: landingPreview.replyText,
       isConfirmedByUser: IS_CONFIRMED_BY_USER,
     });
   }, [commits, executeLanding, landingPreview]);
@@ -315,19 +328,9 @@ export function useLandingPreview({
             value: `${landingPreview.prRef.repoKey}${PR_NUMBER_PREFIX}${landingPreview.prRef.number}`,
           },
           {
-            key: TARGET_ITEM_KEY.REMOTE,
-            label: TARGET_REMOTE_LABEL,
-            value: landingPreview.remoteName,
-          },
-          {
             key: TARGET_ITEM_KEY.TARGET_BRANCH,
             label: TARGET_BRANCH_LABEL,
             value: landingPreview.targetBranch,
-          },
-          {
-            key: TARGET_ITEM_KEY.INTEGRATION_BRANCH,
-            label: TARGET_INTEGRATION_BRANCH_LABEL,
-            value: landingPreview.integrationBranchName,
           },
         ],
       },
@@ -350,29 +353,12 @@ export function useLandingPreview({
         hasCommits: commitItems.length > EMPTY_LENGTH,
         emptyLabel: COMMITS_EMPTY_LABEL,
       },
-      guardrails: {
-        heading: GUARDRAILS_HEADING,
-        explanation: GUARDRAILS_EXPLANATION,
-        items: guardrailItems,
-        hasFlags: guardrailItems.length > EMPTY_LENGTH,
-        statusLabel: buildGuardrailStatusLabel(guardrailItems.length),
-      },
       combinedDiff: {
         heading: COMBINED_DIFF_HEADING,
         explanation: COMBINED_DIFF_EXPLANATION,
         files: landingPreview.combinedFiles,
         hasChanges: landingPreview.combinedFiles.length > EMPTY_LENGTH,
         emptyLabel: COMBINED_DIFF_EMPTY_LABEL,
-      },
-      threads: {
-        heading: THREADS_HEADING,
-        explanation: THREADS_EXPLANATION,
-        items: threads.map((thread) => ({ threadId: thread.threadId, url: thread.url })),
-        hasThreads: threads.length > EMPTY_LENGTH,
-        emptyLabel: THREADS_EMPTY_LABEL,
-        replyHeading: REPLY_HEADING,
-        replyText: landingPreview.replyText,
-        noReplyLabel: NO_REPLY_LABEL,
       },
       // Not offered at all while a conflict stands, which is the difference between a
       // gate and a button someone waits on.
@@ -382,12 +368,10 @@ export function useLandingPreview({
             heading: CONFIRM_HEADING,
             explanation: CONFIRM_EXPLANATION,
             confirmLabel: buildConfirmLabel({
-              integrationBranchName: landingPreview.integrationBranchName,
-              remoteName: landingPreview.remoteName,
-              threadCount: threads.length,
-              isReplyPlanned: landingPreview.replyText !== null,
+              targetBranch: landingPreview.targetBranch,
+              commitCount: commits.length,
             }),
-            // A landed preview is stale by definition, and re-clicking would push a
+            // A landed preview is stale by definition, and re-clicking would land a
             // second time; the button stays out of reach until this preview is rebuilt.
             isConfirmDisabled: blockerLabel !== null || isDefined(landingResult),
             isConfirmExecuting: isLandingExecuting,
@@ -396,6 +380,7 @@ export function useLandingPreview({
             successLabel: isDefined(landingResult) ? buildLandingSuccessLabel(landingResult) : null,
             failure: landingFailure,
             onConfirmClick,
+            publish,
           },
     };
   })();

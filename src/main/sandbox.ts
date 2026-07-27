@@ -234,10 +234,11 @@ export function buildMainGhEnvironment(): NodeJS.ProcessEnv {
 /** The operations that reach the real repo or GitHub, and therefore need a gate. */
 export const SANDBOX_EXIT_ACTION = {
   COMMIT_INTEGRATION_BRANCH: 'commitIntegrationBranch',
+  /** Fast-forwarding the real target branch to the assembled result. */
+  UPDATE_TARGET_BRANCH: 'updateTargetBranch',
+  /** Pushing the target branch to its remote, on demand and never as part of a landing. */
   PUSH_BRANCH: 'pushBranch',
   RESOLVE_REVIEW_THREAD: 'resolveReviewThread',
-  UNRESOLVE_REVIEW_THREAD: 'unresolveReviewThread',
-  POST_REPLY: 'postReply',
   /** Writing distilled conventions into the user's repository. */
   EXPORT_CONVENTIONS: 'exportConventions',
 } as const;
