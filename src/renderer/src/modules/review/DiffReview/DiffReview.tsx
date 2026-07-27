@@ -23,7 +23,17 @@ export interface DiffReviewProps {
 
 const SECTION_LABEL = 'Candidate patch';
 const EDITOR_LOADING_LABEL = 'Loading the diff';
-const FILE_TREE_CLASS = 'border-border w-56 shrink-0 overflow-y-auto border-r pr-1';
+/**
+ * Pinned while the tall diff scrolls past, because switching file or hunk is something
+ * you decide mid-read — sending you back to the top to do it would undo the point of
+ * the single scroll column. The tree pins below the toolbar's row, and caps its own
+ * height so a long file list scrolls within itself rather than growing past the
+ * viewport it is pinned inside.
+ */
+const FILE_TREE_CLASS =
+  'border-border sticky top-10 max-h-screen w-56 shrink-0 self-start overflow-y-auto border-r pr-1';
+/** Above the sticky tree, and backed so the diff does not read through it. */
+const HEADER_CLASS = 'bg-bg-1/90 sticky top-0 z-10 flex items-center gap-2 py-1 backdrop-blur';
 const HEADER_PATH_CLASS = 'text-ink min-w-0 flex-1 truncate font-mono text-xs';
 const PROGRESS_CLASS = 'text-state-revising flex items-center gap-1.5 text-xs';
 const TOOLBAR_CLASS = 'flex shrink-0 items-center gap-1';
@@ -206,7 +216,7 @@ export function DiffReview({ runId, revisionProgressLabel, isEditable }: DiffRev
 
   return (
     <section aria-label={SECTION_LABEL} className="flex min-h-0 flex-1 flex-col gap-2">
-      <header className="flex items-center gap-2">
+      <header className={HEADER_CLASS}>
         <p className={HEADER_PATH_CLASS} title={selectedPathLabel}>
           {selectedPathLabel}
         </p>
