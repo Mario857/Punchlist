@@ -4,7 +4,6 @@ import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
 import { StateBadge } from '@renderer/components/StateBadge';
-import { Toggle, TOGGLE_SIZE } from '@renderer/components/Toggle';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
 import { ChevronDownIcon } from '@renderer/components/icons/ChevronDownIcon';
 import { ChevronRightIcon } from '@renderer/components/icons/ChevronRightIcon';
@@ -26,7 +25,6 @@ const CLEANUP_LABEL = 'Clean up finished';
 const CANCEL_LABEL_PREFIX = 'Cancel ';
 const SANDBOX_LOADING_LABEL = 'Measuring sandbox…';
 const SANDBOX_SEPARATOR = ' · ';
-const POOL_SPENDING_ACKNOWLEDGE_LABEL = 'Spend the included pool for this batch';
 
 const AUTO_TRIGGER_LABEL = 'Auto';
 const AUTO_TRIGGER_TITLE = 'Started by automation from an allowlisted author, not by you';
@@ -61,8 +59,6 @@ export function RunControls({ prRef }: RunControlsProps) {
     selectedCommentIds,
     hasSelection,
     poolSpendingMessage,
-    isPoolSpendingAcknowledged,
-    onPoolSpendingAcknowledgedChange,
     costUnknownMessage,
     activeRunItems,
     hasActiveRuns,
@@ -170,20 +166,14 @@ export function RunControls({ prRef }: RunControlsProps) {
     <BatchTierPicker selectedCommentIds={selectedCommentIds} />
   ) : null;
 
+  // Stated, not gated: the pool-spending choice was made in Settings, so the batch
+  // says what it will cost and starts when told to.
   const poolSpendingNotice =
     poolSpendingMessage === null ? null : (
-      <div className="flex flex-col gap-1.5">
-        <p role="alert" className={WARNING_CLASS}>
-          <AlertTriangleIcon size={ATTENTION_ICON_SIZE} className="mt-0.5 shrink-0" />
-          {poolSpendingMessage}
-        </p>
-        <Toggle
-          isChecked={isPoolSpendingAcknowledged}
-          onChange={onPoolSpendingAcknowledgedChange}
-          label={POOL_SPENDING_ACKNOWLEDGE_LABEL}
-          size={TOGGLE_SIZE.SM}
-        />
-      </div>
+      <p role="alert" className={WARNING_CLASS}>
+        <AlertTriangleIcon size={ATTENTION_ICON_SIZE} className="mt-0.5 shrink-0" />
+        {poolSpendingMessage}
+      </p>
     );
 
   const costUnknownNotice =

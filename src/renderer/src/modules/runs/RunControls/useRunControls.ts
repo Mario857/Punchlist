@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { isRecommendedForRun, type PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
@@ -58,10 +58,12 @@ interface UseRunControlsResult {
   /** Passed down so the batch tier picker stays a dumb component. */
   selectedCommentIds: readonly string[];
   hasSelection: boolean;
-  /** Non-null whenever starting this selection would draw down the included pool. */
+  /**
+   * Non-null whenever starting this selection would draw down the included pool. A
+   * statement, not a gate: picking a pool-spending model in Settings was the consent,
+   * and asking again per batch taught the reflex of clicking through it.
+   */
   poolSpendingMessage: string | null;
-  isPoolSpendingAcknowledged: boolean;
-  onPoolSpendingAcknowledgedChange: (isAcknowledged: boolean) => void;
   /** Non-null while a pinned model's lane is still unknown, which blocks the start. */
   costUnknownMessage: string | null;
   activeRunItems: ActiveRunItem[];
@@ -153,9 +155,6 @@ const UNLISTED_MODEL_LABEL = 'a model your account does not list';
 
 const COST_UNKNOWN_MESSAGE =
   'Waiting on your settings and the account model list before starting: a pinned model whose lane is unknown could spend the included pool.';
-
-const ACKNOWLEDGEMENT_KEY_SEPARATOR = '|';
-const ACKNOWLEDGEMENT_PART_SEPARATOR = ':';
 
 /**
  * A worktree that survives cleanup held uncommitted changes, and git's refusal to
@@ -330,17 +329,6 @@ function buildBulkApproveExclusionMessage(flagBlockedCount: number): string | nu
   return `${BULK_APPROVE_EXCLUSION_PREFIX}${countLabel}${BULK_APPROVE_EXCLUSION_REMEDIATION}`;
 }
 
-/** Keyed by the exact tier-and-model set, so an acknowledgement cannot outlive it. */
-function buildAcknowledgementKey(resolutions: readonly TierLaneResolution[]): string {
-  return resolutions
-    .map(
-      (resolution) =>
-        `${resolution.tier}${ACKNOWLEDGEMENT_PART_SEPARATOR}${resolution.modelId ?? ''}`,
-    )
-    .sort()
-    .join(ACKNOWLEDGEMENT_KEY_SEPARATOR);
-}
-
 export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControlsResult {
   const selectedCommentIds = useSessionStore((state) => state.selectedCommentIds);
   const setSelectedCommentIds = useSessionStore((state) => state.setSelectedCommentIds);
@@ -349,10 +337,6 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const setIsRunControlsExpanded = useSessionStore((state) => state.setIsRunControlsExpanded);
   const activeRuns = useActiveRunsForPr(prRef);
   const runsForPr = useRunsForPr(prRef);
-
-  const [acknowledgedPoolSpendingKey, setAcknowledgedPoolSpendingKey] = useState<string | null>(
-    null,
-  );
 
   const { prComments } = useQueryPrComments(prRef);
   const { settings } = useQuerySettings();
@@ -392,12 +376,7 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     [laneResolutions],
   );
 
-  const poolSpendingKey =
-    poolSpendingResolutions.length === EMPTY_COUNT
-      ? null
-      : buildAcknowledgementKey(poolSpendingResolutions);
-  const isPoolSpendingAcknowledged =
-    poolSpendingKey !== null && acknowledgedPoolSpendingKey === poolSpendingKey;
+  const isPoolSpending = poolSpendingResolutions.length > EMPTY_COUNT;
 
   const isCostUndecided = laneResolutions.some(isUndecidedResolution);
 
@@ -432,10 +411,9 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const isStartDisabled = (() => {
     if (prRef === null) return true;
     if (selectedCount === EMPTY_COUNT) return true;
-    // Spend has to be knowable before it can be authorised, so an undecided lane
-    // blocks the start rather than defaulting to "probably free".
+    // Spend has to be knowable before it can be stated, so an undecided lane blocks
+    // the start rather than defaulting to "probably free".
     if (isCostUndecided) return true;
-    if (poolSpendingKey !== null) return !isPoolSpendingAcknowledged;
     return false;
   })();
 
@@ -464,17 +442,8 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     return toErrorMessage(sandboxCleanupError, CLEANUP_ERROR_FALLBACK);
   })();
 
-  const onPoolSpendingAcknowledgedChange = useCallback(
-    (isAcknowledged: boolean) => {
-      setAcknowledgedPoolSpendingKey(isAcknowledged ? poolSpendingKey : null);
-    },
-    [poolSpendingKey],
-  );
-
   const onStartClick = useCallback(() => {
     startRuns(startRequests);
-    // The batch is on its way, so the authorisation it carried is spent with it.
-    setAcknowledgedPoolSpendingKey(null);
   }, [startRequests, startRuns]);
 
   // The one definition of "recommended" lives in src/shared/comments.ts, so the set auto
@@ -529,10 +498,7 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     startErrorMessage: toErrorMessage(startRunsError, START_ERROR_FALLBACK),
     selectedCommentIds,
     hasSelection: selectedCount > EMPTY_COUNT,
-    poolSpendingMessage:
-      poolSpendingKey === null ? null : describePoolSpending(poolSpendingResolutions),
-    isPoolSpendingAcknowledged,
-    onPoolSpendingAcknowledgedChange,
+    poolSpendingMessage: isPoolSpending ? describePoolSpending(poolSpendingResolutions) : null,
     costUnknownMessage: isCostUndecided ? COST_UNKNOWN_MESSAGE : null,
     activeRunItems,
     hasActiveRuns: activeRunItems.length > EMPTY_COUNT,

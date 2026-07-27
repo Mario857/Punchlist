@@ -27,8 +27,6 @@ const NO_FREE_LANE_MESSAGE =
   'No unlimited-lane model (Auto, Composer, Cursor Grok) is available on this account.';
 const NO_FREE_LANE_REMEDIATION = 'Pin a model for each tier in Settings, then retry.';
 const CONFIGURED_MODEL_REMEDIATION = 'Pick an available model for this tier in Settings.';
-const CONFIGURED_EFFORT_REMEDIATION =
-  'Pick an available reasoning effort for this tier in Settings.';
 
 /**
  * Cursor's unlimited lane — Auto plus the first-party Composer and Cursor Grok models —
@@ -280,15 +278,23 @@ function resolveEffort(
   const ladder = toEffortLadder(parameter);
   if (requestedEffort === null) return toTierEffort(ladder, tier);
 
-  if (!ladder.includes(requestedEffort)) {
-    throw new AppError(
-      APP_ERROR_KIND.NOT_FOUND,
-      `Model ${entry.id} does not offer the configured reasoning effort "${requestedEffort}".`,
-      CONFIGURED_EFFORT_REMEDIATION,
-    );
-  }
+  // Matched by normalized name, answered with the declared value: the catalog's casing
+  // is what the SDK expects back, and a setting saved as "high" must keep matching a
+  // catalog that declares "High". Exact comparison here is what made Opus refuse an
+  // effort it genuinely offers.
+  const declaredEffort = ladder.find(
+    (value) => normalizeName(value) === normalizeName(requestedEffort),
+  );
+  if (declaredEffort !== undefined) return declaredEffort;
 
-  return requestedEffort;
+  // A genuinely absent value must not make the model unusable: efforts are per-model
+  // value sets, and one configured against a different model degrades to this model's
+  // own rung for the tier rather than refusing to run at all.
+  console.warn(
+    ROUTER_LOG_SCOPE,
+    `Model ${entry.id} does not offer the configured reasoning effort "${requestedEffort}"; using the tier default.`,
+  );
+  return toTierEffort(ladder, tier);
 }
 
 interface TierEntry {
