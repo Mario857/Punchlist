@@ -29,12 +29,10 @@ const PROGRESS_CLASS = 'text-state-revising flex items-center gap-1.5 text-xs';
 const TOOLBAR_CLASS = 'flex shrink-0 items-center gap-1';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 const REMEDIATION_CLASS = 'text-muted block';
-/**
- * A floor rather than `min-h-0`: the patch shares a scrolling column with the flag,
- * opinion and decision cards, all of which take their natural height, so a shrinkable
- * editor collapsed to a few pixels and the diff became invisible.
- */
-const DIFF_BODY_CLASS = 'flex min-h-96 flex-1';
+// No flex sizing: the editor reports its content height and the row wraps it, so the
+// review column around it is the one thing that scrolls.
+const DIFF_BODY_CLASS = 'flex';
+const LOADING_BODY_CLASS = 'grid h-40 place-items-center';
 const DIMMED_CLASS = 'opacity-50';
 
 export function DiffReview({ runId, revisionProgressLabel, isEditable }: DiffReviewProps) {
@@ -160,7 +158,7 @@ export function DiffReview({ runId, revisionProgressLabel, isEditable }: DiffRev
   const body = (() => {
     if (isCandidatePatchLoading) {
       return (
-        <div className="grid flex-1 place-items-center">
+        <div className={LOADING_BODY_CLASS}>
           <Spinner size={SPINNER_SIZE.MD} label={EDITOR_LOADING_LABEL} />
         </div>
       );

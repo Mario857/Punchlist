@@ -66,7 +66,6 @@ interface UseRunControlsResult {
   costUnknownMessage: string | null;
   activeRunItems: ActiveRunItem[];
   hasActiveRuns: boolean;
-  activeRunsLabel: string;
   isCancelRunPending: boolean;
   cancelErrorMessage: string | null;
   stopAllLabel: string;
@@ -134,17 +133,12 @@ const NO_SELECTION_LABEL = 'Start selected';
 const SINGLE_SELECTION_LABEL = 'Start 1 comment';
 const EXPAND_LABEL = 'More actions';
 const COLLAPSE_LABEL = 'Fewer actions';
-const NO_ACTIVE_RUNS_LABEL = 'Nothing running';
-const SINGLE_ACTIVE_RUN_LABEL = '1 run in flight';
 
 /**
  * Which of the runs in flight nobody asked for. Said at the queue level as well as on
  * the row, because "four runs in flight" reads very differently when three of them
  * started while you were away.
  */
-const AUTO_RUNS_LABEL_SEPARATOR = ' · ';
-const SINGLE_AUTO_RUN_LABEL = '1 auto';
-const AUTO_RUNS_LABEL_SUFFIX = ' auto';
 const SINGLE_ACTIVE_RUN_STOP_LABEL = 'Stop the run';
 const START_ERROR_FALLBACK = 'Could not start a run for the selected comments.';
 const CANCEL_ERROR_FALLBACK = 'Could not cancel that run.';
@@ -430,22 +424,6 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     return `Start ${selectedCount} comments`;
   })();
 
-  const autoRunCount = activeRunItems.filter((item) => item.isAutoTriggered).length;
-
-  const activeRunsLabel = (() => {
-    if (activeRunItems.length === EMPTY_COUNT) return NO_ACTIVE_RUNS_LABEL;
-    const countLabel =
-      activeRunItems.length === SINGLE_COUNT
-        ? SINGLE_ACTIVE_RUN_LABEL
-        : `${activeRunItems.length} runs in flight`;
-    if (autoRunCount === EMPTY_COUNT) return countLabel;
-    const autoLabel =
-      autoRunCount === SINGLE_COUNT
-        ? SINGLE_AUTO_RUN_LABEL
-        : `${autoRunCount}${AUTO_RUNS_LABEL_SUFFIX}`;
-    return `${countLabel}${AUTO_RUNS_LABEL_SEPARATOR}${autoLabel}`;
-  })();
-
   const stopAllLabel =
     activeRunItems.length === SINGLE_COUNT
       ? SINGLE_ACTIVE_RUN_STOP_LABEL
@@ -558,7 +536,6 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     costUnknownMessage: isCostUndecided ? COST_UNKNOWN_MESSAGE : null,
     activeRunItems,
     hasActiveRuns: activeRunItems.length > EMPTY_COUNT,
-    activeRunsLabel,
     isCancelRunPending,
     cancelErrorMessage: toErrorMessage(cancelRunError, CANCEL_ERROR_FALLBACK),
     stopAllLabel,

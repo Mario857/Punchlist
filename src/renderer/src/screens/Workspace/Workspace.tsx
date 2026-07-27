@@ -12,6 +12,7 @@ import { RunControls } from '@renderer/modules/runs/RunControls/RunControls';
 import { LEFT_PANE_WIDTH } from '@shared/settings';
 import { PaneDivider } from './components/PaneDivider/PaneDivider';
 import { PANE_EDGE } from './components/PaneDivider/usePaneDivider';
+import { StatusBar } from './components/StatusBar/StatusBar';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { useWorkspace } from './useWorkspace';
 
@@ -183,6 +184,7 @@ export function Workspace() {
       />
       <RunControls prRef={selectedPr} />
       {body}
+      <StatusBar prRef={selectedPr} comments={comments} />
       <ShortcutHelp isOpen={isShortcutHelpOpen} onClose={onCloseShortcutHelp} />
     </main>
   );

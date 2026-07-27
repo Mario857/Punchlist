@@ -41,9 +41,8 @@ const ATTENTION_ICON_SIZE = 12;
 const ROW_ALERT_ICON_SIZE = 11;
 
 const ROW_CLASS = 'flex items-center gap-2';
+const TRAILING_GROUP_CLASS = 'ml-auto flex items-center gap-2';
 const META_CLASS = 'text-muted text-xs';
-/** Pushed to the trailing edge of its row, matching the filter bar's triage counter. */
-const ACTIVE_RUNS_LABEL_CLASS = 'text-muted ml-auto text-xs';
 const ALERT_CLASS = 'text-danger text-xs leading-relaxed';
 const WARNING_CLASS = 'text-warning flex items-start gap-1.5 text-xs leading-relaxed';
 const ACTIVE_RUN_ROW_CLASS = 'bg-surface-raised flex items-center gap-2 rounded-md px-1.5 py-1';
@@ -66,7 +65,6 @@ export function RunControls({ prRef }: RunControlsProps) {
     costUnknownMessage,
     activeRunItems,
     hasActiveRuns,
-    activeRunsLabel,
     isCancelRunPending,
     cancelErrorMessage,
     stopAllLabel,
@@ -358,19 +356,20 @@ export function RunControls({ prRef }: RunControlsProps) {
             {startLabel}
           </Button>
           {batchTierPicker}
-          <span role="status" className={ACTIVE_RUNS_LABEL_CLASS}>
-            {activeRunsLabel}
-          </span>
-          {stopAllButton}
-          <Button
-            variant={BUTTON_VARIANT.GHOST}
-            size={BUTTON_SIZE.SM}
-            icon={expandIcon}
-            isExpanded={isExpanded}
-            onClick={onToggleExpandedClick}
-          >
-            {expandLabel}
-          </Button>
+          {/* Grouped so the pair holds the trailing edge whether or not the stop
+              button is rendered. */}
+          <div className={TRAILING_GROUP_CLASS}>
+            {stopAllButton}
+            <Button
+              variant={BUTTON_VARIANT.GHOST}
+              size={BUTTON_SIZE.SM}
+              icon={expandIcon}
+              isExpanded={isExpanded}
+              onClick={onToggleExpandedClick}
+            >
+              {expandLabel}
+            </Button>
+          </div>
         </div>
         {poolSpendingNotice}
         {costUnknownNotice}

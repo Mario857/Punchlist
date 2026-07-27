@@ -12,6 +12,7 @@ import {
   type WriteRunFileRequest,
 } from '@shared/runs';
 import { isDefined } from '@renderer/lib/guards';
+import { clamp } from '@renderer/lib/numbers';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import {
   useExecuteContinueRun,
@@ -136,8 +137,18 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
 };
 
 const MONACO_THEME = 'vs-dark';
-/** The editor fills its flex parent rather than guessing a pixel height. */
-const MONACO_HEIGHT = '100%';
+/**
+ * The editor sizes itself to its diff, so the review column is the only scroll context
+ * — a scrollbar inside a scrollbar means fighting over the wheel. Bounded because
+ * Monaco renders every line inside its height: a floor for the first paint before the
+ * content has reported, and a ceiling so a thousand-line patch falls back to internal
+ * scrolling instead of putting a thousand rendered lines in the DOM. Alignment spacing
+ * means the two sides can disagree, so the taller one wins.
+ */
+const MIN_EDITOR_HEIGHT_PX = 160;
+const MAX_EDITOR_HEIGHT_PX = 4000;
+/** Room for the horizontal scrollbar, so one long line does not clip the last row. */
+const EDITOR_CHROME_HEIGHT_PX = 14;
 const MONACO_FONT_SIZE = 12;
 const MONACO_LINE_HEIGHT = 18;
 /** Editor pixels, not pane pixels: the changed-files tree is already subtracted. */
@@ -162,6 +173,9 @@ const READ_ONLY_DIFF_EDITOR_OPTIONS: monaco.editor.IDiffEditorConstructionOption
   renderOverviewRuler: false,
   fontSize: MONACO_FONT_SIZE,
   lineHeight: MONACO_LINE_HEIGHT,
+  // With the editor content-sized this is what lets the wheel reach the column around
+  // it; when a capped editor does scroll internally, the edges still bubble out.
+  scrollbar: { alwaysConsumeMouseWheel: false },
 };
 
 /**
@@ -300,6 +314,7 @@ export function useDiffReview({
   const run = useRun(runId);
   const [requestedPath, setRequestedPath] = useState<string | null>(null);
   const [diffEditor, setDiffEditor] = useState<monaco.editor.IStandaloneDiffEditor | null>(null);
+  const [editorContentHeight, setEditorContentHeight] = useState(MIN_EDITOR_HEIGHT_PX);
   const [liveSelection, setLiveSelection] = useState<TargetedEditSelection | null>(null);
   const [promptSelection, setPromptSelection] = useState<TargetedEditSelection | null>(null);
   const writeDebounceHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -343,6 +358,29 @@ export function useDiffReview({
   }, [modifiedContent]);
 
   const onEditorMount = useCallback<DiffOnMount>((editor) => setDiffEditor(editor), []);
+
+  // Track the diff's own height so the editor grows with its content instead of
+  // scrolling inside itself.
+  useEffect(() => {
+    if (diffEditor === null) return undefined;
+
+    const applyContentHeight = (): void => {
+      const contentHeight = Math.max(
+        diffEditor.getOriginalEditor().getContentHeight(),
+        diffEditor.getModifiedEditor().getContentHeight(),
+      );
+      setEditorContentHeight(
+        clamp(contentHeight + EDITOR_CHROME_HEIGHT_PX, MIN_EDITOR_HEIGHT_PX, MAX_EDITOR_HEIGHT_PX),
+      );
+    };
+
+    const subscriptions = [
+      diffEditor.getOriginalEditor().onDidContentSizeChange(applyContentHeight),
+      diffEditor.getModifiedEditor().onDidContentSizeChange(applyContentHeight),
+    ];
+    applyContentHeight();
+    return () => subscriptions.forEach((subscription) => subscription.dispose());
+  }, [diffEditor]);
 
   useEffect(() => {
     if (diffEditor === null || !isEditable || selectedPath === null) return undefined;
@@ -528,7 +566,7 @@ export function useDiffReview({
     progressLabel,
     editorOptions: isEditable ? EDITABLE_DIFF_EDITOR_OPTIONS : READ_ONLY_DIFF_EDITOR_OPTIONS,
     editorTheme: MONACO_THEME,
-    editorHeight: MONACO_HEIGHT,
+    editorHeight: `${editorContentHeight}px`,
     onEditorMount,
     previousHunkLabel: PREVIOUS_HUNK_LABEL,
     previousHunkTitle: PREVIOUS_HUNK_TITLE,

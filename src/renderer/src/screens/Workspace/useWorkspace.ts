@@ -18,7 +18,13 @@ import { useQueryPrStatus } from '@renderer/modules/discovery/useQueryPrStatus';
 import { useExecuteDismissRun, useQueryRuns } from '@renderer/modules/runs/useQueryRuns';
 import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
 import { prRefKey } from '@shared/discovery';
-import { useRunForComment, useRunStateByCommentId } from '@renderer/stores/runStore';
+import {
+  selectRunForComment,
+  useRunForComment,
+  useRunStateByCommentId,
+  useRunStore,
+  type RunsById,
+} from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
 import { useElementSize } from '@renderer/hooks/useElementSize';
 import { clamp } from '@renderer/lib/numbers';
@@ -77,6 +83,34 @@ const EMPTY_STYLE: CSSProperties = {};
 
 /** A stable identity, so an absent result does not remount the tree every render. */
 const EMPTY_COMMENTS: PrComment[] = [];
+
+/** The states that mean a comment is waiting on the reviewer, not on an agent. */
+const AWAITING_REVIEW_STATES: readonly RunState[] = [RUN_STATE.READY, RUN_STATE.NEEDS_DECISION];
+
+function isAwaitingReview(runsById: RunsById, commentId: string): boolean {
+  const run = selectRunForComment(runsById, commentId);
+  return run !== null && AWAITING_REVIEW_STATES.includes(run.state);
+}
+
+/**
+ * The next comment after the current one — wrapping — whose run is waiting on the
+ * reviewer. Comment order rather than run order, so advancing walks the tree the way
+ * the eye does.
+ */
+function findNextAwaitingCommentId(
+  comments: readonly PrComment[],
+  runsById: RunsById,
+  currentCommentId: string,
+): string | null {
+  const currentIndex = comments.findIndex((comment) => comment.id === currentCommentId);
+  if (currentIndex === -1) return null;
+
+  for (let offset = 1; offset < comments.length; offset += 1) {
+    const candidate = comments[(currentIndex + offset) % comments.length];
+    if (isAwaitingReview(runsById, candidate.id)) return candidate.id;
+  }
+  return null;
+}
 
 interface UseWorkspaceResult {
   selectedPr: PrRef | null;
@@ -245,6 +279,35 @@ export function useWorkspace(): UseWorkspaceResult {
     onApproveRun: onApproveClick ?? undefined,
     onRejectRun: onRejectClick ?? undefined,
   });
+
+  // Deciding advances the selection to the next comment awaiting review, so working
+  // through the punch list is decide, read, decide rather than a walk back to the tree
+  // after every decision. A store subscription rather than an effect on derived state:
+  // the transition is the event, and this fires exactly once per transition whether the
+  // decision came from the button, the keyboard, or a bulk approve.
+  const advanceContextRef = useRef({ selectedCommentId, comments });
+  useEffect(() => {
+    advanceContextRef.current = { selectedCommentId, comments };
+  }, [selectedCommentId, comments]);
+
+  useEffect(() => {
+    return useRunStore.subscribe((state, previousState) => {
+      const { selectedCommentId: commentId, comments: currentComments } = advanceContextRef.current;
+      if (commentId === null) return;
+
+      const previousRun = selectRunForComment(previousState.runsById, commentId);
+      const currentRun = selectRunForComment(state.runsById, commentId);
+      if (previousRun === null || currentRun === null) return;
+
+      const wasAwaiting = AWAITING_REVIEW_STATES.includes(previousRun.state);
+      const isDecided =
+        currentRun.state === RUN_STATE.APPROVED || currentRun.state === RUN_STATE.REJECTED;
+      if (!wasAwaiting || !isDecided) return;
+
+      const nextCommentId = findNextAwaitingCommentId(currentComments, state.runsById, commentId);
+      if (nextCommentId !== null) setSelectedCommentId(nextCommentId);
+    });
+  }, []);
 
   // Stamped once the comments actually arrive, so the new-since-last-viewed marker
   // reflects what you could have seen rather than merely which PR was open.

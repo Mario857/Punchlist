@@ -24,7 +24,6 @@ const CLEAR_ICON_SIZE = 11;
 const BAR_CLASS = 'border-border flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-2 py-2';
 const FIELD_CLASS = 'inline-flex items-center gap-1.5';
 const FIELD_LABEL_CLASS = 'text-muted text-xs';
-const TRIAGE_CLASS = 'text-muted ml-auto text-xs tabular-nums';
 
 const SELECT_CLASS = joinClassNames(
   'h-7 max-w-40 truncate rounded-md border px-1.5 text-xs',
@@ -42,7 +41,6 @@ export function FilterBar({ comments }: FilterBarProps) {
     authorOptions,
     pathValue,
     pathOptions,
-    triageLabel,
     hasActiveFilters,
     onUnresolvedOnlyChange,
     onHideBotsChange,
@@ -107,7 +105,6 @@ export function FilterBar({ comments }: FilterBarProps) {
           {pathOptionItems}
         </select>
       </label>
-      <span className={TRIAGE_CLASS}>{triageLabel}</span>
       {clearButton}
     </div>
   );

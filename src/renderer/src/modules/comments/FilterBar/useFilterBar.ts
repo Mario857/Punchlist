@@ -2,11 +2,7 @@ import { useCallback, useMemo } from 'react';
 import type { ChangeEvent } from 'react';
 import { DEFAULT_COMMENT_FILTERS, type PrComment } from '@shared/comments';
 import { useSessionStore } from '@renderer/stores/sessionStore';
-import {
-  collectAuthorLogins,
-  collectCommentPaths,
-  summarizeTriage,
-} from '../CommentTree/commentTreeModel';
+import { collectAuthorLogins, collectCommentPaths } from '../CommentTree/commentTreeModel';
 
 export interface FilterOption {
   value: string;
@@ -21,7 +17,6 @@ interface UseFilterBarResult {
   authorOptions: FilterOption[];
   pathValue: string;
   pathOptions: FilterOption[];
-  triageLabel: string;
   hasActiveFilters: boolean;
   onUnresolvedOnlyChange: (isChecked: boolean) => void;
   onHideBotsChange: (isChecked: boolean) => void;
@@ -35,9 +30,6 @@ interface UseFilterBarResult {
 const ALL_OPTION_VALUE = '';
 const ALL_AUTHORS_LABEL = 'All authors';
 const ALL_FILES_LABEL = 'All files';
-
-const TRIAGE_LABEL_JOINER = ' of ';
-const TRIAGE_LABEL_SUFFIX = ' decided';
 
 const FIRST_FILTER_INDEX = 0;
 const EMPTY_LENGTH = 0;
@@ -66,9 +58,6 @@ export function useFilterBar(comments: readonly PrComment[]): UseFilterBarResult
     ],
     [comments],
   );
-
-  const triage = useMemo(() => summarizeTriage(comments), [comments]);
-  const triageLabel = `${triage.decidedCount}${TRIAGE_LABEL_JOINER}${triage.totalCount}${TRIAGE_LABEL_SUFFIX}`;
 
   const onUnresolvedOnlyChange = useCallback(
     (isChecked: boolean) => setFilters({ ...filters, isUnresolvedOnly: isChecked }),
@@ -117,7 +106,6 @@ export function useFilterBar(comments: readonly PrComment[]): UseFilterBarResult
     authorOptions,
     pathValue: filters.paths[FIRST_FILTER_INDEX] ?? ALL_OPTION_VALUE,
     pathOptions,
-    triageLabel,
     hasActiveFilters,
     onUnresolvedOnlyChange,
     onHideBotsChange,
