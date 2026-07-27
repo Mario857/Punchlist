@@ -1,5 +1,10 @@
 import { hasUnacknowledgedFlags } from '@shared/guardrails';
+import { isDissentingVerdict } from '@shared/opinion';
 import type { AgentDecision, RunRecord } from '@shared/runs';
+import {
+  AUX_SECTION,
+  type AuxSection,
+} from '@renderer/modules/review/RunPane/components/RunAuxSections/useRunAuxSections';
 import { FAILURE_REASON, RUN_STATE, type RunState } from '@shared/runState';
 import { assertNever } from '@renderer/lib/assertNever';
 import { formatDuration } from '@renderer/lib/format';
@@ -48,6 +53,16 @@ export type RunPaneView =
        * the patch.
        */
       hasUnacknowledgedGuardrailFlags: boolean;
+      /**
+       * The occasional surfaces this run can offer behind the aux row, so the pane's
+       * spine stays comment → diff → decision.
+       */
+      auxSections: readonly AuxSection[];
+      /**
+       * A dissenting verdict renders outright instead of behind the row: a reader who
+       * disagrees with the patch is the one voice that must not need a click to hear.
+       */
+      isSecondOpinionPinned: boolean;
       /**
        * Where a second reading is worth a card: `ready` and `approved` can still ask
        * for one, and a decided or landed run keeps the verdict it already has, since
@@ -158,6 +173,9 @@ const META_SEPARATOR = ' · ';
 const FAILURE_TRANSCRIPT_TAIL_LINE_COUNT = 40;
 const NO_REVISIONS = 0;
 const NO_GUARDRAIL_FLAGS = 0;
+const NO_AUTO_DECISIONS = 0;
+/** Placeholder on construction; `toAuxEnrichedView` fills the real list in. */
+const NO_AUX_SECTIONS: readonly AuxSection[] = [];
 
 interface FailureCopy {
   heading: string;
@@ -207,6 +225,26 @@ function toRevisionProgressLabel(run: RunRecord): string {
   return `${REVISING_LABEL} ${REVISION_LABEL_PREFIX}${run.revisionCount}`;
 }
 
+function toAuxEnrichedView(view: RunPaneView, run: RunRecord): RunPaneView {
+  if (view.kind !== RUN_PANE_VIEW_KIND.DIFF) return view;
+
+  const opinion = run.secondOpinion;
+  const isSecondOpinionPinned = isDefined(opinion) && isDissentingVerdict(opinion.verdict);
+
+  const auxSections: AuxSection[] = [];
+  if (view.isFollowUpAvailable) auxSections.push(AUX_SECTION.FOLLOW_UP);
+  if (view.isSecondOpinionAvailable && !isSecondOpinionPinned) {
+    auxSections.push(AUX_SECTION.SECOND_OPINION);
+  }
+  if (view.isRevisionHistoryAvailable) auxSections.push(AUX_SECTION.REVISION_HISTORY);
+  if (view.hasGuardrailFlags && !view.hasUnacknowledgedGuardrailFlags) {
+    auxSections.push(AUX_SECTION.ACKNOWLEDGED_FLAGS);
+  }
+  if (run.autoDecisions.length > NO_AUTO_DECISIONS) auxSections.push(AUX_SECTION.AUTO_DECISIONS);
+
+  return { ...view, auxSections, isSecondOpinionPinned };
+}
+
 function toView(run: RunRecord): RunPaneView {
   const hasGuardrailFlags = run.guardrailFlags.length > NO_GUARDRAIL_FLAGS;
   const hasUnacknowledgedGuardrailFlags = hasUnacknowledgedFlags(
@@ -248,6 +286,8 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         hasUnacknowledgedGuardrailFlags,
+        auxSections: NO_AUX_SECTIONS,
+        isSecondOpinionPinned: false,
         // The patch is moving, and a verdict is about the patch that was read.
         isSecondOpinionAvailable: false,
         revisionProgressLabel: toRevisionProgressLabel(run),
@@ -262,6 +302,8 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         hasUnacknowledgedGuardrailFlags,
+        auxSections: NO_AUX_SECTIONS,
+        isSecondOpinionPinned: false,
         isSecondOpinionAvailable: true,
         revisionProgressLabel: null,
         isPatchEditable: true,
@@ -277,6 +319,8 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         hasUnacknowledgedGuardrailFlags,
+        auxSections: NO_AUX_SECTIONS,
+        isSecondOpinionPinned: false,
         // Approval is revocable up to the landing gate, so a second reading can still
         // change the outcome here.
         isSecondOpinionAvailable: true,
@@ -296,6 +340,8 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         hasUnacknowledgedGuardrailFlags,
+        auxSections: NO_AUX_SECTIONS,
+        isSecondOpinionPinned: false,
         // Kept where one exists, dropped where none does: a turned-down run is not
         // worth a fresh agent, but the reading that informed the rejection is history
         // worth keeping on screen.
@@ -312,6 +358,8 @@ function toView(run: RunRecord): RunPaneView {
         runId: run.id,
         hasGuardrailFlags,
         hasUnacknowledgedGuardrailFlags,
+        auxSections: NO_AUX_SECTIONS,
+        isSecondOpinionPinned: false,
         // Landed: the verdict stays readable as part of the record, and there is
         // nothing left for a new one to change.
         isSecondOpinionAvailable: hasSecondOpinion,
@@ -386,5 +434,10 @@ export function useRunPane(commentId: string | null): UseRunPaneResult {
     };
   }
 
-  return { view: toView(run), runState: run.state, metaLabel: toMetaLabel(run), ...verbosity };
+  return {
+    view: toAuxEnrichedView(toView(run), run),
+    runState: run.state,
+    metaLabel: toMetaLabel(run),
+    ...verbosity,
+  };
 }

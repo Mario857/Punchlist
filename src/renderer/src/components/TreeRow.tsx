@@ -176,7 +176,7 @@ export function TreeRow({
   })();
 
   const labelClassName = joinClassNames(
-    'min-w-0 flex-1 truncate text-left text-sm',
+    'min-w-0 flex-1 truncate text-left text-xs',
     isSelected ? 'text-ink' : 'text-muted',
   );
 
@@ -216,7 +216,7 @@ export function TreeRow({
       aria-expanded={ariaExpanded}
       style={indentStyle}
       className={joinClassNames(
-        'flex w-full items-center gap-1.5 rounded-md py-1 pr-2',
+        'flex w-full items-center gap-1.5 rounded-md py-0.5 pr-2',
         isSelected ? 'bg-surface-hover' : 'hover:bg-surface-raised',
         isFocused === true && TREE_ROW_FOCUSED_CLASS,
         INTERACTIVE_TRANSITION,

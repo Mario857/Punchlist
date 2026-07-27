@@ -5,13 +5,11 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentTranscript';
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
-import { FollowUpPrompt } from '@renderer/modules/review/FollowUpPrompt/FollowUpPrompt';
-import { AutoDecisions } from '@renderer/modules/review/AutoDecisions/AutoDecisions';
 import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
-import { RevisionHistory } from '@renderer/modules/review/RevisionHistory/RevisionHistory';
 import { RunSummary } from '@renderer/modules/review/RunSummary/RunSummary';
 import { ReviewDecision } from '@renderer/modules/review/ReviewDecision/ReviewDecision';
 import { SecondOpinion } from '@renderer/modules/review/SecondOpinion/SecondOpinion';
+import { RunAuxSections } from '@renderer/modules/review/RunPane/components/RunAuxSections/RunAuxSections';
 import { RunEscalation } from '@renderer/modules/review/RunPane/components/RunEscalation/RunEscalation';
 import { RUN_PANE_VIEW_KIND, useRunPane } from '@renderer/modules/review/RunPane/useRunPane';
 
@@ -21,6 +19,7 @@ export interface RunPaneProps {
 }
 
 const SECTION_LABEL = 'Run';
+const NO_AUX_SECTIONS = 0;
 const VERBOSITY_TITLE =
   'Show or hide the paragraphs describing what each surface here means. The flags, verdicts and patch itself never hide — only the copy explaining them.';
 const HEADING_CLASS = 'text-ink text-sm font-semibold';
@@ -63,54 +62,36 @@ export function RunPane({ commentId }: RunPaneProps) {
       case RUN_PANE_VIEW_KIND.DECISION:
         return <DecisionPrompt key={view.runId} runId={view.runId} decision={view.decision} />;
       case RUN_PANE_VIEW_KIND.DIFF: {
-        // Keyed per run so a drafted follow-up cannot follow the selection onto a
-        // different comment's patch.
-        const followUpPrompt = view.isFollowUpAvailable ? (
-          <FollowUpPrompt key={view.runId} runId={view.runId} />
-        ) : null;
-
-        // A flag still waiting on you renders above the diff — it is worth seeing
-        // before you start reading — but once acknowledged the card is a record, and
-        // records live below the patch with the rest of the history.
-        const guardrailFlags = view.hasGuardrailFlags ? (
+        // The spine is comment → summary → diff → decision. A flag still waiting on
+        // acknowledgement gates the approval, so it interrupts the spine; a dissenting
+        // second reading is the one voice that must not need a click to hear. Every
+        // other surface waits behind the aux row.
+        const gatingFlags = view.hasUnacknowledgedGuardrailFlags ? (
           <GuardrailFlags key={view.runId} runId={view.runId} />
         ) : null;
-        const gatingFlags = view.hasUnacknowledgedGuardrailFlags ? guardrailFlags : null;
-        const acknowledgedFlags = view.hasUnacknowledgedGuardrailFlags ? null : guardrailFlags;
 
-        // Under the patch and the prompt: the trail undoes a step you have already read
-        // rather than being something to read first.
-        const revisionHistory = view.isRevisionHistoryAvailable ? (
-          <RevisionHistory key={view.runId} runId={view.runId} />
-        ) : null;
-
-        // Beside the flags and above the patch, for the same reason: a decision taken
-        // without you is something to know before you read the diff it produced.
-        const autoDecisions = <AutoDecisions key={view.runId} runId={view.runId} />;
-
-        // With the flags and the auto-decisions, because a second reader's verdict is
-        // worth having before you read the patch — but it is the one card up here that
-        // gates nothing, and asking for one lives in it so the answer arrives where the
-        // question was put.
-        const secondOpinion = view.isSecondOpinionAvailable ? (
+        const pinnedSecondOpinion = view.isSecondOpinionPinned ? (
           <SecondOpinion key={view.runId} runId={view.runId} />
         ) : null;
 
-        // Directly under the patch: the decision is what you take once you have read
-        // it, and it must come before the ways of asking for more work rather than
-        // after them.
         const reviewDecision = view.isReviewDecisionAvailable ? (
           <ReviewDecision key={view.runId} runId={view.runId} />
         ) : null;
 
+        const auxSections =
+          view.auxSections.length === NO_AUX_SECTIONS ? null : (
+            <RunAuxSections
+              key={view.runId}
+              runId={view.runId}
+              availableSections={view.auxSections}
+            />
+          );
+
         return (
           <div className={COLUMN_CLASS}>
-            {/* First because it frames everything under it: what the agent says it
-                did is the claim the flags, opinions and diff are checked against. */}
             <RunSummary key={view.runId} runId={view.runId} />
             {gatingFlags}
-            {autoDecisions}
-            {secondOpinion}
+            {pinnedSecondOpinion}
             <DiffReview
               key={view.runId}
               runId={view.runId}
@@ -118,9 +99,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               isEditable={view.isPatchEditable}
             />
             {reviewDecision}
-            {acknowledgedFlags}
-            {followUpPrompt}
-            {revisionHistory}
+            {auxSections}
           </div>
         );
       }

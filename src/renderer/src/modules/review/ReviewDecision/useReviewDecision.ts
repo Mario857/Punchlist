@@ -20,9 +20,6 @@ export interface UseReviewDecisionOptions {
 interface UseReviewDecisionResult {
   heading: string;
   /** What this run's review state actually is, in a sentence rather than a colour. */
-  /** Stands in for the body while the section is closed. */
-  summary: string;
-  isDefaultOpen: boolean;
   statusLabel: string;
   /**
    * Says that approving lands nothing. The distinction is the product's central
@@ -249,9 +246,6 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
   return {
     heading: copy.heading,
     statusLabel: copy.statusLabel,
-    summary: copy.statusLabel,
-    // The decision is what the pane exists to reach, so it does not start folded away.
-    isDefaultOpen: true,
     explanation: isVerbose ? copy.explanation : null,
     approveLabel: copy.approveLabel,
     isApproveDisabled: isApproveBlocked,

@@ -1,12 +1,13 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
-import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
+import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { useAutoDecisions } from '@renderer/modules/review/AutoDecisions/useAutoDecisions';
 
 export interface AutoDecisionsProps {
   runId: string;
 }
 
-const SECTION_ID = 'auto-decisions';
+const CARD_COLUMN_CLASS = 'flex flex-col gap-2';
+const HEADING_CLASS = 'text-ink text-xs font-semibold tracking-wide uppercase';
 const SECTION_LABEL = 'Auto-answered decisions';
 const LIST_LABEL = 'Decisions auto mode took on this run';
 const AUTO_ANSWERED_BADGE_LABEL = 'Auto';
@@ -30,16 +31,8 @@ const ALTERNATIVES_LIST_CLASS = 'text-muted flex flex-col gap-0.5 text-xs leadin
  * back. Renders nothing when the run has none, so an empty card never claims otherwise.
  */
 export function AutoDecisions({ runId }: AutoDecisionsProps) {
-  const {
-    hasAutoDecisions,
-    heading,
-    summary,
-    isDefaultOpen,
-    explanation,
-    reversibilityNote,
-    countLabel,
-    items,
-  } = useAutoDecisions({ runId });
+  const { hasAutoDecisions, heading, explanation, reversibilityNote, countLabel, items } =
+    useAutoDecisions({ runId });
 
   if (!hasAutoDecisions) return null;
 
@@ -70,12 +63,8 @@ export function AutoDecisions({ runId }: AutoDecisionsProps) {
   });
 
   return (
-    <CollapsibleCard
-      sectionId={SECTION_ID}
-      heading={heading}
-      summary={summary}
-      isDefaultOpen={isDefaultOpen}
-    >
+    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM} className={CARD_COLUMN_CLASS}>
+      <h3 className={HEADING_CLASS}>{heading}</h3>
       <section aria-label={SECTION_LABEL} className={COLUMN_CLASS}>
         <p className={META_CLASS}>{explanation}</p>
         <p role="status" className={COUNT_CLASS}>
@@ -86,6 +75,6 @@ export function AutoDecisions({ runId }: AutoDecisionsProps) {
         </ul>
         <p className={META_CLASS}>{reversibilityNote}</p>
       </section>
-    </CollapsibleCard>
+    </Card>
   );
 }

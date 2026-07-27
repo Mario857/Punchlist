@@ -43,7 +43,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = appSettingsSchema.parse({});
  * needs is a judgement about the monitor in front of you: the same width that is
  * generous on a laptop leaves a side-by-side patch unreadable on a wide display.
  */
-export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 340, MAX: 560 } as const;
+export const LEFT_PANE_WIDTH = { MIN: 220, DEFAULT: 280, MAX: 560 } as const;
 /**
  * The review pane has no persisted size — it takes what the comment list leaves — so
  * this is what a drag on the divider must leave it. Without it the `MAX` above is the

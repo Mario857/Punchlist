@@ -1,6 +1,7 @@
 import type { PrRef } from '@shared/discovery';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
+import { ChevronDownIcon } from '@renderer/components/icons/ChevronDownIcon';
 import { ChevronLeftIcon } from '@renderer/components/icons/ChevronLeftIcon';
 import { RefreshIcon } from '@renderer/components/icons/RefreshIcon';
 import { DISABLED_STATE, FOCUS_RING } from '@renderer/components/interactiveClassNames';
@@ -24,9 +25,9 @@ interface Props {
 
 const NO_PR_LABEL = 'No pull request selected';
 const CHOOSE_PR_LABEL = 'Choose a pull request';
-const BACK_TO_LIST_LABEL = 'Pull requests';
-const BACK_TO_COMMENTS_LABEL = 'Comments';
-const BACK_ICON_SIZE = 12;
+const BACK_TO_COMMENTS_LABEL = 'Back to comments';
+const SWITCH_PR_TITLE = 'Switch to another pull request';
+const CHEVRON_ICON_SIZE = 12;
 /** The visible equivalent of `?`, so the keyboard map is discoverable by mouse. */
 const SHORTCUT_HELP_LABEL = '?';
 const SHORTCUT_HELP_TITLE = 'Keyboard shortcuts';
@@ -53,18 +54,44 @@ export function WorkspaceTopBar({
   onTargetBranchChange,
   onToggleLanding,
 }: Props) {
-  const prLabel = selectedPr === null ? NO_PR_LABEL : `${selectedPr.repoKey} #${selectedPr.number}`;
-
-  // One leading control that always goes back a level: to the pull request list from
-  // the workspace, and to the workspace from the list.
-  const backLabel = (() => {
-    if (selectedPr === null) return CHOOSE_PR_LABEL;
-    if (isPickerOpen) return BACK_TO_COMMENTS_LABEL;
-    return BACK_TO_LIST_LABEL;
+  const prLabel = (() => {
+    if (selectedPr === null) return isPickerOpen ? NO_PR_LABEL : CHOOSE_PR_LABEL;
+    return `${selectedPr.repoKey} #${selectedPr.number}`;
   })();
 
   // Nothing to toggle back to before a PR is chosen, and nothing to refresh either.
   const isPickerToggleDisabled = selectedPr === null && isPickerOpen;
+
+  // The PR identity is itself the switcher: clicking what you are working on is how
+  // you change it, the way an editor's window title works — no standing back button
+  // for a screen there is no reason to leave. The picker keeps a way back out.
+  const leadingControl = (() => {
+    if (isPickerOpen && selectedPr !== null) {
+      return (
+        <Button
+          variant={BUTTON_VARIANT.GHOST}
+          size={BUTTON_SIZE.SM}
+          icon={<ChevronLeftIcon size={CHEVRON_ICON_SIZE} />}
+          onClick={onTogglePicker}
+        >
+          {BACK_TO_COMMENTS_LABEL}
+        </Button>
+      );
+    }
+    return (
+      <Button
+        variant={BUTTON_VARIANT.GHOST}
+        size={BUTTON_SIZE.SM}
+        icon={<ChevronDownIcon size={CHEVRON_ICON_SIZE} />}
+        isDisabled={isPickerToggleDisabled}
+        title={SWITCH_PR_TITLE}
+        onClick={onTogglePicker}
+      >
+        {prLabel}
+      </Button>
+    );
+  })();
+
   const isRefreshDisabled = selectedPr === null;
   const isTargetBranchDisabled = selectedPr === null;
   // Nothing to rearrange until there are panes to rearrange.
@@ -80,18 +107,7 @@ export function WorkspaceTopBar({
         'border-border border-b px-4 py-2',
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <Button
-          variant={BUTTON_VARIANT.GHOST}
-          size={BUTTON_SIZE.SM}
-          icon={<ChevronLeftIcon size={BACK_ICON_SIZE} />}
-          isDisabled={isPickerToggleDisabled}
-          onClick={onTogglePicker}
-        >
-          {backLabel}
-        </Button>
-        <p className="text-ink truncate text-sm font-medium tabular-nums">{prLabel}</p>
-      </div>
+      <div className="flex min-w-0 items-center gap-2">{leadingControl}</div>
       <div className="flex shrink-0 items-center gap-2">
         <label className="text-muted text-xs" htmlFor={TARGET_BRANCH_INPUT_ID}>
           {TARGET_BRANCH_LABEL}

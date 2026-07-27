@@ -1,6 +1,6 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
+import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
 import { CheckIcon } from '@renderer/components/icons/CheckIcon';
 import { useGuardrailFlags } from '@renderer/modules/review/GuardrailFlags/useGuardrailFlags';
@@ -19,7 +19,8 @@ const BADGE_ICON_SIZE = 11;
 /** One step up from a badge glyph: this is the heading mark for a flagged item. */
 const FLAG_ICON_SIZE = 14;
 
-const SECTION_ID = 'guardrail-flags';
+const CARD_COLUMN_CLASS = 'flex flex-col gap-2';
+const HEADING_CLASS = 'text-ink text-xs font-semibold tracking-wide uppercase';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const STATUS_CLASS = 'text-warning text-xs leading-relaxed';
 const LIST_CLASS = 'flex flex-col gap-2';
@@ -40,8 +41,6 @@ const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
   const {
     heading,
-    summary,
-    isDefaultOpen,
     explanation,
     items,
     statusLabel,
@@ -104,12 +103,8 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
     explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
 
   return (
-    <CollapsibleCard
-      sectionId={SECTION_ID}
-      heading={heading}
-      summary={summary}
-      isDefaultOpen={isDefaultOpen}
-    >
+    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM} className={CARD_COLUMN_CLASS}>
+      <h3 className={HEADING_CLASS}>{heading}</h3>
       {explanationLine}
       <p role="status" className={STATUS_CLASS}>
         {statusLabel}
@@ -118,6 +113,6 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
         {flagItems}
       </ul>
       {acknowledgeError}
-    </CollapsibleCard>
+    </Card>
   );
 }

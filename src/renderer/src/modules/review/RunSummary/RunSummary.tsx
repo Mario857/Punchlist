@@ -1,44 +1,28 @@
-import { CollapsibleCard } from '@renderer/components/CollapsibleCard/CollapsibleCard';
 import { useRunSummary } from '@renderer/modules/review/RunSummary/useRunSummary';
 
 export interface RunSummaryProps {
   runId: string;
 }
 
-const SECTION_ID = 'run-summary';
-const HEADING = 'What changed';
 const SUBJECT_CLASS = 'text-ink text-sm font-medium leading-relaxed';
 const DETAILS_CLASS = 'text-muted text-xs leading-relaxed break-words whitespace-pre-wrap';
-const ABSENCE_CLASS = 'text-muted text-xs leading-relaxed';
 
 /**
- * The overview the patch is read against: the agent's statement of what it changed and
- * with what consequences, above the diff because it frames the reading rather than
- * summarising it afterwards.
+ * The overview the patch is read against, as plain prose rather than a card: it is
+ * part of the reading, not a section to manage. An absent summary renders nothing —
+ * the diff below is the record either way.
  */
 export function RunSummary({ runId }: RunSummaryProps) {
-  const { subject, details, summary, isDefaultOpen, absenceLabel } = useRunSummary({ runId });
+  const { subject, details } = useRunSummary({ runId });
+
+  if (subject === null) return null;
 
   const detailsBlock = details === null ? null : <p className={DETAILS_CLASS}>{details}</p>;
 
-  const body =
-    subject === null ? (
-      <p className={ABSENCE_CLASS}>{absenceLabel}</p>
-    ) : (
-      <>
-        <p className={SUBJECT_CLASS}>{subject}</p>
-        {detailsBlock}
-      </>
-    );
-
   return (
-    <CollapsibleCard
-      sectionId={SECTION_ID}
-      heading={HEADING}
-      summary={summary}
-      isDefaultOpen={isDefaultOpen}
-    >
-      {body}
-    </CollapsibleCard>
+    <div className="flex flex-col gap-1">
+      <p className={SUBJECT_CLASS}>{subject}</p>
+      {detailsBlock}
+    </div>
   );
 }

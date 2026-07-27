@@ -10,9 +10,6 @@ export interface UseFollowUpPromptOptions {
 interface UseFollowUpPromptResult {
   heading: string;
   explanation: string;
-  /** Stands in for the body while the section is closed. */
-  summary: string;
-  isDefaultOpen: boolean;
   promptFieldId: string;
   promptLabel: string;
   promptPlaceholder: string;
@@ -34,7 +31,6 @@ const EXPLANATION =
   'This goes to the same agent that wrote the patch, so it still knows the comment, the code, and what it tried. The result arrives as another revision on top of what is on screen.';
 
 const PROMPT_FIELD_ID_PREFIX = 'follow-up-prompt-';
-const SUMMARY = 'Send the agent another instruction on this patch';
 const PROMPT_LABEL = 'Follow-up';
 const PROMPT_PLACEHOLDER = 'Describe what is wrong with the patch as a whole.';
 const PROMPT_ROW_COUNT = 3;
@@ -76,9 +72,6 @@ export function useFollowUpPrompt({ runId }: UseFollowUpPromptOptions): UseFollo
 
   return {
     heading: HEADING,
-    summary: SUMMARY,
-    // Asking for more work is a deliberate detour, never the thing you open the pane for.
-    isDefaultOpen: false,
     explanation: EXPLANATION,
     promptFieldId: `${PROMPT_FIELD_ID_PREFIX}${runId}`,
     promptLabel: PROMPT_LABEL,

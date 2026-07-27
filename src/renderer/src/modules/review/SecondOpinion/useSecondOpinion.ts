@@ -58,9 +58,6 @@ interface UseSecondOpinionResult {
   /** Null when the pane is compact; the verdict and its concerns never hide. */
   explanation: string | null;
   /** Null before anyone asked, which is the normal state rather than a failure. */
-  /** Stands in for the body while the section is closed. */
-  summary: string;
-  isDefaultOpen: boolean;
   verdict: SecondOpinionVerdictView | null;
   /** Non-null only on a disagreement, and it exists to say the disagreement is advice. */
   dissentNote: string | null;
@@ -236,9 +233,6 @@ export function useSecondOpinion({ runId }: UseSecondOpinionOptions): UseSecondO
   return {
     heading: HEADING,
     explanation: isVerbose ? EXPLANATION : null,
-    summary: isDefined(opinion) ? toVerdictView(opinion.verdict).statement : ABSENCE_LABEL,
-    // A verdict that agrees needs no attention; one that disagrees is the whole point.
-    isDefaultOpen: isDefined(opinion) && isDissentingVerdict(opinion.verdict),
     verdict: isDefined(opinion) ? toVerdictView(opinion.verdict) : null,
     dissentNote: isDefined(opinion) && isDissentingVerdict(opinion.verdict) ? DISSENT_NOTE : null,
     concernsHeading: hasConcerns ? CONCERNS_HEADING : null,
