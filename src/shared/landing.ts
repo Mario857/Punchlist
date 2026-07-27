@@ -104,12 +104,6 @@ export interface ExecuteLandingRequest {
   commits: LandingCommitPlan[];
   replyText: string | null;
   /**
-   * Acknowledging the combined-diff guardrail flags. The per-patch acknowledgements
-   * do not carry over: the combined diff is a different artifact and may be flagged
-   * for something no individual patch was.
-   */
-  acknowledgedGuardrailIds: string[];
-  /**
    * The confirmation itself. Main mints the type-level `SandboxConfirmation` from
    * this, so no path can push, resolve a thread or post a reply without the user
    * having said so at this exact step.

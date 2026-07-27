@@ -73,11 +73,6 @@ export interface LandingGuardrailItem {
   path: string | null;
   /** Composed in main and already safe to display — never the matched secret itself. */
   detail: string;
-  isAcknowledged: boolean;
-  acknowledgedLabel: string;
-  /** Names the specific flag, so the button's accessible name identifies which one. */
-  acknowledgeLabel: string;
-  onAcknowledgeClick: () => void;
 }
 
 export interface LandingGuardrailsView {
@@ -222,14 +217,10 @@ export const COMBINED_DIFF_EMPTY_LABEL =
 
 export const GUARDRAILS_HEADING = 'Flagged on the combined diff';
 export const GUARDRAILS_EXPLANATION =
-  'The checks run again over the combined diff, because it is a different artifact from any single patch and can be flagged for something none of them was. These acknowledgements are separate from the per-patch ones and travel with this confirmation.';
-export const GUARDRAILS_ALL_ACKNOWLEDGED_LABEL =
-  'Every flag on the combined diff is acknowledged, so none of them is holding this landing back.';
-export const GUARDRAILS_SINGLE_OUTSTANDING_LABEL =
-  '1 flag still to acknowledge before this landing can be confirmed.';
-export const GUARDRAILS_OUTSTANDING_SUFFIX =
-  ' flags still to acknowledge before this landing can be confirmed.';
-export const GUARDRAIL_ACKNOWLEDGED_LABEL = 'Acknowledged';
+  'The checks run again over the combined diff, because it is a different artifact from any single patch and can be flagged for something none of them was. Findings inform the confirmation below; nothing here blocks it.';
+const GUARDRAILS_NONE_LABEL = 'Nothing was flagged on the combined diff.';
+const GUARDRAILS_SINGLE_LABEL = '1 finding on the combined diff, listed above.';
+const GUARDRAILS_COUNT_SUFFIX = ' findings on the combined diff, listed above.';
 
 export const THREADS_HEADING = 'Threads that will be resolved';
 export const THREADS_EXPLANATION =
@@ -253,10 +244,6 @@ export const CONFIRM_EXPLANATION =
   'This is the only step that leaves the sandbox. It publishes the integration branch, pushes it, resolves each thread listed above and only then posts the reply — separate network calls, in that order, and not atomic. There is deliberately no keyboard shortcut for this button and it is not focused for you: the gate is worth nothing if it becomes muscle memory.';
 export const NOTHING_TO_LAND_BLOCKER =
   'Nothing is approved to land, so there is nothing to confirm.';
-export const SINGLE_OUTSTANDING_FLAG_BLOCKER =
-  '1 guardrail flag on the combined diff is still unacknowledged.';
-export const OUTSTANDING_FLAGS_BLOCKER_SUFFIX =
-  ' guardrail flags on the combined diff are still unacknowledged.';
 
 export const LANDING_PENDING_LABEL =
   'Landing… publishing the integration branch, pushing it, resolving each thread and posting the reply. These run one after another, so leave this open until it reports back what it did.';
@@ -288,10 +275,6 @@ export const LANDING_GUARDRAIL_KIND_LABEL: Record<GuardrailFlagKind, string> = {
   [GUARDRAIL_FLAG_KIND.SCOPE_MISMATCH]: 'Larger than the comment asked for',
   [GUARDRAIL_FLAG_KIND.OUT_OF_ANCHOR_PATH]: 'Outside the comment’s file',
 };
-
-const ACKNOWLEDGE_PREFIX = 'Acknowledge ';
-const ACKNOWLEDGE_PATH_PREFIX = ' on ';
-const ACKNOWLEDGE_SUBJECT_SUFFIX = ' on the combined diff';
 
 const COMMENT_EXCERPT_MAX_LENGTH = 80;
 const EXCERPT_ELLIPSIS = '…';
@@ -334,20 +317,10 @@ export function toCommentSummary(
   };
 }
 
-export function buildAcknowledgeLabel(kindLabel: string, path: string | null): string {
-  const subject = path === null ? ACKNOWLEDGE_SUBJECT_SUFFIX : `${ACKNOWLEDGE_PATH_PREFIX}${path}`;
-  return `${ACKNOWLEDGE_PREFIX}${kindLabel.toLowerCase()}${subject}`;
-}
-
-export function buildGuardrailStatusLabel(outstandingCount: number): string {
-  if (outstandingCount === EMPTY_LENGTH) return GUARDRAILS_ALL_ACKNOWLEDGED_LABEL;
-  if (outstandingCount === SINGLE_ITEM_COUNT) return GUARDRAILS_SINGLE_OUTSTANDING_LABEL;
-  return `${outstandingCount}${GUARDRAILS_OUTSTANDING_SUFFIX}`;
-}
-
-export function buildOutstandingFlagsBlocker(outstandingCount: number): string {
-  if (outstandingCount === SINGLE_ITEM_COUNT) return SINGLE_OUTSTANDING_FLAG_BLOCKER;
-  return `${outstandingCount}${OUTSTANDING_FLAGS_BLOCKER_SUFFIX}`;
+export function buildGuardrailStatusLabel(flagCount: number): string {
+  if (flagCount === EMPTY_LENGTH) return GUARDRAILS_NONE_LABEL;
+  if (flagCount === SINGLE_ITEM_COUNT) return GUARDRAILS_SINGLE_LABEL;
+  return `${flagCount}${GUARDRAILS_COUNT_SUFFIX}`;
 }
 
 export function buildConflictPathsLabel(paths: readonly string[]): string {

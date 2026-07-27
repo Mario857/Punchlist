@@ -76,7 +76,6 @@ export function RunControls({ prRef }: RunControlsProps) {
     isBulkApproveDisabled,
     isBulkApprovePending,
     bulkApproveNote,
-    bulkApproveExclusionMessage,
     bulkApproveErrorMessage,
     bulkRejectLabel,
     isBulkRejectDisabled,
@@ -200,14 +199,6 @@ export function RunControls({ prRef }: RunControlsProps) {
       </p>
     );
 
-  const bulkApproveExclusion =
-    bulkApproveExclusionMessage === null ? null : (
-      <p role="alert" className={WARNING_CLASS}>
-        <AlertTriangleIcon size={ATTENTION_ICON_SIZE} className="mt-0.5 shrink-0" />
-        {bulkApproveExclusionMessage}
-      </p>
-    );
-
   const bulkApproveError =
     bulkApproveErrorMessage === null ? null : (
       <p role="alert" className={ALERT_CLASS}>
@@ -252,7 +243,6 @@ export function RunControls({ prRef }: RunControlsProps) {
           {bulkRejectLabel}
         </Button>
       </div>
-      {bulkApproveExclusion}
       {bulkApproveError}
       {bulkRejectError}
     </div>

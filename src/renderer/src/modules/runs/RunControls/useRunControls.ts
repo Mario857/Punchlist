@@ -2,7 +2,6 @@ import { useCallback, useMemo } from 'react';
 import { isRecommendedForRun, type PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
-import { hasUnacknowledgedFlags } from '@shared/guardrails';
 import type { RunRecord, StartRunRequest } from '@shared/runs';
 import { RUN_STATE, RUN_TRIGGER, type ModelTier, type RunState } from '@shared/runState';
 import { classifyCommentTier } from '@shared/tier';
@@ -89,8 +88,6 @@ interface UseRunControlsResult {
   isBulkApprovePending: boolean;
   /** Says on the control itself that a bulk approve moves records and lands nothing. */
   bulkApproveNote: string;
-  /** Non-null whenever flags keep runs out of the batch — never a silent exclusion. */
-  bulkApproveExclusionMessage: string | null;
   bulkApproveErrorMessage: string | null;
   bulkRejectLabel: string;
   isBulkRejectDisabled: boolean;
@@ -186,11 +183,6 @@ const BULK_APPROVE_NOTE =
  * runs are left out of the request. Saying which and how many is the point: a bulk
  * action that quietly does less than its label claims is worse than one that refuses.
  */
-const BULK_APPROVE_EXCLUSION_PREFIX = 'Held out of this batch by unacknowledged guardrail flags: ';
-const SINGLE_BULK_APPROVE_EXCLUSION = '1 ready run';
-const BULK_APPROVE_EXCLUSION_SUFFIX = ' ready runs';
-const BULK_APPROVE_EXCLUSION_REMEDIATION =
-  '. Open each one, acknowledge its flags, then approve it.';
 
 const NO_SECOND_OPINION_LABEL = 'Get a second opinion on every run awaiting one';
 const SINGLE_SECOND_OPINION_LABEL = 'Get a second opinion on the 1 run awaiting one';
@@ -260,10 +252,8 @@ function describePoolSpending(resolutions: readonly TierLaneResolution[]): strin
 }
 
 interface BulkDecisionScope {
-  /** `ready` runs with every flag acknowledged: exactly the set main will accept. */
+  /** Every `ready` run: flags inform the reading, they do not shrink the batch. */
   approvableRunIds: string[];
-  /** Counted rather than dropped, because the exclusion has to be visible. */
-  flagBlockedCount: number;
   /** `ready` and `approved` alike — a rejection is legal from both. */
   rejectableRunIds: string[];
 }
@@ -276,21 +266,15 @@ interface BulkDecisionScope {
 function toBulkDecisionScope(runs: readonly RunRecord[]): BulkDecisionScope {
   const approvableRunIds: string[] = [];
   const rejectableRunIds: string[] = [];
-  let flagBlockedCount = EMPTY_COUNT;
 
   for (const run of runs) {
     if (run.state === RUN_STATE.READY || run.state === RUN_STATE.APPROVED) {
       rejectableRunIds.push(run.id);
     }
-    if (run.state !== RUN_STATE.READY) continue;
-    if (hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds)) {
-      flagBlockedCount += SINGLE_COUNT;
-      continue;
-    }
-    approvableRunIds.push(run.id);
+    if (run.state === RUN_STATE.READY) approvableRunIds.push(run.id);
   }
 
-  return { approvableRunIds, flagBlockedCount, rejectableRunIds };
+  return { approvableRunIds, rejectableRunIds };
 }
 
 function buildBulkApproveLabel(approvableCount: number): string {
@@ -318,15 +302,6 @@ function buildSecondOpinionReviewedMessage(alreadyReviewedCount: number): string
       ? SINGLE_SECOND_OPINION_REVIEWED
       : `${alreadyReviewedCount}${SECOND_OPINION_REVIEWED_SUFFIX}`;
   return `${SECOND_OPINION_REVIEWED_PREFIX}${countLabel}${SECOND_OPINION_REVIEWED_REMEDIATION}`;
-}
-
-function buildBulkApproveExclusionMessage(flagBlockedCount: number): string | null {
-  if (flagBlockedCount === EMPTY_COUNT) return null;
-  const countLabel =
-    flagBlockedCount === SINGLE_COUNT
-      ? SINGLE_BULK_APPROVE_EXCLUSION
-      : `${flagBlockedCount}${BULK_APPROVE_EXCLUSION_SUFFIX}`;
-  return `${BULK_APPROVE_EXCLUSION_PREFIX}${countLabel}${BULK_APPROVE_EXCLUSION_REMEDIATION}`;
 }
 
 export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControlsResult {
@@ -459,7 +434,7 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
 
   const onStopAllClick = useCallback(() => stopAllRuns(), [stopAllRuns]);
 
-  const { approvableRunIds, flagBlockedCount, rejectableRunIds } = useMemo(
+  const { approvableRunIds, rejectableRunIds } = useMemo(
     () => toBulkDecisionScope(runsForPr),
     [runsForPr],
   );
@@ -518,7 +493,6 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
     isBulkApproveDisabled: approvableRunIds.length === EMPTY_COUNT,
     isBulkApprovePending: isApproveRunsPending,
     bulkApproveNote: BULK_APPROVE_NOTE,
-    bulkApproveExclusionMessage: buildBulkApproveExclusionMessage(flagBlockedCount),
     bulkApproveErrorMessage: toErrorMessage(approveRunsError, BULK_APPROVE_ERROR_FALLBACK),
     bulkRejectLabel: buildBulkRejectLabel(rejectableRunIds.length),
     isBulkRejectDisabled: rejectableRunIds.length === EMPTY_COUNT,

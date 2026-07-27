@@ -201,7 +201,7 @@ export interface UseReviewShortcutsOptions {
   onDismissRun?: () => void;
   /**
    * The review gate on the selected run. Omit each one wherever the decision is not
-   * available — a run with unacknowledged guardrail flags, or one already approved —
+   * available — a run already approved, for instance —
    * so the key reaches nothing rather than being swallowed to do nothing.
    *
    * Approving marks a run ready to land and lands nothing, which is what makes it

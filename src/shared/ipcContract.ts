@@ -19,7 +19,6 @@ import type {
 } from './landing';
 import type { ModelCatalogEntry } from './models';
 import type {
-  AcknowledgeGuardrailRequest,
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
@@ -69,7 +68,6 @@ export const IPC_CHANNEL = {
   RUNS_STOP_ALL: 'runs:stopAll',
   RUNS_ESCALATE: 'runs:escalate',
   RUNS_CONTINUE: 'runs:continue',
-  RUNS_ACKNOWLEDGE_GUARDRAIL: 'runs:acknowledgeGuardrail',
   RUNS_REVISIONS: 'runs:revisions',
   RUNS_REVERT: 'runs:revert',
   RUNS_WRITE_FILE: 'runs:writeFile',
@@ -223,7 +221,6 @@ export interface RunsApi {
    * blocks — a comment may legitimately ask for a lock-file bump — so the gate is
    * an explicit acknowledgement rather than a refusal.
    */
-  acknowledgeGuardrail(request: AcknowledgeGuardrailRequest): Promise<IpcResult<RunRecord>>;
   /**
    * Retries a hard failure with a fresh agent against the worktree reset to base.
    * `shouldUseFrontier` crosses into the pool-spending lane and is never automatic.

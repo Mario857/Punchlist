@@ -21,7 +21,6 @@ import type {
 } from '@shared/landing';
 import type { ModelCatalogEntry } from '@shared/models';
 import type {
-  AcknowledgeGuardrailRequest,
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
@@ -117,8 +116,6 @@ const api: PunchlistApi = {
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_REVERT, request),
     rerunConflicted: (runId: string): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_RERUN_CONFLICTED, runId),
-    acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest): Promise<IpcResult<RunRecord>> =>
-      ipcRenderer.invoke(IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL, request),
     escalate: (request: EscalateRunRequest): Promise<IpcResult<RunRecord>> =>
       ipcRenderer.invoke(IPC_CHANNEL.RUNS_ESCALATE, request),
     onEvent: (listener: (event: RunEvent) => void): (() => void) => {

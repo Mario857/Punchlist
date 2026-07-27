@@ -1,4 +1,3 @@
-import { hasUnacknowledgedFlags } from '@shared/guardrails';
 import { isDissentingVerdict } from '@shared/opinion';
 import type { AgentDecision, RunRecord } from '@shared/runs';
 import {
@@ -46,13 +45,6 @@ export type RunPaneView =
        * flag stays on screen because the record of what was accepted is the point.
        */
       hasGuardrailFlags: boolean;
-      /**
-       * Where the flag card renders. A flag still waiting on you gates the approval,
-       * so it belongs above the diff; once every flag is acknowledged the card is a
-       * record rather than a gate, and a record does not get to stand between you and
-       * the patch.
-       */
-      hasUnacknowledgedGuardrailFlags: boolean;
       /**
        * The occasional surfaces this run can offer behind the aux row, so the pane's
        * spine stays comment → diff → decision.
@@ -237,9 +229,7 @@ function toAuxEnrichedView(view: RunPaneView, run: RunRecord): RunPaneView {
     auxSections.push(AUX_SECTION.SECOND_OPINION);
   }
   if (view.isRevisionHistoryAvailable) auxSections.push(AUX_SECTION.REVISION_HISTORY);
-  if (view.hasGuardrailFlags && !view.hasUnacknowledgedGuardrailFlags) {
-    auxSections.push(AUX_SECTION.ACKNOWLEDGED_FLAGS);
-  }
+  if (view.hasGuardrailFlags) auxSections.push(AUX_SECTION.FLAGS);
   if (run.autoDecisions.length > NO_AUTO_DECISIONS) auxSections.push(AUX_SECTION.AUTO_DECISIONS);
 
   return { ...view, auxSections, isSecondOpinionPinned };
@@ -247,10 +237,6 @@ function toAuxEnrichedView(view: RunPaneView, run: RunRecord): RunPaneView {
 
 function toView(run: RunRecord): RunPaneView {
   const hasGuardrailFlags = run.guardrailFlags.length > NO_GUARDRAIL_FLAGS;
-  const hasUnacknowledgedGuardrailFlags = hasUnacknowledgedFlags(
-    run.guardrailFlags,
-    run.acknowledgedGuardrailIds,
-  );
   const hasSecondOpinion = isDefined(run.secondOpinion);
 
   switch (run.state) {
@@ -285,7 +271,6 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
-        hasUnacknowledgedGuardrailFlags,
         auxSections: NO_AUX_SECTIONS,
         isSecondOpinionPinned: false,
         // The patch is moving, and a verdict is about the patch that was read.
@@ -301,7 +286,6 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
-        hasUnacknowledgedGuardrailFlags,
         auxSections: NO_AUX_SECTIONS,
         isSecondOpinionPinned: false,
         isSecondOpinionAvailable: true,
@@ -318,7 +302,6 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
-        hasUnacknowledgedGuardrailFlags,
         auxSections: NO_AUX_SECTIONS,
         isSecondOpinionPinned: false,
         // Approval is revocable up to the landing gate, so a second reading can still
@@ -339,7 +322,6 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
-        hasUnacknowledgedGuardrailFlags,
         auxSections: NO_AUX_SECTIONS,
         isSecondOpinionPinned: false,
         // Kept where one exists, dropped where none does: a turned-down run is not
@@ -357,7 +339,6 @@ function toView(run: RunRecord): RunPaneView {
         kind: RUN_PANE_VIEW_KIND.DIFF,
         runId: run.id,
         hasGuardrailFlags,
-        hasUnacknowledgedGuardrailFlags,
         auxSections: NO_AUX_SECTIONS,
         isSecondOpinionPinned: false,
         // Landed: the verdict stays readable as part of the record, and there is

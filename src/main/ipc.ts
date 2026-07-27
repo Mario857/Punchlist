@@ -28,7 +28,6 @@ import { confirmSandboxExit, SANDBOX_EXIT_ACTION } from './sandbox';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, rerunConflictedRun, stopAllRuns } from './queue';
 import {
-  acknowledgeGuardrail,
   approveRuns,
   cancelRun,
   cleanupTerminalRuns,
@@ -124,7 +123,6 @@ const executeLandingPayloadSchema = z.object({
   targetBranch: z.string().min(MIN_BRANCH_NAME_LENGTH),
   commits: z.array(landingCommitPlanSchema),
   replyText: z.string().nullable(),
-  acknowledgedGuardrailIds: z.array(z.string()),
   isConfirmedByUser: z.boolean(),
 });
 
@@ -171,11 +169,6 @@ const revertRunPayloadSchema = z.object({
   runId: z.string(),
   revision: z.string(),
   isDiscardConfirmed: z.boolean(),
-});
-
-const acknowledgeGuardrailPayloadSchema = z.object({
-  runId: z.string(),
-  flagId: z.string(),
 });
 
 const escalateRunPayloadSchema = z.object({
@@ -316,11 +309,6 @@ export function registerIpcHandlers(): void {
   registerHandler(IPC_CHANNEL.RUNS_REVERT, revertRunPayloadSchema, (request) => revertRun(request));
   registerHandler(IPC_CHANNEL.RUNS_RERUN_CONFLICTED, z.string(), (runId) =>
     rerunConflictedRun(runId),
-  );
-  registerHandler(
-    IPC_CHANNEL.RUNS_ACKNOWLEDGE_GUARDRAIL,
-    acknowledgeGuardrailPayloadSchema,
-    ({ runId, flagId }) => acknowledgeGuardrail(runId, flagId),
   );
   registerHandler(IPC_CHANNEL.RUNS_ESCALATE, escalateRunPayloadSchema, (request) =>
     escalateRun(request),

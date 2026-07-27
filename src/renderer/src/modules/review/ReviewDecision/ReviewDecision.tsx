@@ -11,7 +11,6 @@ const HEADING_CLASS = 'text-ink text-xs font-semibold tracking-wide uppercase';
 const STATUS_CLASS = 'text-ink text-xs leading-relaxed';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const HINT_CLASS = 'text-muted text-xs leading-relaxed';
-const BLOCKED_CLASS = 'text-warning text-xs leading-relaxed';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 const ACTION_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 
@@ -27,7 +26,6 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
     explanation,
     approveLabel,
     isApproveDisabled,
-    approveBlockedMessage,
     rejectLabel,
     reopenHint,
     isDecisionPending,
@@ -64,11 +62,6 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
   // Beside the buttons rather than as a tooltip: a disabled button cannot be focused,
   // so a hover-only explanation would be unreachable from the keyboard. The flag card
   // above already announces the outstanding count, so this one is not a live region too.
-  const approveBlocked =
-    approveBlockedMessage === null ? null : (
-      <p className={BLOCKED_CLASS}>{approveBlockedMessage}</p>
-    );
-
   const reopen = reopenHint === null ? null : <p className={HINT_CLASS}>{reopenHint}</p>;
 
   const error =
@@ -92,7 +85,6 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
         {approveButton}
         {rejectButton}
       </div>
-      {approveBlocked}
       {reopen}
       {error}
     </Card>

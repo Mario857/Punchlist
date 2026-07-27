@@ -48,7 +48,7 @@ export function RunAuxSections({ runId, availableSections }: RunAuxSectionsProps
         return <SecondOpinion key={runId} runId={runId} />;
       case AUX_SECTION.REVISION_HISTORY:
         return <RevisionHistory key={runId} runId={runId} />;
-      case AUX_SECTION.ACKNOWLEDGED_FLAGS:
+      case AUX_SECTION.FLAGS:
         return <GuardrailFlags key={runId} runId={runId} />;
       case AUX_SECTION.AUTO_DECISIONS:
         return <AutoDecisions key={runId} runId={runId} />;

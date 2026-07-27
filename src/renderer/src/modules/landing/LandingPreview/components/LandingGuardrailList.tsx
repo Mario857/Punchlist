@@ -1,16 +1,11 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
-import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
-import { CheckIcon } from '@renderer/components/icons/CheckIcon';
 import type { LandingGuardrailsView } from '@renderer/modules/landing/LandingPreview/landingPreviewModel';
 
 interface Props {
   view: LandingGuardrailsView;
 }
-
-/** Matches the row badges, so every small mark in the app agrees in weight. */
-const BADGE_ICON_SIZE = 11;
 
 /** One step up from a badge glyph: the heading mark for a flagged item. */
 const FLAG_ICON_SIZE = 14;
@@ -40,33 +35,12 @@ export function LandingGuardrailList({ view }: Props) {
         </Badge>
       );
 
-    const action = item.isAcknowledged ? (
-      <Badge
-        tone={BADGE_TONE.SUCCESS}
-        isMuted
-        icon={<CheckIcon size={BADGE_ICON_SIZE} />}
-        title={item.acknowledgedLabel}
-      >
-        {item.acknowledgedLabel}
-      </Badge>
-    ) : (
-      <Button
-        variant={BUTTON_VARIANT.SECONDARY}
-        size={BUTTON_SIZE.SM}
-        title={item.acknowledgeLabel}
-        onClick={item.onAcknowledgeClick}
-      >
-        {item.acknowledgeLabel}
-      </Button>
-    );
-
     return (
       <li key={item.id} className={ITEM_CLASS}>
         <div className={ITEM_HEADER_CLASS}>
           <AlertTriangleIcon size={FLAG_ICON_SIZE} className={FLAG_ICON_CLASS} />
           <h4 className={ITEM_TITLE_CLASS}>{item.kindLabel}</h4>
           {pathBadge}
-          {action}
         </div>
         <p className={DETAIL_CLASS}>{item.detail}</p>
       </li>

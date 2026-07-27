@@ -35,24 +35,3 @@ export const guardrailFlagSchema = z.object({
 });
 
 export type GuardrailFlag = z.infer<typeof guardrailFlagSchema>;
-
-/**
- * Flags require acknowledgement rather than blocking outright. A review comment may
- * legitimately ask you to bump a dependency, which touches a lock file; refusing
- * would make the tool fight you, while surfacing it loudly means you decide
- * knowingly. There is deliberately no severity axis — every flag is worth one
- * explicit acknowledgement, and ranking them would invite ignoring the low ones.
- */
-export function hasUnacknowledgedFlags(
-  flags: readonly GuardrailFlag[],
-  acknowledgedIds: readonly string[],
-): boolean {
-  return flags.some((flag) => !acknowledgedIds.includes(flag.id));
-}
-
-export function selectUnacknowledgedFlags(
-  flags: readonly GuardrailFlag[],
-  acknowledgedIds: readonly string[],
-): GuardrailFlag[] {
-  return flags.filter((flag) => !acknowledgedIds.includes(flag.id));
-}

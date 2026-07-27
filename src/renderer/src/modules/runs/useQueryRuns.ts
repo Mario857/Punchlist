@@ -1,7 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PrRef } from '@shared/discovery';
 import type {
-  AcknowledgeGuardrailRequest,
   CandidatePatch,
   ContinueRunRequest,
   EscalateRunRequest,
@@ -408,41 +407,9 @@ export function useExecuteRerunConflicted(): UseExecuteRerunConflictedResult {
   };
 }
 
-interface UseExecuteAcknowledgeGuardrailResult {
-  acknowledgeGuardrail: (request: AcknowledgeGuardrailRequest) => void;
-  isAcknowledgeGuardrailPending: boolean;
-  acknowledgeGuardrailError: unknown;
-}
-
-/**
- * Acknowledging a flag is what lets a patch be approved later, and main audits the
- * acknowledgement, so it is never assumed here: the returned record is authoritative
- * and the streamed state change arrives with it, leaving nothing optimistic to patch.
- */
-export function useExecuteAcknowledgeGuardrail(): UseExecuteAcknowledgeGuardrailResult {
-  const hydrate = useRunStore((state) => state.hydrate);
-
-  const { mutate, isPending, error } = useMutation({
-    mutationFn: async (request: AcknowledgeGuardrailRequest) =>
-      unwrapIpcResult(await requireBridge().runs.acknowledgeGuardrail(request)),
-    onSuccess: (acknowledged) => hydrate([acknowledged]),
-    onError: (mutationError) => logError(mutationError, 'useExecuteAcknowledgeGuardrail'),
-  });
-
-  return {
-    acknowledgeGuardrail: mutate,
-    isAcknowledgeGuardrailPending: isPending,
-    acknowledgeGuardrailError: error,
-  };
-}
-
 interface UseExecuteApproveRunsResult {
   approveRuns: (runIds: string[]) => void;
   isApproveRunsPending: boolean;
-  /**
-   * An unacknowledged flag refuses the whole batch, and that refusal is the message
-   * the reviewer needs rather than something to swallow.
-   */
   approveRunsError: unknown;
 }
 

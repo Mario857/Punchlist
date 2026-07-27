@@ -1,4 +1,3 @@
-import { hasUnacknowledgedFlags } from '@shared/guardrails';
 import { isTerminalRunState } from '@shared/runState';
 import { assertNever } from '@renderer/lib/assertNever';
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
@@ -18,13 +17,14 @@ const SINGLE_COMMENT_TITLE = '1 comment in here';
 const COMMENT_COUNT_TITLE_SUFFIX = ' comments in here';
 
 const GUARDRAIL_LABEL = 'Flagged';
-const GUARDRAIL_TITLE = 'This patch touched something worth acknowledging before it is approved';
+const GUARDRAIL_TITLE = 'This patch carries guardrail findings worth reading it with';
 
 const STALE_LABEL = 'Stale';
 const STALE_TITLE =
   'The PR head moved after this run started, so its patch is against code that is no longer current';
 
 /** Matches the other row glyphs, so every small mark on a row agrees in weight. */
+const NO_FLAGS = 0;
 const ROW_ALERT_ICON_SIZE = 11;
 
 const BADGE_LIST_CLASS = 'flex shrink-0 items-center gap-1';
@@ -38,8 +38,6 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
   const hasStaleRun = useRunStore((state) => selectHasStaleRun(state.runsById, row));
 
   // The one loud badge on a row, which is affordable precisely because flags are rare.
-  // Acknowledged flags stop showing here: the tree answers "is anything still waiting
-  // on me", and the record of what was accepted lives in the run pane.
   const guardrailBadge = hasFlaggedRun ? (
     <Badge
       tone={BADGE_TONE.DANGER}
@@ -131,7 +129,7 @@ function selectHasFlaggedRun(runsById: RunsById, row: CommentTreeRow): boolean {
   return rolledUpCommentIdsOf(row).some((commentId) => {
     const run = selectRunForComment(runsById, commentId);
     if (run === null) return false;
-    return hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds);
+    return run.guardrailFlags.length > NO_FLAGS;
   });
 }
 

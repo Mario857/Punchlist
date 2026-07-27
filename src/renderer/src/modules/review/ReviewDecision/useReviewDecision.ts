@@ -1,5 +1,4 @@
 import { useCallback } from 'react';
-import { hasUnacknowledgedFlags, selectUnacknowledgedFlags } from '@shared/guardrails';
 import type { RunRecord } from '@shared/runs';
 import { RUN_STATE } from '@shared/runState';
 import { assertNever } from '@renderer/lib/assertNever';
@@ -30,8 +29,6 @@ interface UseReviewDecisionResult {
   /** Null wherever approval is not on offer, so an approved run is never asked twice. */
   approveLabel: string | null;
   isApproveDisabled: boolean;
-  /** Non-null exactly while unacknowledged flags hold the approval back. */
-  approveBlockedMessage: string | null;
   rejectLabel: string | null;
   /** How a decided run gets back into review, stated where the decision was taken. */
   reopenHint: string | null;
@@ -89,15 +86,8 @@ const APPROVED_REOPEN_HINT =
 const REJECTED_REOPEN_HINT =
   'Changed your mind? Rewinding a revision below reopens this run for review rather than leaving the rejection final.';
 
-const APPROVE_BLOCKED_PREFIX = 'Approval is held until the flags above are acknowledged: ';
-const APPROVE_BLOCKED_SINGLE = '1 is still outstanding.';
-const APPROVE_BLOCKED_SUFFIX = ' are still outstanding.';
-
 const APPROVE_ERROR_FALLBACK = 'Could not approve this resolution.';
 const REJECT_ERROR_FALLBACK = 'Could not reject this resolution.';
-
-const SINGLE_FLAG_OUTSTANDING = 1;
-const NO_FLAGS_OUTSTANDING = 0;
 
 interface ReviewDecisionCopy {
   heading: string;
@@ -193,18 +183,9 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
   }
 }
 
-function buildApproveBlockedMessage(outstandingCount: number): string {
-  const countLabel =
-    outstandingCount === SINGLE_FLAG_OUTSTANDING
-      ? APPROVE_BLOCKED_SINGLE
-      : `${outstandingCount}${APPROVE_BLOCKED_SUFFIX}`;
-  return `${APPROVE_BLOCKED_PREFIX}${countLabel}`;
-}
-
 /**
- * The per-run review gate. Main refuses an approval carrying an unacknowledged flag,
- * so the button does not offer one: it disables itself and says which flags are
- * holding it, because a control that fails on click teaches nothing.
+ * The per-run review decision. Flags never touch it: they are read alongside the
+ * patch, and the landing preview is the boundary where anything is actually held.
  */
 export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseReviewDecisionResult {
   const isVerbose = useSessionStore((state) => state.isRunPaneVerbose);
@@ -224,14 +205,7 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
 
   const copy = isDefined(run) ? toDecisionCopy(run) : NO_RUN_COPY;
 
-  const outstandingFlagCount = isDefined(run)
-    ? selectUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds).length
-    : NO_FLAGS_OUTSTANDING;
-  const isApproveBlocked =
-    isDefined(run) && hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds);
-
-  const isApproveOffered = copy.approveLabel !== null;
-  const isApproveAvailable = isApproveOffered && !isApproveBlocked;
+  const isApproveAvailable = copy.approveLabel !== null;
 
   const decisionError = isDefined(approveRunsError) ? approveRunsError : rejectRunsError;
   const errorFallback = isDefined(approveRunsError)
@@ -248,11 +222,7 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
     statusLabel: copy.statusLabel,
     explanation: isVerbose ? copy.explanation : null,
     approveLabel: copy.approveLabel,
-    isApproveDisabled: isApproveBlocked,
-    approveBlockedMessage:
-      isApproveOffered && isApproveBlocked
-        ? buildApproveBlockedMessage(outstandingFlagCount)
-        : null,
+    isApproveDisabled: false,
     rejectLabel: copy.rejectLabel,
     reopenHint: copy.reopenHint,
     isDecisionPending: isApproveRunsPending || isRejectRunsPending,

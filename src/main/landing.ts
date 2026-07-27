@@ -166,8 +166,6 @@ const NO_INTEGRATION_BRANCH_MESSAGE =
   'This pull request has no assembled integration branch, so a conflicting comment has nothing to be re-run against.';
 const NO_INTEGRATION_BRANCH_REMEDIATION =
   'Assemble the landing preview first, then re-run the conflicting comment.';
-const UNACKNOWLEDGED_FLAGS_REMEDIATION =
-  'Acknowledge each combined-diff finding in the landing preview, then confirm again.';
 const NOT_LATEST_LANDING_MESSAGE =
   'That landing is no longer the most recent one, so undoing it here could unwind work built on top of it.';
 const NOT_LATEST_LANDING_REMEDIATION =
@@ -513,7 +511,7 @@ async function readCombinedFiles(
  * The second guardrail pass. A patch that was fine on its own can combine badly, and
  * the combined diff is a different artifact — more files, more added lines, and
  * whatever the overlap of two patches produced — which is why `inspectCandidatePatch`
- * takes no per-run assumption and why the per-patch acknowledgements do not carry over.
+ * takes no per-run assumption.
  */
 function inspectCombinedDiff(
   prRef: PrRef,
@@ -699,27 +697,6 @@ function assertNoConflicts(assembled: AssembledIntegration): void {
 }
 
 /**
- * Flags are acknowledgements rather than hard blocks — a comment may legitimately ask
- * for a lock-file bump — but the acknowledgement has to be against *these* findings.
- * They are re-read from the freshly assembled diff rather than trusted from the
- * preview, so a flag that appeared since the preview was rendered still stops here.
- */
-function assertGuardrailsAcknowledged(
-  assembled: AssembledIntegration,
-  acknowledgedGuardrailIds: readonly string[],
-): void {
-  const acknowledged = new Set(acknowledgedGuardrailIds);
-  const unacknowledged = assembled.guardrailFlags.filter((flag) => !acknowledged.has(flag.id));
-  if (unacknowledged.length === NO_ENTRIES) return;
-
-  throw new AppError(
-    APP_ERROR_KIND.CONFIRMATION_REQUIRED,
-    `${unacknowledged.length} finding(s) on the combined diff have not been acknowledged, so the landing was not prepared.`,
-    UNACKNOWLEDGED_FLAGS_REMEDIATION,
-  );
-}
-
-/**
  * Everything the landing does inside the sandbox: it rebuilds the integration branch
  * with the messages that were reviewed, and refuses while a conflict or an
  * unacknowledged finding stands. Nothing has left the sandbox when this returns, which
@@ -741,7 +718,6 @@ async function prepareLanding(
   });
 
   assertNoConflicts(assembled);
-  assertGuardrailsAcknowledged(assembled, request.acknowledgedGuardrailIds);
 
   return {
     landingId: createLandingId(),

@@ -5,7 +5,6 @@ import { assertNever } from '@renderer/lib/assertNever';
 import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentTranscript';
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
-import { GuardrailFlags } from '@renderer/modules/review/GuardrailFlags/GuardrailFlags';
 import { RunSummary } from '@renderer/modules/review/RunSummary/RunSummary';
 import { ReviewDecision } from '@renderer/modules/review/ReviewDecision/ReviewDecision';
 import { SecondOpinion } from '@renderer/modules/review/SecondOpinion/SecondOpinion';
@@ -62,14 +61,9 @@ export function RunPane({ commentId }: RunPaneProps) {
       case RUN_PANE_VIEW_KIND.DECISION:
         return <DecisionPrompt key={view.runId} runId={view.runId} decision={view.decision} />;
       case RUN_PANE_VIEW_KIND.DIFF: {
-        // The spine is comment → summary → diff → decision. A flag still waiting on
-        // acknowledgement gates the approval, so it interrupts the spine; a dissenting
-        // second reading is the one voice that must not need a click to hear. Every
-        // other surface waits behind the aux row.
-        const gatingFlags = view.hasUnacknowledgedGuardrailFlags ? (
-          <GuardrailFlags key={view.runId} runId={view.runId} />
-        ) : null;
-
+        // The spine is comment → summary → diff → decision. A dissenting second
+        // reading is the one voice that must not need a click to hear; every other
+        // surface — flags included — waits behind the aux row.
         const pinnedSecondOpinion = view.isSecondOpinionPinned ? (
           <SecondOpinion key={view.runId} runId={view.runId} />
         ) : null;
@@ -90,7 +84,6 @@ export function RunPane({ commentId }: RunPaneProps) {
         return (
           <div className={COLUMN_CLASS}>
             <RunSummary key={view.runId} runId={view.runId} />
-            {gatingFlags}
             {pinnedSecondOpinion}
             <DiffReview
               key={view.runId}

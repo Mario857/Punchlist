@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from 'react';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
-import { selectUnacknowledgedFlags, type GuardrailFlag } from '@shared/guardrails';
+import type { GuardrailFlag } from '@shared/guardrails';
 import type {
   AssembleLandingRequest,
   LandingCommitPlan,
@@ -18,12 +18,10 @@ import { useExecuteRerunConflicted } from '@renderer/modules/runs/useQueryRuns';
 import {
   ASSEMBLE_ERROR_FALLBACK,
   ASSEMBLING_LABEL,
-  buildAcknowledgeLabel,
   buildConfirmLabel,
   buildConflictPathsLabel,
   buildGuardrailStatusLabel,
   buildLandingSuccessLabel,
-  buildOutstandingFlagsBlocker,
   COMBINED_DIFF_EMPTY_LABEL,
   COMBINED_DIFF_EXPLANATION,
   COMBINED_DIFF_HEADING,
@@ -38,7 +36,6 @@ import {
   CONFIRM_HEADING,
   CONFLICTS_EXPLANATION,
   CONFLICTS_HEADING,
-  GUARDRAIL_ACKNOWLEDGED_LABEL,
   GUARDRAILS_EXPLANATION,
   GUARDRAILS_HEADING,
   LANDING_ERROR_FALLBACK,
@@ -103,7 +100,6 @@ const IS_CONFIRMED_BY_USER = true;
 
 /** Stable identities, so an absent preview does not rebuild every list each render. */
 const NO_DRAFTS: ReadonlyMap<string, LandingCommitMessageDraft> = new Map();
-const NO_ACKNOWLEDGED_IDS: readonly string[] = [];
 const NO_COMMIT_PLANS: readonly LandingCommitPlan[] = [];
 const NO_GUARDRAIL_FLAGS: readonly GuardrailFlag[] = [];
 const NO_THREADS: readonly LandingThread[] = [];
@@ -133,11 +129,6 @@ export function useLandingPreview({
   // and does so without an effect copying data into state.
   const [draftsByRunId, setDraftsByRunId] =
     useState<ReadonlyMap<string, LandingCommitMessageDraft>>(NO_DRAFTS);
-  // Acknowledging the combined diff's flags is local because it travels with the
-  // confirmation itself, not with any run: the per-patch acknowledgements do not carry
-  // over, since the combined diff is a different artifact.
-  const [acknowledgedGuardrailIds, setAcknowledgedGuardrailIds] =
-    useState<readonly string[]>(NO_ACKNOWLEDGED_IDS);
 
   const request: AssembleLandingRequest | null =
     prRef !== null && targetBranch !== null ? { prRef, targetBranch } : null;
@@ -222,22 +213,9 @@ export function useLandingPreview({
     () =>
       guardrailFlags.map((flag) => {
         const kindLabel = LANDING_GUARDRAIL_KIND_LABEL[flag.kind];
-        return {
-          id: flag.id,
-          kindLabel,
-          path: flag.path,
-          detail: flag.detail,
-          isAcknowledged: acknowledgedGuardrailIds.includes(flag.id),
-          acknowledgedLabel: GUARDRAIL_ACKNOWLEDGED_LABEL,
-          acknowledgeLabel: buildAcknowledgeLabel(kindLabel, flag.path),
-          onAcknowledgeClick: () => {
-            setAcknowledgedGuardrailIds((previous) =>
-              previous.includes(flag.id) ? previous : [...previous, flag.id],
-            );
-          },
-        };
+        return { id: flag.id, kindLabel, path: flag.path, detail: flag.detail };
       }),
-    [acknowledgedGuardrailIds, guardrailFlags],
+    [guardrailFlags],
   );
 
   const { rerunConflicted, isRerunConflictedPending } = useExecuteRerunConflicted();
@@ -262,11 +240,6 @@ export function useLandingPreview({
     [commentsById, conflicts, isRerunConflictedPending, rerunConflicted],
   );
 
-  const outstandingFlagCount = selectUnacknowledgedFlags(
-    guardrailFlags,
-    acknowledgedGuardrailIds,
-  ).length;
-
   const { executeLanding, landingResult, isLandingExecuting, landingError } = useExecuteLanding();
 
   /**
@@ -281,10 +254,9 @@ export function useLandingPreview({
       targetBranch: landingPreview.targetBranch,
       commits,
       replyText: landingPreview.replyText,
-      acknowledgedGuardrailIds: [...acknowledgedGuardrailIds],
       isConfirmedByUser: IS_CONFIRMED_BY_USER,
     });
-  }, [acknowledgedGuardrailIds, commits, executeLanding, landingPreview]);
+  }, [commits, executeLanding, landingPreview]);
 
   // A failed landing is never rendered as though nothing happened: the steps before the
   // one that failed are already real, so the notice and the audit pointer travel with
@@ -329,13 +301,7 @@ export function useLandingPreview({
 
     const hasConflicts = conflicts.length > EMPTY_LENGTH;
 
-    const blockerLabel = ((): string | null => {
-      if (commits.length === EMPTY_LENGTH) return NOTHING_TO_LAND_BLOCKER;
-      if (outstandingFlagCount > EMPTY_LENGTH) {
-        return buildOutstandingFlagsBlocker(outstandingFlagCount);
-      }
-      return null;
-    })();
+    const blockerLabel = commits.length === EMPTY_LENGTH ? NOTHING_TO_LAND_BLOCKER : null;
 
     return {
       kind: LANDING_VIEW_KIND.PREVIEW,
@@ -389,7 +355,7 @@ export function useLandingPreview({
         explanation: GUARDRAILS_EXPLANATION,
         items: guardrailItems,
         hasFlags: guardrailItems.length > EMPTY_LENGTH,
-        statusLabel: buildGuardrailStatusLabel(outstandingFlagCount),
+        statusLabel: buildGuardrailStatusLabel(guardrailItems.length),
       },
       combinedDiff: {
         heading: COMBINED_DIFF_HEADING,

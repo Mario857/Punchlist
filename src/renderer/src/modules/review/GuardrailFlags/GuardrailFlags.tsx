@@ -1,8 +1,6 @@
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
-import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
-import { CheckIcon } from '@renderer/components/icons/CheckIcon';
 import { useGuardrailFlags } from '@renderer/modules/review/GuardrailFlags/useGuardrailFlags';
 
 export interface GuardrailFlagsProps {
@@ -10,11 +8,7 @@ export interface GuardrailFlagsProps {
 }
 
 const LIST_LABEL = 'Guardrail flags';
-const ACKNOWLEDGED_LABEL = 'Acknowledged';
 const DETAIL_LABEL = 'What the check found';
-
-/** Matches the row badges, so every small mark in the app agrees in weight. */
-const BADGE_ICON_SIZE = 11;
 
 /** One step up from a badge glyph: this is the heading mark for a flagged item. */
 const FLAG_ICON_SIZE = 14;
@@ -22,7 +16,6 @@ const FLAG_ICON_SIZE = 14;
 const CARD_COLUMN_CLASS = 'flex flex-col gap-2';
 const HEADING_CLASS = 'text-ink text-xs font-semibold tracking-wide uppercase';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
-const STATUS_CLASS = 'text-warning text-xs leading-relaxed';
 const LIST_CLASS = 'flex flex-col gap-2';
 const ITEM_CLASS = 'border-border bg-surface flex flex-col gap-1.5 rounded-md border p-2';
 const ITEM_HEADER_CLASS = 'flex flex-wrap items-center gap-2';
@@ -31,22 +24,14 @@ const FLAG_ICON_CLASS = 'text-warning shrink-0';
 const REASON_CLASS = 'text-muted text-xs leading-relaxed';
 const DETAIL_LABEL_CLASS = 'text-muted text-xs font-medium tracking-wide uppercase';
 const DETAIL_CLASS = 'text-ink font-mono text-xs break-words';
-const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
 
 /**
- * The acknowledgement surface, not an error surface: flags are shown so a deliberate
- * decision can be recorded, and an acknowledged one stays listed because that record is
- * the whole point of the check.
+ * A warning surface, not a gate: the findings are shown beside the patch they are
+ * about, and the reviewer reads both and decides. Nothing here blocks approval — the
+ * landing preview re-runs its own checks before anything leaves the sandbox.
  */
 export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
-  const {
-    heading,
-    explanation,
-    items,
-    statusLabel,
-    isAcknowledgePending,
-    acknowledgeErrorMessage,
-  } = useGuardrailFlags({ runId });
+  const { heading, explanation, items } = useGuardrailFlags({ runId });
 
   const flagItems = items.map((item) => {
     const pathBadge =
@@ -56,34 +41,12 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
         </Badge>
       );
 
-    const action = item.isAcknowledged ? (
-      <Badge
-        tone={BADGE_TONE.SUCCESS}
-        isMuted
-        icon={<CheckIcon size={BADGE_ICON_SIZE} />}
-        title={ACKNOWLEDGED_LABEL}
-      >
-        {ACKNOWLEDGED_LABEL}
-      </Badge>
-    ) : (
-      <Button
-        variant={BUTTON_VARIANT.SECONDARY}
-        size={BUTTON_SIZE.SM}
-        isDisabled={isAcknowledgePending}
-        title={item.acknowledgeLabel}
-        onClick={item.onAcknowledgeClick}
-      >
-        {item.acknowledgeLabel}
-      </Button>
-    );
-
     return (
       <li key={item.id} className={ITEM_CLASS}>
         <div className={ITEM_HEADER_CLASS}>
           <AlertTriangleIcon size={FLAG_ICON_SIZE} className={FLAG_ICON_CLASS} />
           <h3 className={ITEM_TITLE_CLASS}>{item.kindLabel}</h3>
           {pathBadge}
-          {action}
         </div>
         <p className={REASON_CLASS}>{item.reason}</p>
         <p className={DETAIL_LABEL_CLASS}>{DETAIL_LABEL}</p>
@@ -92,13 +55,6 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
     );
   });
 
-  const acknowledgeError =
-    acknowledgeErrorMessage === null ? null : (
-      <p role="alert" className={ERROR_CLASS}>
-        {acknowledgeErrorMessage}
-      </p>
-    );
-
   const explanationLine =
     explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
 
@@ -106,13 +62,9 @@ export function GuardrailFlags({ runId }: GuardrailFlagsProps) {
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM} className={CARD_COLUMN_CLASS}>
       <h3 className={HEADING_CLASS}>{heading}</h3>
       {explanationLine}
-      <p role="status" className={STATUS_CLASS}>
-        {statusLabel}
-      </p>
       <ul aria-label={LIST_LABEL} className={LIST_CLASS}>
         {flagItems}
       </ul>
-      {acknowledgeError}
     </Card>
   );
 }

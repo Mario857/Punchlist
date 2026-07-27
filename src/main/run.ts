@@ -1,7 +1,6 @@
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
-import { appendAuditEntry } from '@main/audit';
 import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
 import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
 import {
@@ -43,9 +42,7 @@ import {
 } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
-import { AUDIT_ACTION } from '@shared/audit';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
-import { hasUnacknowledgedFlags, selectUnacknowledgedFlags } from '@shared/guardrails';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import { opinionFileSchema, type OpinionFile } from '@shared/opinion';
 import {
@@ -85,15 +82,10 @@ const NO_LOCAL_CLONE_REMEDIATION = 'Register the repository in Settings, then tr
 const NO_AGENT_MESSAGE = 'This run has no agent to continue, so it cannot be answered.';
 const NO_AGENT_REMEDIATION = 'Run the comment again to start a fresh agent.';
 const COMMENT_GONE_MESSAGE = 'That comment is no longer on the pull request.';
-const GUARDRAIL_FLAG_NOT_FOUND_MESSAGE =
-  'That guardrail flag is no longer on this run, so there is nothing to acknowledge.';
 const NOT_CONTINUABLE_MESSAGE =
   'This run is not waiting for input, so there is nothing to continue.';
 const NOT_HAND_EDITABLE_MESSAGE =
   'This run has no reviewable patch, so there is nothing to hand-edit.';
-const GUARDRAIL_KIND_SEPARATOR = ', ';
-const UNACKNOWLEDGED_GUARDRAIL_REMEDIATION =
-  'Acknowledge every outstanding flag on those runs, then approve again.';
 const SECOND_OPINION_REMEDIATION =
   'Ask for a second opinion once every selected run has a patch to review.';
 const NO_PATCH_TO_REVIEW_MESSAGE =
@@ -649,38 +641,6 @@ export async function revertRun(request: RevertRunRequest): Promise<RunRecord> {
 }
 
 /**
- * Acknowledging is what unblocks approval later. It is recorded on the run rather
- * than held in the UI, because the record of what was accepted has to survive a
- * restart as much as the patch does.
- */
-export async function acknowledgeGuardrail(runId: string, flagId: string): Promise<RunRecord> {
-  const run = requireRun(runId);
-  const flag = run.guardrailFlags.find((candidate) => candidate.id === flagId);
-  if (flag === undefined) {
-    throw new AppError(APP_ERROR_KIND.NOT_FOUND, GUARDRAIL_FLAG_NOT_FOUND_MESSAGE, null);
-  }
-  if (run.acknowledgedGuardrailIds.includes(flagId)) return run;
-
-  const acknowledged = patchRun(run, {
-    acknowledgedGuardrailIds: [...run.acknowledgedGuardrailIds, flagId],
-  });
-
-  // Audited even though it changes nothing outside the sandbox: acknowledging is what
-  // authorises a flagged patch to be approved and eventually landed, so the decision
-  // belongs in the same record as the actions it enables. The kind and path go in,
-  // never the flag's detail — this is written to a file that outlives the run.
-  await appendAuditEntry({
-    action: AUDIT_ACTION.GUARDRAIL_ACKNOWLEDGED,
-    prRef: run.prRef,
-    summary: `Acknowledged a ${flag.kind} guardrail flag${flag.path === null ? '' : ` on ${flag.path}`}`,
-    runIds: [run.id],
-  });
-
-  emitStateChanged(acknowledged);
-  return acknowledged;
-}
-
-/**
  * A verdict file left behind by an earlier review would otherwise be read as this one's
  * answer, which is the one failure worse than having no opinion: a fabricated one.
  */
@@ -861,46 +821,13 @@ export async function requestSecondOpinion(runIds: readonly string[]): Promise<R
  * and path stay out of it: this message is rendered, and a flag reporting a secret
  * must not become the leak it was raised about.
  */
-function toUnacknowledgedGuardrailMessage(blocked: readonly RunRecord[], total: number): string {
-  const outstanding = blocked.flatMap((run) =>
-    selectUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds),
-  );
-  const kinds = [...new Set(outstanding.map((flag) => flag.kind))].join(GUARDRAIL_KIND_SEPARATOR);
-  return `Approval is blocked by unacknowledged guardrail flags on ${blocked.length} of ${total} selected runs. Outstanding: ${outstanding.length} (${kinds}).`;
-}
-
 /**
- * Approving marks a run ready to land and lands nothing. No branch, no remote and no
- * GitHub call is reachable from here, which is exactly what makes approving twelve at
- * once safe: the landing gate is still ahead of every one of them, so a bulk approve
- * can only ever move records.
- *
- * Unacknowledged guardrail flags refuse the approval. Containment keeps the agent off
- * the network but says nothing about what it wrote, so the flags are the other half of
- * the check and approving past an unread one would quietly discard it.
- *
- * A blocked run refuses the *whole* batch rather than being skipped around: approving
- * nine of twelve and staying silent about the three is the one outcome a reviewer
- * cannot read off the tree, and refusing costs nothing because approval is cheap to
- * retry once the flags are acknowledged. Every id is therefore resolved and checked
- * before the first transition is committed. Whether the state itself allows approval
- * is left to the transition table, which throws — restating that rule here would give
- * it a second, driftable source.
+ * Approval never leaves the sandbox, so it takes no confirmation and no gate: the
+ * guardrail flags stay on the record and on screen, and the landing preview recomputes
+ * its own findings over the combined diff — that confirmation is the one that counts.
  */
 export function approveRuns(runIds: readonly string[]): RunRecord[] {
-  const runs = runIds.map(requireRun);
-  const blocked = runs.filter((run) =>
-    hasUnacknowledgedFlags(run.guardrailFlags, run.acknowledgedGuardrailIds),
-  );
-  if (blocked.length > 0) {
-    throw new AppError(
-      APP_ERROR_KIND.CONFIRMATION_REQUIRED,
-      toUnacknowledgedGuardrailMessage(blocked, runs.length),
-      UNACKNOWLEDGED_GUARDRAIL_REMEDIATION,
-    );
-  }
-
-  return runs.map((run) => advance(run, RUN_STATE.APPROVED));
+  return runIds.map(requireRun).map((run) => advance(run, RUN_STATE.APPROVED));
 }
 
 /**

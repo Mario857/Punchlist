@@ -5,7 +5,7 @@ export const AUX_SECTION = {
   FOLLOW_UP: 'followUp',
   SECOND_OPINION: 'secondOpinion',
   REVISION_HISTORY: 'revisionHistory',
-  ACKNOWLEDGED_FLAGS: 'acknowledgedFlags',
+  FLAGS: 'flags',
   AUTO_DECISIONS: 'autoDecisions',
 } as const;
 
@@ -31,7 +31,7 @@ const AUX_SECTION_LABEL: Record<AuxSection, string> = {
   [AUX_SECTION.FOLLOW_UP]: 'Ask for a change',
   [AUX_SECTION.SECOND_OPINION]: 'Second reading',
   [AUX_SECTION.REVISION_HISTORY]: 'Revision trail',
-  [AUX_SECTION.ACKNOWLEDGED_FLAGS]: 'Flags',
+  [AUX_SECTION.FLAGS]: 'Flags',
   [AUX_SECTION.AUTO_DECISIONS]: 'Auto decisions',
 };
 

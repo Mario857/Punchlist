@@ -194,11 +194,6 @@ export interface RevertRunRequest {
   isDiscardConfirmed: boolean;
 }
 
-export interface AcknowledgeGuardrailRequest {
-  runId: string;
-  flagId: string;
-}
-
 export interface EscalateRunRequest {
   runId: string;
   /**
