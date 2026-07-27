@@ -139,16 +139,34 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
 const MONACO_THEME = 'vs-dark';
 /**
  * The editor sizes itself to its diff, so the review column is the only scroll context
- * — a scrollbar inside a scrollbar means fighting over the wheel. Bounded because
- * Monaco renders every line inside its height: a floor for the first paint before the
- * content has reported, and a ceiling so a thousand-line patch falls back to internal
- * scrolling instead of putting a thousand rendered lines in the DOM. Alignment spacing
- * means the two sides can disagree, so the taller one wins.
+ * — a scrollbar inside a scrollbar means fighting over the wheel. Derived from line
+ * counts rather than from the editor's own content-size events: those events react to
+ * the layout the height feeds, which is a feedback loop, and the loop is exactly the
+ * runaway growth it produced. Line counts cannot loop. Alignment spacing can still
+ * make the true content a little taller — the capped internal scroll absorbs that.
+ *
+ * Bounded because Monaco renders every line inside its height: a floor for the empty
+ * case, and a ceiling so a thousand-line patch falls back to internal scrolling
+ * instead of putting a thousand rendered lines in the DOM.
  */
 const MIN_EDITOR_HEIGHT_PX = 160;
 const MAX_EDITOR_HEIGHT_PX = 4000;
 /** Room for the horizontal scrollbar, so one long line does not clip the last row. */
-const EDITOR_CHROME_HEIGHT_PX = 14;
+const EDITOR_CHROME_HEIGHT_PX = 20;
+const LINE_BREAK = '\n';
+
+function countLines(content: string): number {
+  return content.split(LINE_BREAK).length;
+}
+
+function toEditorHeightPx(originalContent: string, modifiedContent: string): number {
+  const lineCount = Math.max(countLines(originalContent), countLines(modifiedContent));
+  return clamp(
+    lineCount * MONACO_LINE_HEIGHT + EDITOR_CHROME_HEIGHT_PX,
+    MIN_EDITOR_HEIGHT_PX,
+    MAX_EDITOR_HEIGHT_PX,
+  );
+}
 const MONACO_FONT_SIZE = 12;
 const MONACO_LINE_HEIGHT = 18;
 /** Editor pixels, not pane pixels: the changed-files tree is already subtracted. */
@@ -314,7 +332,6 @@ export function useDiffReview({
   const run = useRun(runId);
   const [requestedPath, setRequestedPath] = useState<string | null>(null);
   const [diffEditor, setDiffEditor] = useState<monaco.editor.IStandaloneDiffEditor | null>(null);
-  const [editorContentHeight, setEditorContentHeight] = useState(MIN_EDITOR_HEIGHT_PX);
   const [liveSelection, setLiveSelection] = useState<TargetedEditSelection | null>(null);
   const [promptSelection, setPromptSelection] = useState<TargetedEditSelection | null>(null);
   const writeDebounceHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -343,6 +360,7 @@ export function useDiffReview({
   })();
 
   const selectedPath = isDefined(selectedFile) ? selectedFile.path : null;
+  const originalContent = isDefined(selectedFile) ? selectedFile.originalContent : EMPTY_CONTENT;
   const modifiedContent = isDefined(selectedFile) ? selectedFile.modifiedContent : EMPTY_CONTENT;
 
   const selectedPathLabel = (() => {
@@ -358,29 +376,6 @@ export function useDiffReview({
   }, [modifiedContent]);
 
   const onEditorMount = useCallback<DiffOnMount>((editor) => setDiffEditor(editor), []);
-
-  // Track the diff's own height so the editor grows with its content instead of
-  // scrolling inside itself.
-  useEffect(() => {
-    if (diffEditor === null) return undefined;
-
-    const applyContentHeight = (): void => {
-      const contentHeight = Math.max(
-        diffEditor.getOriginalEditor().getContentHeight(),
-        diffEditor.getModifiedEditor().getContentHeight(),
-      );
-      setEditorContentHeight(
-        clamp(contentHeight + EDITOR_CHROME_HEIGHT_PX, MIN_EDITOR_HEIGHT_PX, MAX_EDITOR_HEIGHT_PX),
-      );
-    };
-
-    const subscriptions = [
-      diffEditor.getOriginalEditor().onDidContentSizeChange(applyContentHeight),
-      diffEditor.getModifiedEditor().onDidContentSizeChange(applyContentHeight),
-    ];
-    applyContentHeight();
-    return () => subscriptions.forEach((subscription) => subscription.dispose());
-  }, [diffEditor]);
 
   useEffect(() => {
     if (diffEditor === null || !isEditable || selectedPath === null) return undefined;
@@ -559,14 +554,14 @@ export function useDiffReview({
     emptyPatchExplanation: EMPTY_PATCH_EXPLANATION,
     selectedPath,
     selectedPathLabel,
-    originalContent: isDefined(selectedFile) ? selectedFile.originalContent : EMPTY_CONTENT,
+    originalContent,
     modifiedContent,
     language: isDefined(selectedFile) ? languageOf(selectedFile.path) : DEFAULT_LANGUAGE,
     isDimmed: progressLabel !== null,
     progressLabel,
     editorOptions: isEditable ? EDITABLE_DIFF_EDITOR_OPTIONS : READ_ONLY_DIFF_EDITOR_OPTIONS,
     editorTheme: MONACO_THEME,
-    editorHeight: `${editorContentHeight}px`,
+    editorHeight: `${toEditorHeightPx(originalContent, modifiedContent)}px`,
     onEditorMount,
     previousHunkLabel: PREVIOUS_HUNK_LABEL,
     previousHunkTitle: PREVIOUS_HUNK_TITLE,

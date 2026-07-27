@@ -198,7 +198,7 @@ export function DiffReview({ runId, revisionProgressLabel, isEditable }: DiffRev
         <div className={FILE_TREE_CLASS}>
           <ChangedFilesTree files={files} selectedPath={selectedPath} onSelectPath={onSelectPath} />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <DiffEditor
             original={originalContent}
             modified={modifiedContent}

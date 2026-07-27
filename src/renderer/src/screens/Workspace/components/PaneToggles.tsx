@@ -1,41 +1,48 @@
-import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import type { PaneToggleItem } from '@renderer/screens/Workspace/useWorkspace';
+import type { ReactNode } from 'react';
+import { BUTTON_VARIANT } from '@renderer/components/Button';
+import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
+import { PanelLeftIcon } from '@renderer/components/icons/PanelLeftIcon';
+import { PanelRightIcon } from '@renderer/components/icons/PanelRightIcon';
+import type { PaneKey, PaneToggleItem } from '@renderer/screens/Workspace/useWorkspace';
 
 interface Props {
   items: PaneToggleItem[];
 }
 
 const GROUP_LABEL = 'Visible panes';
-const HIDDEN_TITLE_PREFIX = 'Show the ';
-const VISIBLE_TITLE_PREFIX = 'Hide the ';
-const TITLE_SUFFIX = ' pane';
-const LAST_PANE_TITLE = 'The last visible pane cannot be hidden';
+const HIDDEN_LABEL_PREFIX = 'Show the ';
+const VISIBLE_LABEL_PREFIX = 'Hide the ';
+const LABEL_SUFFIX = ' pane';
+const PANE_ICON_SIZE = 14;
+
+/** The glyph carries the meaning the text used to: which side of the layout it flips. */
+const PANE_ICON: Record<PaneKey, ReactNode> = {
+  commentList: <PanelLeftIcon size={PANE_ICON_SIZE} />,
+  reviewPane: <PanelRightIcon size={PANE_ICON_SIZE} />,
+};
 
 /**
- * Which of the three panes are on screen. Pressed rather than checked: these turn parts
- * of the workspace on and off rather than selecting among them, so more than one is
- * meaningfully on at once.
+ * Which of the panes are on screen. Pressed rather than checked: these turn parts of
+ * the workspace on and off rather than selecting among them, so more than one is
+ * meaningfully on at once. Icon-only — the glyphs say which side they flip, and the
+ * accessible name still says it in words.
  */
 export function PaneToggles({ items }: Props) {
   const buttons = items.map((item) => {
-    const title = (() => {
-      if (item.isDisabled) return LAST_PANE_TITLE;
-      const prefix = item.isVisible ? VISIBLE_TITLE_PREFIX : HIDDEN_TITLE_PREFIX;
-      return `${prefix}${item.label}${TITLE_SUFFIX}`;
-    })();
+    const prefix = item.isVisible ? VISIBLE_LABEL_PREFIX : HIDDEN_LABEL_PREFIX;
+    const label = `${prefix}${item.label}${LABEL_SUFFIX}`;
 
     return (
-      <Button
+      <IconButton
         key={item.key}
+        label={label}
+        icon={PANE_ICON[item.key]}
         variant={item.isVisible ? BUTTON_VARIANT.SECONDARY : BUTTON_VARIANT.GHOST}
-        size={BUTTON_SIZE.SM}
+        size={ICON_BUTTON_SIZE.SM}
         isPressed={item.isVisible}
         isDisabled={item.isDisabled}
-        title={title}
         onClick={item.onToggle}
-      >
-        {item.label}
-      </Button>
+      />
     );
   });
 
