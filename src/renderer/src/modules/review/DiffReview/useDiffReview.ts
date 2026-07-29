@@ -311,6 +311,16 @@ export function useDiffReview({
   const [diffEditor, setDiffEditor] = useState<monaco.editor.IStandaloneDiffEditor | null>(null);
   const [liveSelection, setLiveSelection] = useState<TargetedEditSelection | null>(null);
   const [promptSelection, setPromptSelection] = useState<TargetedEditSelection | null>(null);
+
+  // The component is deliberately not remounted per run — that raced Monaco's dispose
+  // against its init — so the per-run state resets here instead, the render-time way.
+  const [previousRunId, setPreviousRunId] = useState(runId);
+  if (previousRunId !== runId) {
+    setPreviousRunId(runId);
+    setRequestedPath(null);
+    setLiveSelection(null);
+    setPromptSelection(null);
+  }
   const writeDebounceHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingWriteRef = useRef<WriteRunFileRequest | null>(null);
   const fetchedContentRef = useRef<string>(EMPTY_CONTENT);

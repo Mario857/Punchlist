@@ -14,7 +14,8 @@ export interface UseLandingCombinedDiffOptions {
 
 interface UseLandingCombinedDiffResult {
   selectedPath: string | null;
-  selectedPathLabel: string;
+  /** Null when there is no diff at all — the empty label already says so. */
+  selectedPathLabel: string | null;
   originalContent: string;
   modifiedContent: string;
   language: string;
@@ -29,7 +30,6 @@ const EXTENSION_SEPARATOR = '.';
 const DEFAULT_LANGUAGE = 'plaintext';
 const EMPTY_CONTENT = '';
 
-const NO_FILE_PATH_LABEL = 'No file selected';
 const EDITOR_LOADING_LABEL = 'Loading the combined diff';
 
 const MONACO_THEME = 'vs-dark';
@@ -106,7 +106,7 @@ export function useLandingCombinedDiff({
 
   return {
     selectedPath: isDefined(selectedFile) ? selectedFile.path : null,
-    selectedPathLabel: isDefined(selectedFile) ? selectedFile.path : NO_FILE_PATH_LABEL,
+    selectedPathLabel: isDefined(selectedFile) ? selectedFile.path : null,
     originalContent: isDefined(selectedFile) ? selectedFile.originalContent : EMPTY_CONTENT,
     modifiedContent: isDefined(selectedFile) ? selectedFile.modifiedContent : EMPTY_CONTENT,
     language: isDefined(selectedFile) ? languageOf(selectedFile.path) : DEFAULT_LANGUAGE,

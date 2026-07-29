@@ -275,6 +275,26 @@ export async function createRunWorktree(request: CreateRunWorktreeRequest): Prom
 
   const branchName = buildBranchName(prRef, commentId);
   const worktreePath = buildWorktreePath(prRef, commentId);
+
+  // Self-heal an orphan: a crash or a failed teardown can leave the scratch branch
+  // behind with no run record owning it, and `worktree add -b` then refuses forever.
+  // The store is the authority on ownership — a branch a *live* run holds is a real
+  // collision and still refuses; one nobody owns is garbage in our own namespace.
+  const branches = await git.branchLocal();
+  if (branches.all.includes(branchName)) {
+    const owner = getRuns().find(
+      (run) => run.branchName === branchName && !isTerminalRunState(run.state),
+    );
+    if (owner !== undefined) {
+      throw new AppError(
+        APP_ERROR_KIND.WORKTREE_DIRTY,
+        `A run is still holding ${branchName}, so this comment cannot be started again yet.`,
+        'Wait for that run to finish, or cancel it, then start again.',
+      );
+    }
+    await removeWorktree(repoPath, worktreePath, branchName);
+  }
+
   await mkdir(dirname(worktreePath), { recursive: true });
   await git.raw([...WORKTREE_ADD_ARGS, branchName, worktreePath, baseRevision]);
 

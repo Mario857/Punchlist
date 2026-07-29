@@ -93,8 +93,10 @@ export function RunPane({ commentId }: RunPaneProps) {
           <div className={COLUMN_CLASS}>
             <RunSummary key={view.runId} runId={view.runId} />
             {pinnedSecondOpinion}
+            {/* Deliberately unkeyed: remounting Monaco per comment raced dispose
+                against init and sometimes left a for-ever-loading zombie editor in
+                the DOM. One instance lives on and swaps its models instead. */}
             <DiffReview
-              key={view.runId}
               runId={view.runId}
               revisionProgressLabel={view.revisionProgressLabel}
               isEditable={view.isPatchEditable}

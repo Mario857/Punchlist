@@ -36,6 +36,14 @@ export function LandingCombinedDiff({ view }: Props) {
     onSelectPath,
   } = useLandingCombinedDiff({ files: view.files });
 
+  // "No file selected" above "the diff is empty" was two ways of saying nothing.
+  const pathLine =
+    selectedPathLabel === null ? null : (
+      <p className={HEADER_PATH_CLASS} title={selectedPathLabel}>
+        {selectedPathLabel}
+      </p>
+    );
+
   const body = view.hasChanges ? (
     <div className={BODY_CLASS}>
       <div className={FILE_TREE_CLASS}>
@@ -67,9 +75,7 @@ export function LandingCombinedDiff({ view }: Props) {
         <h3 className={HEADING_CLASS}>{view.heading}</h3>
         <p className={EXPLANATION_CLASS}>{view.explanation}</p>
       </div>
-      <p className={HEADER_PATH_CLASS} title={selectedPathLabel}>
-        {selectedPathLabel}
-      </p>
+      {pathLine}
       {body}
     </Card>
   );
