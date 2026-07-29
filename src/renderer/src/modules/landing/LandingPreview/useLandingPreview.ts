@@ -7,6 +7,7 @@ import { isDefined } from '@renderer/lib/guards';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import { useQueryPrComments } from '@renderer/modules/comments/useQueryPrComments';
 import { useExecuteLanding } from '@renderer/modules/landing/useExecuteLanding';
+import { useQueryLocalBranches } from '@renderer/modules/landing/useQueryLocalBranches';
 import {
   useExecutePushBranch,
   useExecuteResolveThreads,
@@ -17,6 +18,7 @@ import {
   ASSEMBLE_ERROR_FALLBACK,
   ASSEMBLING_LABEL,
   buildConfirmLabel,
+  EMPTY_MERGE_LABEL_SUFFIX,
   buildPushLabel,
   buildPushedLabel,
   buildResolvedLabel,
@@ -74,6 +76,8 @@ interface UseLandingPreviewResult {
   heading: string;
   explanation: string;
   view: LandingView;
+  /** The selectable targets: local branches, plus the stored value even when stale. */
+  branchOptionValues: string[];
 }
 
 /** One hand-edited commit message, held only for the runs whose message was touched. */
@@ -224,6 +228,15 @@ export function useLandingPreview({
   );
 
   const { executeLanding, landingResult, isLandingExecuting, landingError } = useExecuteLanding();
+  const { localBranches } = useQueryLocalBranches(prRef);
+
+  // The stored target stays listed even when it no longer exists locally — a selector
+  // that silently re-points a landing would be worse than one showing a dead value.
+  const branchOptionValues = (() => {
+    const options = localBranches ?? [];
+    if (targetBranch === null || options.includes(targetBranch)) return options;
+    return [targetBranch, ...options];
+  })();
   const { pushBranch, pushBranchResult, isPushBranchPending, pushBranchError } =
     useExecutePushBranch();
   const { resolveThreads, resolveThreadsResult, isResolveThreadsPending, resolveThreadsError } =
@@ -347,6 +360,10 @@ export function useLandingPreview({
           }
         : null,
       commits: {
+        emptyMergeItems: landingPreview.emptyMerges.map((empty) => {
+          const summary = toCommentSummary(empty.commentId, commentsById.get(empty.commentId));
+          return { runId: empty.runId, label: `${summary.label}${EMPTY_MERGE_LABEL_SUFFIX}` };
+        }),
         heading: COMMITS_HEADING,
         explanation: COMMITS_EXPLANATION,
         items: commitItems,
@@ -385,5 +402,5 @@ export function useLandingPreview({
     };
   })();
 
-  return { heading: LANDING_HEADING, explanation: LANDING_EXPLANATION, view };
+  return { heading: LANDING_HEADING, explanation: LANDING_EXPLANATION, view, branchOptionValues };
 }

@@ -54,6 +54,17 @@ export interface LandingCommitsView {
   items: LandingCommitItem[];
   hasCommits: boolean;
   emptyLabel: string;
+  /**
+   * One line per approved run whose merge changed nothing: its work is already on the
+   * target branch. Silent omission read as a bug — "Land 0 commits" with no reason —
+   * and the usual reason is a stale target branch.
+   */
+  emptyMergeItems: LandingEmptyMergeItem[];
+}
+
+export interface LandingEmptyMergeItem {
+  runId: string;
+  label: string;
 }
 
 export interface LandingCombinedDiffView {
@@ -181,6 +192,8 @@ export const TARGET_BRANCH_LABEL = 'Lands on local branch';
 export const COMMITS_HEADING = 'Commits that will be created';
 export const COMMITS_EXPLANATION =
   'One squashed commit per resolved comment. The messages are editable right here because the agent wrote its summary before you hand-edited its patch, and correcting that belongs in the step you are already in rather than a separate one — what you leave in these fields is what gets committed.';
+export const EMPTY_MERGE_LABEL_SUFFIX =
+  ' — already contained in the target branch, so it adds no commit. If that is unexpected, check the target branch above.';
 export const COMMITS_EMPTY_LABEL =
   'Nothing is approved to land yet, so this landing would create no commit.';
 export const COMMIT_SUBJECT_LABEL = 'Commit subject';

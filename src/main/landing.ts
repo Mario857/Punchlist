@@ -28,6 +28,7 @@ import type {
   ExecuteLandingRequest,
   LandingCommitPlan,
   LandingConflict,
+  LandingEmptyMerge,
   LandingPreview,
   LandingResult,
 } from '@shared/landing';
@@ -163,6 +164,7 @@ interface AssembledIntegration {
   headRevision: string;
   commits: LandingCommitPlan[];
   conflicts: LandingConflict[];
+  emptyMerges: LandingEmptyMerge[];
   combinedFiles: CandidatePatchFile[];
   runIds: string[];
 }
@@ -479,6 +481,7 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
 
   const commits: LandingCommitPlan[] = [];
   const conflicts: LandingConflict[] = [];
+  const emptyMerges: LandingEmptyMerge[] = [];
   const runIds: string[] = [];
 
   for (const run of runs) {
@@ -494,7 +497,11 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
     runIds.push(run.id);
     const plan = resolveCommitPlan(run, comment, prUrl, plannedCommits);
     const commit = await commitWorktree(worktreePath, toCommitMessage(plan));
-    if (commit === null) continue;
+    if (commit === null) {
+      // A clean merge that staged nothing: the branch already contains this work.
+      emptyMerges.push({ runId: run.id, commentId: run.commentId });
+      continue;
+    }
     commits.push(plan);
   }
 
@@ -512,6 +519,7 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
     headRevision,
     commits,
     conflicts,
+    emptyMerges,
     combinedFiles,
     runIds,
   };
@@ -537,6 +545,7 @@ export async function assembleLanding(request: AssembleLandingRequest): Promise<
     commits: assembled.commits,
     combinedFiles: assembled.combinedFiles,
     conflicts: assembled.conflicts,
+    emptyMerges: assembled.emptyMerges,
   };
 }
 
@@ -846,4 +855,22 @@ export async function resolveLandedThreads(
     resolvedThreadIds.push(comment.threadId);
   }
   return { resolvedThreadIds };
+}
+
+/**
+ * The local branches a landing may target, current branch first. Read from the clone
+ * the PR's runs would land in; read-only, so it is not a gated action.
+ */
+export async function listLocalBranches(prRef: PrRef): Promise<string[]> {
+  const repoPath = resolveLocalRepoPath(prRef.repoKey);
+  if (repoPath === null) {
+    throw new AppError(APP_ERROR_KIND.NOT_FOUND, MIXED_CLONE_MESSAGE, MIXED_CLONE_REMEDIATION);
+  }
+  const branches = await simpleGit(repoPath).branchLocal();
+  // The checked-out branch leads: it is the likeliest target and the natural default.
+  return [...branches.all].sort((left, right) => {
+    if (left === branches.current) return -1;
+    if (right === branches.current) return 1;
+    return left.localeCompare(right);
+  });
 }

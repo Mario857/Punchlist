@@ -79,6 +79,7 @@ export const IPC_CHANNEL = {
   RUNS_REJECT: 'runs:reject',
   LANDING_ASSEMBLE: 'landing:assemble',
   LANDING_EXECUTE: 'landing:execute',
+  LANDING_BRANCHES: 'landing:branches',
   LANDING_PUSH_BRANCH: 'landing:pushBranch',
   LANDING_RESOLVE_THREADS: 'landing:resolveThreads',
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
@@ -259,6 +260,8 @@ export interface LandingApi {
    * pushed, no thread is resolved, no comment is posted.
    */
   execute(request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>>;
+  /** The local branches a landing may target, the checked-out branch first. */
+  branches(ref: PrRef): Promise<IpcResult<string[]>>;
   /** Pushes the target branch to its remote — on demand, never as part of a landing. */
   pushBranch(request: PushBranchRequest): Promise<IpcResult<PushBranchResult>>;
   /** Resolves the threads of every comment a landed run addressed, skipping resolved ones. */

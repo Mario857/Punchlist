@@ -30,6 +30,16 @@ export interface LandingConflict {
  * sandbox worktree, so conflicts are real findings rather than predictions — and so
  * they can be re-run while the real repository is still untouched.
  */
+/**
+ * A run that merged cleanly and changed nothing: its work is already contained in the
+ * target branch. Reported rather than silently dropped, because "Land 0 commits" with
+ * no explanation reads as a bug — and the usual cause is a stale target branch.
+ */
+export interface LandingEmptyMerge {
+  runId: string;
+  commentId: string;
+}
+
 export interface LandingPreview {
   prRef: PrRef;
   /**
@@ -44,6 +54,7 @@ export interface LandingPreview {
   combinedFiles: CandidatePatchFile[];
   /** Non-empty means the landing cannot proceed until each is re-run or dropped. */
   conflicts: LandingConflict[];
+  emptyMerges: LandingEmptyMerge[];
 }
 
 export interface AssembleLandingRequest {

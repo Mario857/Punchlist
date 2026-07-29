@@ -134,6 +134,8 @@ const api: PunchlistApi = {
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_ASSEMBLE, request),
     execute: (request: ExecuteLandingRequest): Promise<IpcResult<LandingResult>> =>
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_EXECUTE, request),
+    branches: (ref: PrRef): Promise<IpcResult<string[]>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.LANDING_BRANCHES, ref),
     pushBranch: (request: PushBranchRequest): Promise<IpcResult<PushBranchResult>> =>
       ipcRenderer.invoke(IPC_CHANNEL.LANDING_PUSH_BRANCH, request),
     resolveThreads: (

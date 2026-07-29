@@ -20,6 +20,7 @@ import {
   assembleLanding,
   executeLanding,
   LANDING_GATE_ACTION,
+  listLocalBranches,
   pushTargetBranch,
   resolveLandedThreads,
 } from './landing';
@@ -353,6 +354,7 @@ export function registerIpcHandlers(): void {
     ),
   );
 
+  registerHandler(IPC_CHANNEL.LANDING_BRANCHES, prRefSchema, (ref) => listLocalBranches(ref));
   registerHandler(IPC_CHANNEL.LANDING_PUSH_BRANCH, pushBranchPayloadSchema, (request) =>
     pushTargetBranch(
       { prRef: request.prRef, targetBranch: request.targetBranch },

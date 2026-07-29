@@ -25,6 +25,7 @@ const COLUMN_CLASS = 'flex flex-col gap-3';
 const HEADING_CLASS = 'text-ink text-sm font-semibold';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const LIST_CLASS = 'flex flex-col gap-3';
+const EMPTY_MERGE_CLASS = 'text-warning text-xs leading-relaxed';
 const ITEM_CLASS = 'border-border bg-surface flex flex-col gap-1.5 rounded-md border p-2';
 const ITEM_HEADER_CLASS = 'flex flex-wrap items-baseline gap-2';
 const COMMENT_LABEL_CLASS = 'text-ink min-w-0 flex-1 text-xs font-semibold';
@@ -78,6 +79,12 @@ export function LandingCommitList({ view }: Props) {
     <p className={EMPTY_CLASS}>{view.emptyLabel}</p>
   );
 
+  const emptyMergeLines = view.emptyMergeItems.map((item) => (
+    <p key={item.runId} role="status" className={EMPTY_MERGE_CLASS}>
+      {item.label}
+    </p>
+  ));
+
   return (
     <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.MD} className={COLUMN_CLASS}>
       <div>
@@ -85,6 +92,7 @@ export function LandingCommitList({ view }: Props) {
         <p className={EXPLANATION_CLASS}>{view.explanation}</p>
       </div>
       {body}
+      {emptyMergeLines}
     </Card>
   );
 }

@@ -51,7 +51,16 @@ const COLUMN_CLASS = 'flex flex-col gap-3';
  * deliberately no keyboard binding for that click.
  */
 export function LandingPreview({ prRef, targetBranch, onTargetBranchChange }: LandingPreviewProps) {
-  const { heading, explanation, view } = useLandingPreview({ prRef, targetBranch });
+  const { heading, explanation, view, branchOptionValues } = useLandingPreview({
+    prRef,
+    targetBranch,
+  });
+
+  const branchOptions = branchOptionValues.map((branch) => (
+    <option key={branch} value={branch}>
+      {branch}
+    </option>
+  ));
 
   const content = (() => {
     switch (view.kind) {
@@ -121,18 +130,21 @@ export function LandingPreview({ prRef, targetBranch, onTargetBranchChange }: La
           <h2 className={HEADING_CLASS}>{heading}</h2>
           <p className={EXPLANATION_CLASS}>{explanation}</p>
         </div>
-        {/* The target belongs to the landing it steers, not to the always-on chrome:
-            editing it here reassembles the preview against the branch it names. */}
+        {/* A selector of branches that actually exist, because the classic failure is
+            a stale free-typed target: the landing then assembles against a branch that
+            already contains the work and previews zero commits. Choosing reassembles
+            the preview against the branch chosen. */}
         <label className={TARGET_LABEL_CLASS} htmlFor={TARGET_BRANCH_INPUT_ID}>
           {TARGET_BRANCH_LABEL}
         </label>
-        <input
+        <select
           id={TARGET_BRANCH_INPUT_ID}
-          type="text"
           value={targetBranch ?? EMPTY_TARGET_BRANCH}
           onChange={(event) => onTargetBranchChange(event.target.value)}
           className={joinClassNames(TARGET_BRANCH_INPUT_CLASS, FOCUS_RING, DISABLED_STATE)}
-        />
+        >
+          {branchOptions}
+        </select>
       </header>
       {content}
     </section>

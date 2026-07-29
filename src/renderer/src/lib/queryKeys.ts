@@ -23,6 +23,7 @@ const QUERY_DOMAIN = {
   RUN_REVISIONS: 'runRevisions',
   AUDIT: 'audit',
   LANDING_PREVIEW: 'landingPreview',
+  LOCAL_BRANCHES: 'localBranches',
   LANDING_UNDOABLE: 'landingUndoable',
   CONVENTIONS: 'conventions',
   CONVENTION_EXPORT_PREVIEW: 'conventionExportPreview',
@@ -75,6 +76,7 @@ export const queryKeys = {
    * group rather than one exact key at a time.
    */
   landingPreviews: () => createQueryKey(QUERY_DOMAIN.LANDING_PREVIEW),
+  localBranches: (repoKey: string) => createQueryKey(QUERY_DOMAIN.LOCAL_BRANCHES, repoKey),
   /**
    * Unkeyed on purpose: main holds at most one undoable landing, the most recent one.
    * Keying this by PR would keep offering an undo for a landing that a later landing
