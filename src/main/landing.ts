@@ -104,6 +104,9 @@ const NO_ENTRIES = 0;
 const PR_URL_PREFIX = 'https://github.com/';
 const PR_URL_INFIX = '/pull/';
 
+/** Terse like every other run-branch commit: these are squashed away at landing. */
+const UNCOMMITTED_SWEEP_SUBJECT = 'agent: apply resolution';
+
 const NOTHING_APPROVED_MESSAGE =
   'No resolution on this pull request is approved, so there is nothing to land.';
 const NOTHING_APPROVED_REMEDIATION = 'Approve at least one reviewed resolution, then try again.';
@@ -486,6 +489,11 @@ async function assembleIntegration(options: AssembleOptions): Promise<AssembledI
 
   for (const run of runs) {
     const comment = requireComment(comments, run);
+    // Self-heal: a run approved before the first agent result was committed still has
+    // its patch sitting uncommitted in its own worktree, and merging that branch would
+    // find nothing. Sweeping it into the branch here is idempotent — a run whose work
+    // is already committed has a clean worktree and this does nothing.
+    await commitWorktree(run.worktreePath, UNCOMMITTED_SWEEP_SUBJECT);
     const conflict = await mergeRunBranch(worktreePath, run);
     if (conflict !== null) {
       conflicts.push(conflict);

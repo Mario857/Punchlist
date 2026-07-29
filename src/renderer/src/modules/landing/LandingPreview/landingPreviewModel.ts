@@ -196,6 +196,9 @@ export const EMPTY_MERGE_LABEL_SUFFIX =
   ' — already contained in the target branch, so it adds no commit. If that is unexpected, check the target branch above.';
 export const COMMITS_EMPTY_LABEL =
   'Nothing is approved to land yet, so this landing would create no commit.';
+/** The other way to reach zero commits: approvals exist, but every merge was empty. */
+export const COMMITS_ALL_EMPTY_LABEL =
+  'Every approved resolution merged without adding anything, so this landing would create no commit. Each one is listed below with the reason.';
 export const COMMIT_SUBJECT_LABEL = 'Commit subject';
 export const COMMIT_BODY_LABEL = 'Commit body';
 export const COMMIT_BODY_ROW_COUNT = 3;
@@ -221,6 +224,8 @@ export const CONFIRM_EXPLANATION =
   'This is the only step that touches a real branch, and it stays on this machine: the target branch fast-forwards to exactly what is previewed above, and the audit log records the tip it moved from. There is deliberately no keyboard shortcut for this button and it is not focused for you: the gate is worth nothing if it becomes muscle memory.';
 export const NOTHING_TO_LAND_BLOCKER =
   'Nothing is approved to land, so there is nothing to confirm.';
+export const ALL_EMPTY_BLOCKER =
+  'Every approved resolution is already contained in the target branch, so there is nothing to confirm. Check the target branch above.';
 
 export const LANDING_PENDING_LABEL = 'Landing… fast-forwarding the target branch.';
 

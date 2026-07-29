@@ -281,6 +281,14 @@ async function executeRun(
     if (autoAnswer !== null) return continueRun({ runId: startedRun.id, message: autoAnswer });
 
     const summary = await readAgentSummary(startedRun.worktreePath);
+    // The candidate has to exist as a *commit* on the run branch, not merely as edits
+    // in the worktree: landing squash-merges that branch, so an uncommitted patch
+    // merges to nothing and the whole landing previews as empty. Every later change
+    // already commits its own revision — this is the first one, which did not.
+    await commitWorktree(
+      startedRun.worktreePath,
+      REVISION_COMMIT_SUBJECT[REVISION_KIND.AGENT_RESULT],
+    );
     const patch = await readCandidatePatch(withTranscript);
     return resolveCompletedState({ run: withTranscript, comment, patch, summary, decidedRun });
   } catch (error: unknown) {

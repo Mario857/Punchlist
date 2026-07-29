@@ -33,6 +33,7 @@ import {
   COMMIT_BODY_LABEL,
   COMMIT_BODY_ROW_COUNT,
   COMMIT_SUBJECT_LABEL,
+  COMMITS_ALL_EMPTY_LABEL,
   COMMITS_EMPTY_LABEL,
   COMMITS_EXPLANATION,
   COMMITS_HEADING,
@@ -47,6 +48,7 @@ import {
   LANDING_PARTIAL_FAILURE_NOTICE,
   LANDING_PENDING_LABEL,
   LANDING_VIEW_KIND,
+  ALL_EMPTY_BLOCKER,
   NOTHING_TO_LAND_BLOCKER,
   NOTHING_TO_PREVIEW_LABEL,
   REASSEMBLE_LABEL,
@@ -327,7 +329,13 @@ export function useLandingPreview({
 
     const hasConflicts = conflicts.length > EMPTY_LENGTH;
 
-    const blockerLabel = commits.length === EMPTY_LENGTH ? NOTHING_TO_LAND_BLOCKER : null;
+    // Zero commits has two causes and they need different remedies: nothing approved
+    // at all, versus approvals whose work the target branch already has.
+    const hasEmptyMerges = landingPreview.emptyMerges.length > EMPTY_LENGTH;
+    const blockerLabel = (() => {
+      if (commits.length > EMPTY_LENGTH) return null;
+      return hasEmptyMerges ? ALL_EMPTY_BLOCKER : NOTHING_TO_LAND_BLOCKER;
+    })();
 
     return {
       kind: LANDING_VIEW_KIND.PREVIEW,
@@ -368,7 +376,7 @@ export function useLandingPreview({
         explanation: COMMITS_EXPLANATION,
         items: commitItems,
         hasCommits: commitItems.length > EMPTY_LENGTH,
-        emptyLabel: COMMITS_EMPTY_LABEL,
+        emptyLabel: hasEmptyMerges ? COMMITS_ALL_EMPTY_LABEL : COMMITS_EMPTY_LABEL,
       },
       combinedDiff: {
         heading: COMBINED_DIFF_HEADING,
