@@ -15,9 +15,13 @@ import { useRunControls } from '@renderer/modules/runs/RunControls/useRunControl
 export interface RunControlsProps {
   /** Null before a PR is chosen: a run needs a local clone to build its worktree from. */
   prRef: PrRef | null;
+  /** The button hides while the landing view is already the one on screen. */
+  isLandingOpen: boolean;
+  onOpenLanding: () => void;
 }
 
 const SECTION_LABEL = 'Run controls';
+const REVIEW_LANDING_LABEL = 'Review landing';
 const BULK_REVIEW_HEADING = 'Bulk review';
 const SECOND_OPINION_HEADING = 'Second opinion';
 const SANDBOX_HEADING = 'Sandbox';
@@ -50,7 +54,7 @@ const ACTIVE_RUN_LABEL_CLASS = 'text-ink min-w-0 flex-1 truncate text-xs';
 const BLOCK_HEADING_CLASS = 'text-ink text-xs font-medium';
 const BLOCK_COLUMN_CLASS = 'flex flex-col gap-1.5';
 
-export function RunControls({ prRef }: RunControlsProps) {
+export function RunControls({ prRef, isLandingOpen, onOpenLanding }: RunControlsProps) {
   const {
     startLabel,
     isStartDisabled,
@@ -160,6 +164,16 @@ export function RunControls({ prRef }: RunControlsProps) {
       {stopAllLabel}
     </Button>
   ) : null;
+
+  // Beside the start button in spirit: the row is the workflow — start work on the
+  // left, land the reviewed result on the right. Hidden while the landing view is
+  // open, where the chevron is the way back.
+  const reviewLandingButton =
+    prRef === null || isLandingOpen ? null : (
+      <Button variant={BUTTON_VARIANT.SECONDARY} size={BUTTON_SIZE.SM} onClick={onOpenLanding}>
+        {REVIEW_LANDING_LABEL}
+      </Button>
+    );
 
   const batchTierPicker = hasSelection ? (
     <BatchTierPicker selectedCommentIds={selectedCommentIds} />
@@ -342,10 +356,11 @@ export function RunControls({ prRef }: RunControlsProps) {
             {startLabel}
           </Button>
           {batchTierPicker}
-          {/* Grouped so the pair holds the trailing edge whether or not the stop
+          {/* Grouped so the set holds the trailing edge whether or not the stop
               button is rendered. */}
           <div className={TRAILING_GROUP_CLASS}>
             {stopAllButton}
+            {reviewLandingButton}
             <Button
               variant={BUTTON_VARIANT.GHOST}
               size={BUTTON_SIZE.SM}

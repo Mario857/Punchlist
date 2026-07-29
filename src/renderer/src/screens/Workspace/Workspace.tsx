@@ -58,13 +58,14 @@ export function Workspace() {
     targetBranch,
     isLandingOpen,
     onTargetBranchChange,
-    onToggleLanding,
+    onOpenLanding,
+    onBackClick,
+    isBackAvailable,
     isShortcutHelpOpen,
     onShowShortcutHelp,
     onCloseShortcutHelp,
     onSelectPr,
     onSelectComment,
-    onTogglePicker,
     onRefreshComments,
   } = useWorkspace();
 
@@ -113,7 +114,11 @@ export function Workspace() {
     if (selectedPr !== null && isLandingOpen) {
       return (
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <LandingPreview prRef={selectedPr} targetBranch={targetBranch} />
+          <LandingPreview
+            prRef={selectedPr}
+            targetBranch={targetBranch}
+            onTargetBranchChange={onTargetBranchChange}
+          />
         </div>
       );
     }
@@ -171,18 +176,14 @@ export function Workspace() {
     <main className="flex min-h-0 flex-1 flex-col">
       <WorkspaceTopBar
         selectedPr={selectedPr}
-        isPickerOpen={isPickerOpen}
         isRefreshing={isPrCommentsFetching}
-        onTogglePicker={onTogglePicker}
+        isBackAvailable={isBackAvailable}
+        onBackClick={onBackClick}
         onRefreshComments={onRefreshComments}
         onShowShortcutHelp={onShowShortcutHelp}
-        targetBranch={targetBranch}
         paneToggleItems={paneToggleItems}
-        isLandingOpen={isLandingOpen}
-        onTargetBranchChange={onTargetBranchChange}
-        onToggleLanding={onToggleLanding}
       />
-      <RunControls prRef={selectedPr} />
+      <RunControls prRef={selectedPr} isLandingOpen={isLandingOpen} onOpenLanding={onOpenLanding} />
       {body}
       <StatusBar prRef={selectedPr} comments={comments} />
       <ShortcutHelp isOpen={isShortcutHelpOpen} onClose={onCloseShortcutHelp} />

@@ -1,6 +1,8 @@
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { Spinner, SPINNER_SIZE } from '@renderer/components/Spinner';
+import { DISABLED_STATE, FOCUS_RING } from '@renderer/components/interactiveClassNames';
+import { joinClassNames } from '@renderer/lib/classNames';
 import { assertNever } from '@renderer/lib/assertNever';
 import type { PrRef } from '@shared/discovery';
 import { LandingCombinedDiff } from '@renderer/modules/landing/LandingPreview/components/LandingCombinedDiff/LandingCombinedDiff';
@@ -15,13 +17,21 @@ export interface LandingPreviewProps {
   /** Null before a PR is selected: the gate then has nothing to describe. */
   prRef: PrRef | null;
   /**
-   * The branch the integration branch is assembled onto, and the one thing this screen
-   * promises never to push to.
+   * The local branch the landing fast-forwards — normally the PR's own branch.
+   * Editable here because the target belongs to the landing it steers.
    */
   targetBranch: string | null;
+  onTargetBranchChange: (targetBranch: string) => void;
 }
 
 const SECTION_LABEL = 'Landing preview';
+const TARGET_BRANCH_INPUT_ID = 'landing-target-branch';
+const TARGET_BRANCH_LABEL = 'Target branch';
+const EMPTY_TARGET_BRANCH = '';
+const HEADER_ROW_CLASS = 'flex items-end gap-2';
+const TARGET_LABEL_CLASS = 'text-muted shrink-0 text-xs';
+const TARGET_BRANCH_INPUT_CLASS =
+  'border-border bg-surface-raised text-ink w-44 shrink-0 rounded border px-2 py-1 text-sm';
 
 const SECTION_CLASS = 'flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-3';
 const HEADING_CLASS = 'text-ink text-sm font-semibold';
@@ -40,7 +50,7 @@ const COLUMN_CLASS = 'flex flex-col gap-3';
  * acknowledged first. Nothing here runs until the button below is clicked, and there is
  * deliberately no keyboard binding for that click.
  */
-export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
+export function LandingPreview({ prRef, targetBranch, onTargetBranchChange }: LandingPreviewProps) {
   const { heading, explanation, view } = useLandingPreview({ prRef, targetBranch });
 
   const content = (() => {
@@ -106,9 +116,23 @@ export function LandingPreview({ prRef, targetBranch }: LandingPreviewProps) {
 
   return (
     <section aria-label={SECTION_LABEL} className={SECTION_CLASS}>
-      <header>
-        <h2 className={HEADING_CLASS}>{heading}</h2>
-        <p className={EXPLANATION_CLASS}>{explanation}</p>
+      <header className={HEADER_ROW_CLASS}>
+        <div className="min-w-0 flex-1">
+          <h2 className={HEADING_CLASS}>{heading}</h2>
+          <p className={EXPLANATION_CLASS}>{explanation}</p>
+        </div>
+        {/* The target belongs to the landing it steers, not to the always-on chrome:
+            editing it here reassembles the preview against the branch it names. */}
+        <label className={TARGET_LABEL_CLASS} htmlFor={TARGET_BRANCH_INPUT_ID}>
+          {TARGET_BRANCH_LABEL}
+        </label>
+        <input
+          id={TARGET_BRANCH_INPUT_ID}
+          type="text"
+          value={targetBranch ?? EMPTY_TARGET_BRANCH}
+          onChange={(event) => onTargetBranchChange(event.target.value)}
+          className={joinClassNames(TARGET_BRANCH_INPUT_CLASS, FOCUS_RING, DISABLED_STATE)}
+        />
       </header>
       {content}
     </section>

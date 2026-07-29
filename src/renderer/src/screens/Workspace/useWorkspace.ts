@@ -146,13 +146,18 @@ interface UseWorkspaceResult {
   targetBranch: string;
   isLandingOpen: boolean;
   onTargetBranchChange: (targetBranch: string) => void;
-  onToggleLanding: () => void;
+  onOpenLanding: () => void;
+  /**
+   * One level up, whatever the level: landing → comments → the pull request list.
+   * Two back affordances was one too many, and one of them led nowhere.
+   */
+  onBackClick: () => void;
+  isBackAvailable: boolean;
   isShortcutHelpOpen: boolean;
   onShowShortcutHelp: () => void;
   onCloseShortcutHelp: () => void;
   onSelectPr: (ref: PrRef) => void;
   onSelectComment: (commentId: string) => void;
-  onTogglePicker: () => void;
   onRefreshComments: () => void;
 }
 
@@ -358,8 +363,20 @@ export function useWorkspace(): UseWorkspaceResult {
     },
     // Opening the gate is a view change, not an action: the preview assembles in the
     // sandbox and nothing it shows has happened yet.
-    onToggleLanding: () => setIsLandingOpen((isOpen) => !isOpen),
-    onTogglePicker: () => setIsPickerOpen((isOpen) => !isOpen),
+    onOpenLanding: () => setIsLandingOpen(true),
+    onBackClick: () => {
+      if (isLandingOpen) {
+        setIsLandingOpen(false);
+        return;
+      }
+      if (isPickerOpen) {
+        setIsPickerOpen(false);
+        return;
+      }
+      setIsPickerOpen(true);
+    },
+    // Home is the list: with no PR selected there is nowhere further up to go.
+    isBackAvailable: selectedPr !== null,
     onRefreshComments: refetchPrComments,
   };
 }
