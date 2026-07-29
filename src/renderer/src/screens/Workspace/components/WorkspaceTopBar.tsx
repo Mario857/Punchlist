@@ -22,9 +22,6 @@ interface Props {
   onToggleLanding: () => void;
 }
 
-const NO_PR_LABEL = 'No pull request selected';
-const CHOOSE_PR_LABEL = 'Choose a pull request';
-const BACK_TO_COMMENTS_LABEL = 'Back to comments';
 const BACK_TO_LIST_LABEL = 'Back to the pull request list';
 /** The visible equivalent of `?`, so the keyboard map is discoverable by mouse. */
 const SHORTCUT_HELP_LABEL = '?';
@@ -52,18 +49,24 @@ export function WorkspaceTopBar({
   onTargetBranchChange,
   onToggleLanding,
 }: Props) {
-  const prLabel = (() => {
-    if (selectedPr === null) return isPickerOpen ? NO_PR_LABEL : CHOOSE_PR_LABEL;
-    return `${selectedPr.repoKey} #${selectedPr.number}`;
-  })();
-
-  // Nothing to toggle back to before a PR is chosen, and nothing to refresh either.
-  const isPickerToggleDisabled = selectedPr === null && isPickerOpen;
-
-  // One bare chevron, always: from the workspace it opens the pull request list, from
-  // the list it returns. "Back" needs no sentence — the accessible name still says
-  // where it goes — and the PR identity stays plain text rather than a control.
-  const backLabel = isPickerOpen ? BACK_TO_COMMENTS_LABEL : BACK_TO_LIST_LABEL;
+  // The list is the home screen, so it carries no back control and no PR identity —
+  // there is nowhere up from home. Inside a PR, one bare chevron goes back to the
+  // list, with the PR named in plain text beside it.
+  const leadingControls =
+    isPickerOpen || selectedPr === null ? null : (
+      <>
+        <IconButton
+          label={BACK_TO_LIST_LABEL}
+          icon={<ChevronLeftIcon />}
+          variant={BUTTON_VARIANT.GHOST}
+          size={ICON_BUTTON_SIZE.SM}
+          onClick={onTogglePicker}
+        />
+        <p className="text-ink truncate text-sm font-medium tabular-nums">
+          {`${selectedPr.repoKey} #${selectedPr.number}`}
+        </p>
+      </>
+    );
 
   const isRefreshDisabled = selectedPr === null;
   const isTargetBranchDisabled = selectedPr === null;
@@ -80,17 +83,7 @@ export function WorkspaceTopBar({
         'border-border border-b px-4 py-2',
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <IconButton
-          label={backLabel}
-          icon={<ChevronLeftIcon />}
-          variant={BUTTON_VARIANT.GHOST}
-          size={ICON_BUTTON_SIZE.SM}
-          isDisabled={isPickerToggleDisabled}
-          onClick={onTogglePicker}
-        />
-        <p className="text-ink truncate text-sm font-medium tabular-nums">{prLabel}</p>
-      </div>
+      <div className="flex min-w-0 items-center gap-2">{leadingControls}</div>
       <div className="flex shrink-0 items-center gap-2">
         <label className="text-muted text-xs" htmlFor={TARGET_BRANCH_INPUT_ID}>
           {TARGET_BRANCH_LABEL}
