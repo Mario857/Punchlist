@@ -2,11 +2,13 @@ import { isTerminalRunState } from '@shared/runState';
 import { assertNever } from '@renderer/lib/assertNever';
 import { Badge, BADGE_TONE } from '@renderer/components/Badge';
 import { StateBadge } from '@renderer/components/StateBadge';
-import { AlertTriangleIcon } from '@renderer/components/icons/AlertTriangleIcon';
+import { ClockIcon } from '@renderer/components/icons/ClockIcon';
+import { FlagIcon } from '@renderer/components/icons/FlagIcon';
 import { selectRunForComment, useRunStore, type RunsById } from '@renderer/stores/runStore';
 import { COMMENT_TREE_NODE_KIND, type CommentTreeRow } from '../commentTreeModel';
 import { CommentAttributeBadges } from './CommentAttributeBadges';
 import { CommentTierBadge } from './CommentTierBadge/CommentTierBadge';
+import { RowGlyph } from './RowGlyph';
 
 export interface CommentRowBadgesProps {
   row: CommentTreeRow;
@@ -16,16 +18,14 @@ const SINGLE_COMMENT_COUNT = 1;
 const SINGLE_COMMENT_TITLE = '1 comment in here';
 const COMMENT_COUNT_TITLE_SUFFIX = ' comments in here';
 
-const GUARDRAIL_LABEL = 'Flagged';
-const GUARDRAIL_TITLE = 'This patch carries guardrail findings worth reading it with';
+const GUARDRAIL_TITLE = 'Flagged: this patch carries guardrail findings worth reading it with';
 
-const STALE_LABEL = 'Stale';
 const STALE_TITLE =
-  'The PR head moved after this run started, so its patch is against code that is no longer current';
+  'Stale: the PR head moved after this run started, so its patch is against code that is no longer current';
 
 /** Matches the other row glyphs, so every small mark on a row agrees in weight. */
 const NO_FLAGS = 0;
-const ROW_ALERT_ICON_SIZE = 11;
+const ROW_GLYPH_SIZE = 12;
 
 const BADGE_LIST_CLASS = 'flex shrink-0 items-center gap-1';
 
@@ -37,30 +37,25 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
   const hasFlaggedRun = useRunStore((state) => selectHasFlaggedRun(state.runsById, row));
   const hasStaleRun = useRunStore((state) => selectHasStaleRun(state.runsById, row));
 
-  // The one loud badge on a row, which is affordable precisely because flags are rare.
-  const guardrailBadge = hasFlaggedRun ? (
-    <Badge
-      tone={BADGE_TONE.DANGER}
+  // Colour carries the warning, the tooltip carries the words: a flag is worth a
+  // mark on the row, not a second text badge crowding the comment out.
+  const guardrailGlyph = hasFlaggedRun ? (
+    <RowGlyph
       title={GUARDRAIL_TITLE}
-      icon={<AlertTriangleIcon size={ROW_ALERT_ICON_SIZE} />}
-    >
-      {GUARDRAIL_LABEL}
-    </Badge>
+      icon={<FlagIcon size={ROW_GLYPH_SIZE} />}
+      className="text-warning"
+    />
   ) : null;
 
-  // Loud for the same reason Flagged is: rare, and a trap if it is missed. A stale run
-  // still reads as landable — StateBadge says "Ready" — while its patch is against a
-  // head that has since moved, so muting this would hide the one thing that is wrong
-  // with it. It stays below Flagged in weight by sitting second and by disappearing
-  // once the run is terminal, rather than by being quieter.
-  const staleBadge = hasStaleRun ? (
-    <Badge
-      tone={BADGE_TONE.WARNING}
+  // A stale run still reads as landable — StateBadge says "Ready" — while its patch is
+  // against a head that has since moved, so this stays visible until the run is
+  // terminal; a landed or rejected run is history rather than a warning.
+  const staleGlyph = hasStaleRun ? (
+    <RowGlyph
       title={STALE_TITLE}
-      icon={<AlertTriangleIcon size={ROW_ALERT_ICON_SIZE} />}
-    >
-      {STALE_LABEL}
-    </Badge>
+      icon={<ClockIcon size={ROW_GLYPH_SIZE} />}
+      className="text-warning"
+    />
   ) : null;
 
   const stateBadge = (() => {
@@ -100,8 +95,8 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
 
   return (
     <span className={BADGE_LIST_CLASS}>
-      {guardrailBadge}
-      {staleBadge}
+      {guardrailGlyph}
+      {staleGlyph}
       {stateBadge}
       {tierBadge}
       {attributeBadges}
