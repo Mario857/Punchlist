@@ -12,7 +12,6 @@ import {
   type WriteRunFileRequest,
 } from '@shared/runs';
 import { isDefined } from '@renderer/lib/guards';
-import { clamp } from '@renderer/lib/numbers';
 import { isIpcError } from '@renderer/lib/unwrapIpcResult';
 import {
   useExecuteContinueRun,
@@ -138,46 +137,13 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
 
 const MONACO_THEME = 'vs-dark';
 /**
- * The editor sizes itself to its diff, so the review column is the only scroll context
- * — an editor with internal scroll left captures the wheel on the way past, once per
- * side, which read as scrolling the same file three times.
- *
- * A line count seeds the height before the first diff lands, but the truth comes from
- * the editors once `onDidUpdateDiff` fires: side-by-side alignment inserts spacer rows
- * a line count cannot see. That event fires when a diff is computed, never when the
- * container resizes, which is what makes it safe to feed the height it measures —
- * the content-size events this replaced react to layout itself and ran away.
- *
- * Bounded because Monaco renders every line inside its height: a floor for the empty
- * case, and a ceiling so a thousand-line patch falls back to internal scrolling
- * instead of putting a thousand rendered lines in the DOM.
+ * A fixed viewport the diff scrolls inside, exactly like the landing preview's
+ * combined diff and like an editor pane in Cursor. Content-sizing the editor was
+ * tried twice and both times found a way to run away — Monaco's measurements react
+ * to the layout they feed — so the editor owns its scrolling and the height is a
+ * constant that cannot loop.
  */
-const MIN_EDITOR_HEIGHT_PX = 160;
-const MAX_EDITOR_HEIGHT_PX = 4000;
-/** Room for the horizontal scrollbar, so one long line does not clip the last row. */
-const EDITOR_CHROME_HEIGHT_PX = 20;
-/** Ignore sub-pixel disagreements rather than re-rendering over them. */
-const HEIGHT_EPSILON_PX = 2;
-const LINE_BREAK = '\n';
-
-function clampEditorHeight(rawHeightPx: number): number {
-  return clamp(rawHeightPx, MIN_EDITOR_HEIGHT_PX, MAX_EDITOR_HEIGHT_PX);
-}
-
-function countLines(content: string): number {
-  return content.split(LINE_BREAK).length;
-}
-
-function toEstimatedHeightPx(originalContent: string, modifiedContent: string): number {
-  const lineCount = Math.max(countLines(originalContent), countLines(modifiedContent));
-  return clampEditorHeight(lineCount * MONACO_LINE_HEIGHT + EDITOR_CHROME_HEIGHT_PX);
-}
-
-/** A measurement is only trusted for the file it was taken on. */
-interface MeasuredEditorHeight {
-  path: string;
-  heightPx: number;
-}
+const DIFF_EDITOR_HEIGHT = '40rem';
 const MONACO_FONT_SIZE = 12;
 const MONACO_LINE_HEIGHT = 18;
 /** Editor pixels, not pane pixels: the changed-files tree is already subtracted. */
@@ -343,7 +309,6 @@ export function useDiffReview({
   const run = useRun(runId);
   const [requestedPath, setRequestedPath] = useState<string | null>(null);
   const [diffEditor, setDiffEditor] = useState<monaco.editor.IStandaloneDiffEditor | null>(null);
-  const [measuredHeight, setMeasuredHeight] = useState<MeasuredEditorHeight | null>(null);
   const [liveSelection, setLiveSelection] = useState<TargetedEditSelection | null>(null);
   const [promptSelection, setPromptSelection] = useState<TargetedEditSelection | null>(null);
   const writeDebounceHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -388,44 +353,6 @@ export function useDiffReview({
   }, [modifiedContent]);
 
   const onEditorMount = useCallback<DiffOnMount>((editor) => setDiffEditor(editor), []);
-
-  // The listener reads which file the measurement belongs to from a ref, so switching
-  // files does not tear the subscription down and remake it.
-  const measuredPathRef = useRef<string | null>(null);
-  useEffect(() => {
-    measuredPathRef.current = selectedPath;
-  }, [selectedPath]);
-
-  useEffect(() => {
-    if (diffEditor === null) return undefined;
-
-    const subscription = diffEditor.onDidUpdateDiff(() => {
-      const path = measuredPathRef.current;
-      if (path === null) return;
-      const heightPx = clampEditorHeight(
-        Math.max(
-          diffEditor.getOriginalEditor().getContentHeight(),
-          diffEditor.getModifiedEditor().getContentHeight(),
-        ) + EDITOR_CHROME_HEIGHT_PX,
-      );
-      setMeasuredHeight((previous) => {
-        if (
-          previous !== null &&
-          previous.path === path &&
-          Math.abs(previous.heightPx - heightPx) <= HEIGHT_EPSILON_PX
-        ) {
-          return previous;
-        }
-        return { path, heightPx };
-      });
-    });
-    return () => subscription.dispose();
-  }, [diffEditor]);
-
-  const editorHeightPx =
-    measuredHeight !== null && measuredHeight.path === selectedPath
-      ? measuredHeight.heightPx
-      : toEstimatedHeightPx(originalContent, modifiedContent);
 
   useEffect(() => {
     if (diffEditor === null || !isEditable || selectedPath === null) return undefined;
@@ -611,7 +538,7 @@ export function useDiffReview({
     progressLabel,
     editorOptions: isEditable ? EDITABLE_DIFF_EDITOR_OPTIONS : READ_ONLY_DIFF_EDITOR_OPTIONS,
     editorTheme: MONACO_THEME,
-    editorHeight: `${editorHeightPx}px`,
+    editorHeight: DIFF_EDITOR_HEIGHT,
     onEditorMount,
     previousHunkLabel: PREVIOUS_HUNK_LABEL,
     previousHunkTitle: PREVIOUS_HUNK_TITLE,

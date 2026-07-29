@@ -1,7 +1,6 @@
 import type { PrRef } from '@shared/discovery';
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
 import { IconButton, ICON_BUTTON_SIZE } from '@renderer/components/IconButton';
-import { ChevronDownIcon } from '@renderer/components/icons/ChevronDownIcon';
 import { ChevronLeftIcon } from '@renderer/components/icons/ChevronLeftIcon';
 import { RefreshIcon } from '@renderer/components/icons/RefreshIcon';
 import { DISABLED_STATE, FOCUS_RING } from '@renderer/components/interactiveClassNames';
@@ -26,8 +25,7 @@ interface Props {
 const NO_PR_LABEL = 'No pull request selected';
 const CHOOSE_PR_LABEL = 'Choose a pull request';
 const BACK_TO_COMMENTS_LABEL = 'Back to comments';
-const SWITCH_PR_TITLE = 'Switch to another pull request';
-const CHEVRON_ICON_SIZE = 12;
+const BACK_TO_LIST_LABEL = 'Back to the pull request list';
 /** The visible equivalent of `?`, so the keyboard map is discoverable by mouse. */
 const SHORTCUT_HELP_LABEL = '?';
 const SHORTCUT_HELP_TITLE = 'Keyboard shortcuts';
@@ -62,35 +60,10 @@ export function WorkspaceTopBar({
   // Nothing to toggle back to before a PR is chosen, and nothing to refresh either.
   const isPickerToggleDisabled = selectedPr === null && isPickerOpen;
 
-  // The PR identity is itself the switcher: clicking what you are working on is how
-  // you change it, the way an editor's window title works — no standing back button
-  // for a screen there is no reason to leave. The picker keeps a way back out.
-  const leadingControl = (() => {
-    // A bare chevron: "back" needs no sentence, and the accessible name still says it.
-    if (isPickerOpen && selectedPr !== null) {
-      return (
-        <IconButton
-          label={BACK_TO_COMMENTS_LABEL}
-          icon={<ChevronLeftIcon />}
-          variant={BUTTON_VARIANT.GHOST}
-          size={ICON_BUTTON_SIZE.SM}
-          onClick={onTogglePicker}
-        />
-      );
-    }
-    return (
-      <Button
-        variant={BUTTON_VARIANT.GHOST}
-        size={BUTTON_SIZE.SM}
-        icon={<ChevronDownIcon size={CHEVRON_ICON_SIZE} />}
-        isDisabled={isPickerToggleDisabled}
-        title={SWITCH_PR_TITLE}
-        onClick={onTogglePicker}
-      >
-        {prLabel}
-      </Button>
-    );
-  })();
+  // One bare chevron, always: from the workspace it opens the pull request list, from
+  // the list it returns. "Back" needs no sentence — the accessible name still says
+  // where it goes — and the PR identity stays plain text rather than a control.
+  const backLabel = isPickerOpen ? BACK_TO_COMMENTS_LABEL : BACK_TO_LIST_LABEL;
 
   const isRefreshDisabled = selectedPr === null;
   const isTargetBranchDisabled = selectedPr === null;
@@ -107,7 +80,17 @@ export function WorkspaceTopBar({
         'border-border border-b px-4 py-2',
       )}
     >
-      <div className="flex min-w-0 items-center gap-2">{leadingControl}</div>
+      <div className="flex min-w-0 items-center gap-2">
+        <IconButton
+          label={backLabel}
+          icon={<ChevronLeftIcon />}
+          variant={BUTTON_VARIANT.GHOST}
+          size={ICON_BUTTON_SIZE.SM}
+          isDisabled={isPickerToggleDisabled}
+          onClick={onTogglePicker}
+        />
+        <p className="text-ink truncate text-sm font-medium tabular-nums">{prLabel}</p>
+      </div>
       <div className="flex shrink-0 items-center gap-2">
         <label className="text-muted text-xs" htmlFor={TARGET_BRANCH_INPUT_ID}>
           {TARGET_BRANCH_LABEL}
