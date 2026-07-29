@@ -523,6 +523,19 @@ async function removeWorktree(
   await pruneRegistrations(repoPath);
 }
 
+/**
+ * Reclaims a *terminal* run's worktree so its comment can be run again — the branch
+ * name is derived from the comment, so a leftover blocks the next `worktree add`.
+ * Unlike `teardownRunWorktree` this ignores the retention setting: retention exists
+ * for inspecting finished work, and starting a fresh run on the same comment is the
+ * user deciding they are done inspecting. Still never `--force` — a dirty worktree
+ * refuses here exactly as everywhere else.
+ */
+export async function reclaimWorktreeForRerun(run: RunRecord): Promise<void> {
+  if (!isTerminalRunState(run.state)) return;
+  await removeWorktree(run.repoPath, run.worktreePath, run.branchName);
+}
+
 export async function teardownRunWorktree(run: RunRecord): Promise<TeardownResult> {
   // A local agent is bound to its cwd, so removing a non-terminal run's worktree
   // breaks Agent.resume: a paused decision could never be answered and a reviewable

@@ -1,5 +1,6 @@
 import { COMMENT_KIND, type CommentReply, type PrComment } from '@shared/comments';
 import { assertNever } from '@renderer/lib/assertNever';
+import { useRunForComment } from '@renderer/stores/runStore';
 import { formatDateTime } from '@renderer/lib/format';
 import { isDefined } from '@renderer/lib/guards';
 import type { CommentReplyItem } from '@renderer/modules/review/CommentDetail/components/CommentReplies';
@@ -30,6 +31,10 @@ export type CommentDetailKindView =
     };
 
 export interface CommentDetailView {
+  /** Carried whole so the header can host the interactive tier badge. */
+  comment: PrComment;
+  /** Tier answers "what will this cost to run", which a started run has answered. */
+  isTierShown: boolean;
   authorLogin: string;
   isBotAuthor: boolean;
   createdAtLabel: string;
@@ -111,6 +116,7 @@ function toKindView(comment: PrComment): CommentDetailKindView {
 }
 
 export function useCommentDetail(comment: PrComment | null): UseCommentDetailResult {
+  const run = useRunForComment(comment?.id ?? null);
   if (comment === null) return { detail: null, emptyStateLabel: EMPTY_STATE_LABEL };
 
   const hasBody = comment.body.trim().length > EMPTY_BODY_LENGTH;
@@ -118,6 +124,8 @@ export function useCommentDetail(comment: PrComment | null): UseCommentDetailRes
 
   return {
     detail: {
+      comment,
+      isTierShown: run === null,
       authorLogin: comment.author.login,
       isBotAuthor: comment.author.isBot,
       createdAtLabel: `${CREATED_LABEL_PREFIX}${formatDateTime(comment.createdAt)}`,

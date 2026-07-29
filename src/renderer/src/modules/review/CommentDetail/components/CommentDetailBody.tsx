@@ -4,6 +4,7 @@ import { BotIcon } from '@renderer/components/icons/BotIcon';
 import { ExternalLinkIcon } from '@renderer/components/icons/ExternalLinkIcon';
 import { FOCUS_RING, INTERACTIVE_TRANSITION } from '@renderer/components/interactiveClassNames';
 import { joinClassNames } from '@renderer/lib/classNames';
+import { CommentTierBadge } from '@renderer/modules/comments/CommentTree/components/CommentTierBadge/CommentTierBadge';
 import { CommentKindDetail } from '@renderer/modules/review/CommentDetail/components/CommentKindDetail';
 import { CommentReplies } from '@renderer/modules/review/CommentDetail/components/CommentReplies';
 import type { CommentDetailView } from '@renderer/modules/review/CommentDetail/useCommentDetail';
@@ -25,6 +26,10 @@ const META_SEPARATOR = '·';
  * patch below is answering the question and the question is what has to stay in view.
  */
 export function CommentDetailBody({ detail }: Props) {
+  // The tier lives with the comment it prices, not on every tree row: one glance
+  // here answers it, and the tree keeps its width for the comment text.
+  const tierBadge = detail.isTierShown ? <CommentTierBadge comment={detail.comment} /> : null;
+
   const botBadge = detail.isBotAuthor ? (
     <Badge isMuted icon={<BotIcon size={BOT_ICON_SIZE} />} title="Authored by a bot">
       Bot
@@ -54,6 +59,7 @@ export function CommentDetailBody({ detail }: Props) {
         {botBadge}
         <span className="text-muted/60 text-xs">{META_SEPARATOR}</span>
         <span className="text-muted/80 truncate text-xs tabular-nums">{detail.createdAtLabel}</span>
+        {tierBadge}
         {/* A plain anchor: main routes every new-window request to the system browser. */}
         <a
           href={detail.url}

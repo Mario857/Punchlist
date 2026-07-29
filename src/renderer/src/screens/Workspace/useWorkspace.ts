@@ -208,7 +208,9 @@ export function useWorkspace(): UseWorkspaceResult {
 
   const isSelectedRunDismissable =
     selectedRun !== null &&
-    (selectedRun.state === RUN_STATE.NO_ACTION_NEEDED || selectedRun.state === RUN_STATE.FAILED);
+    (selectedRun.state === RUN_STATE.NO_ACTION_NEEDED ||
+      selectedRun.state === RUN_STATE.FAILED ||
+      selectedRun.state === RUN_STATE.REJECTED);
 
   // The same hook the review pane uses, so the shortcut and the button can never
   // disagree about whether an action is on offer — both read one source. A null

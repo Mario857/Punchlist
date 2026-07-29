@@ -7,7 +7,6 @@ import { FlagIcon } from '@renderer/components/icons/FlagIcon';
 import { selectRunForComment, useRunStore, type RunsById } from '@renderer/stores/runStore';
 import { COMMENT_TREE_NODE_KIND, type CommentTreeRow } from '../commentTreeModel';
 import { CommentAttributeBadges } from './CommentAttributeBadges';
-import { CommentTierBadge } from './CommentTierBadge/CommentTierBadge';
 import { RowGlyph } from './RowGlyph';
 
 export interface CommentRowBadgesProps {
@@ -66,14 +65,6 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
     return <StateBadge state={row.runState} />;
   })();
 
-  const tierBadge = (() => {
-    if (row.node.kind !== COMMENT_TREE_NODE_KIND.COMMENT) return null;
-    // Tier answers "what will this cost to run", which stops being the question the
-    // moment a run exists: from then on StateBadge supersedes it.
-    if (row.runState !== null) return null;
-    return <CommentTierBadge comment={row.node.comment} />;
-  })();
-
   const attributeBadges = (() => {
     switch (row.node.kind) {
       case COMMENT_TREE_NODE_KIND.COMMENT:
@@ -98,7 +89,6 @@ export function CommentRowBadges({ row }: CommentRowBadgesProps) {
       {guardrailGlyph}
       {staleGlyph}
       {stateBadge}
-      {tierBadge}
       {attributeBadges}
     </span>
   );

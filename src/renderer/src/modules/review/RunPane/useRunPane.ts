@@ -125,6 +125,10 @@ const RUNNING_HEADLINE = 'The agent is working in its own worktree.';
 const MALFORMED_DECISION_HEADLINE =
   'The agent halted to ask something, but its decision file could not be read. The transcript is the only record of what it wanted.';
 
+const REJECTED_HEADING = 'Rejected, and the sandbox is cleaned up';
+const REJECTED_EXPLANATION =
+  'The worktree and every change in it were removed when you rejected this resolution. The transcript stays on the record. Start the comment again for a fresh attempt.';
+
 const NO_ACTION_HEADING = 'Ran, produced nothing, and that was correct';
 const NO_ACTION_EXPLANATION =
   'The agent read the comment, looked at the code, and concluded there was nothing to change. No worktree edits, no patch, nothing to review.';
@@ -313,26 +317,13 @@ function toView(run: RunRecord): RunPaneView {
         isRevisionHistoryAvailable: true,
         isReviewDecisionAvailable: true,
       };
-    // Rejected keeps its diff readable: the record of what was turned down is the
-    // point, and the run can still be reopened for review. The trail is what reopens
-    // it — a revert re-reads the patch and settles the run back in `ready` — so it
-    // stays on offer here even though a landed run's does not.
+    // Rejecting discarded the sandbox, so there is no patch left to render: the card
+    // says what happened and how to try again, and the record keeps the transcript.
     case RUN_STATE.REJECTED:
       return {
-        kind: RUN_PANE_VIEW_KIND.DIFF,
-        runId: run.id,
-        hasGuardrailFlags,
-        auxSections: NO_AUX_SECTIONS,
-        isSecondOpinionPinned: false,
-        // Kept where one exists, dropped where none does: a turned-down run is not
-        // worth a fresh agent, but the reading that informed the rejection is history
-        // worth keeping on screen.
-        isSecondOpinionAvailable: hasSecondOpinion,
-        revisionProgressLabel: null,
-        isPatchEditable: false,
-        isFollowUpAvailable: false,
-        isRevisionHistoryAvailable: true,
-        isReviewDecisionAvailable: true,
+        kind: RUN_PANE_VIEW_KIND.NO_ACTION_NEEDED,
+        heading: REJECTED_HEADING,
+        explanation: REJECTED_EXPLANATION,
       };
     case RUN_STATE.APPLIED:
       return {

@@ -53,7 +53,7 @@ const APPROVED_STATUS =
 
 const REJECTED_HEADING = 'Rejected';
 const REJECTED_STATUS =
-  'This resolution was turned down. Its record and its worktree are both kept — dismissing the run is the separate action that tears them down.';
+  'This resolution was turned down and its sandbox cleaned up. Start the comment again for a fresh attempt.';
 
 const IN_FLIGHT_HEADING = 'Nothing to decide yet';
 const IN_FLIGHT_STATUS = 'The agent still holds this run, so there is no candidate to decide on.';
@@ -73,7 +73,7 @@ const APPLIED_STATUS =
 const APPROVAL_EXPLANATION =
   'Approving marks a resolution ready to land and does nothing else. Landing is a separate step with its own preview and its own confirmation.';
 const REJECTION_EXPLANATION =
-  'Rejecting turns the resolution down without discarding it: the record and the worktree survive, so the decision is reversible.';
+  'Rejecting discards the sandbox — the worktree and every change in it are removed — so the comment can be run again fresh. The transcript stays on the record.';
 const APPLIED_EXPLANATION =
   'Landing already happened, so there is no decision left to take here. Undoing it is an operation on the landing record, not on this run.';
 
@@ -83,8 +83,6 @@ const REJECT_APPROVED_LABEL = 'Reject this resolution after all';
 
 const APPROVED_REOPEN_HINT =
   'Approval is revocable right up to the landing gate: hand-editing the patch or rewinding a revision below puts this run back into review.';
-const REJECTED_REOPEN_HINT =
-  'Changed your mind? Rewinding a revision below reopens this run for review rather than leaving the rejection final.';
 
 const APPROVE_ERROR_FALLBACK = 'Could not approve this resolution.';
 const REJECT_ERROR_FALLBACK = 'Could not reject this resolution.';
@@ -145,7 +143,7 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
         explanation: REJECTION_EXPLANATION,
         approveLabel: null,
         rejectLabel: null,
-        reopenHint: REJECTED_REOPEN_HINT,
+        reopenHint: null,
       };
     case RUN_STATE.QUEUED:
     case RUN_STATE.RUNNING:

@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent';
 import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
 import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
+
+/** Sweeps stray hand-edits into history so the teardown never needs `--force`. */
+const REJECT_SWEEP_COMMIT_SUBJECT = 'Rejected: sweep of uncommitted edits';
 import {
   clearAgentDecision,
   readAgentSummary,
@@ -36,12 +39,13 @@ import {
   listRunRevisions,
   readCandidatePatch,
   readSandboxUsage,
+  reclaimWorktreeForRerun,
   resetWorktreeToRevision,
   teardownRunWorktree,
   writeWorktreeFile,
 } from '@main/worktree';
 import type { PrComment } from '@shared/comments';
-import type { PrRef } from '@shared/discovery';
+import { prRefKey, type PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
 import { opinionFileSchema, type OpinionFile } from '@shared/opinion';
@@ -312,6 +316,17 @@ export interface StartRunInput {
  * moving on its own — ready, needsDecision, noActionNeeded or failed.
  */
 export async function startRun(input: StartRunInput): Promise<RunRecord> {
+  // The branch name is derived from the comment, so a previous run's leftovers —
+  // rejected with a teardown that failed, or retained by the inspection setting —
+  // would make `worktree add` refuse. Terminal leftovers are reclaimed; a non-terminal
+  // run keeps its worktree and the collision surfaces as the start failure it is.
+  for (const previous of getRuns()) {
+    if (previous.commentId !== input.comment.id) continue;
+    if (prRefKey(previous.prRef) !== prRefKey(input.ref)) continue;
+    if (!isTerminalRunState(previous.state)) continue;
+    await reclaimWorktreeForRerun(previous);
+  }
+
   const worktree = await createRunWorktree({
     repoPath: input.repoPath,
     prRef: input.ref,
@@ -831,18 +846,31 @@ export function approveRuns(runIds: readonly string[]): RunRecord[] {
 }
 
 /**
- * Turning a resolution down is a review decision, not a destructive one, so nothing is
- * torn down here: the worktree survives until the run is dismissed, and the transition
- * table keeps the way back to `ready` open for a reviewer who changes their mind.
+ * Rejecting discards the sandbox. The record survives — transcript, summary and the
+ * rejection itself are history worth keeping — but the worktree and its changes go,
+ * which is what lets the same comment be started again fresh. Stray hand-edits are
+ * swept into a commit first so the removal never needs `--force`; the branch the
+ * commit lands on is deleted in the same teardown, so nothing of it survives.
  *
- * Guardrail flags do not block a rejection. They exist to stop unread work being
- * approved, and rejecting is the outcome they were raised to protect.
- *
- * Bulk rejection refuses as a batch for the same reason bulk approval does — every id
- * is resolved before the first transition is committed.
+ * Teardown failures degrade to a warning rather than failing the rejection: the
+ * decision stands either way, and `startRun` reclaims leftovers before reusing the
+ * comment's branch name.
  */
-export function rejectRuns(runIds: readonly string[]): RunRecord[] {
-  return runIds.map(requireRun).map((run) => advance(run, RUN_STATE.REJECTED));
+export async function rejectRuns(runIds: readonly string[]): Promise<RunRecord[]> {
+  const rejected: RunRecord[] = [];
+  for (const runId of runIds) {
+    const run = requireRun(runId);
+    const settled = advance(run, RUN_STATE.REJECTED);
+    try {
+      await commitWorktree(run.worktreePath, REJECT_SWEEP_COMMIT_SUBJECT);
+      await teardownRunWorktree(settled);
+    } catch (error: unknown) {
+      const kind = error instanceof AppError ? error.kind : APP_ERROR_KIND.UNKNOWN;
+      console.warn(`${RUN_LOG_SCOPE} could not reclaim a rejected worktree`, kind);
+    }
+    rejected.push(settled);
+  }
+  return rejected;
 }
 
 export function listRunsForPr(ref: PrRef): RunRecord[] {
