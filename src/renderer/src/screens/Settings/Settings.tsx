@@ -1,5 +1,6 @@
 import { SettingsIcon } from '@renderer/components/icons/SettingsIcon';
 import { AutomationSettings } from '@renderer/modules/settings/AutomationSettings/AutomationSettings';
+import { AgentRules } from '@renderer/modules/settings/AgentRules/AgentRules';
 import { GeneralSettings } from '@renderer/modules/settings/GeneralSettings/GeneralSettings';
 import { CursorKeyCard } from '@renderer/modules/settings/CursorKeyCard/CursorKeyCard';
 import { GhAuthStatusCard } from '@renderer/modules/settings/GhAuthStatusCard/GhAuthStatusCard';
@@ -27,6 +28,7 @@ export function Settings() {
         <CursorKeyCard />
         <RepoRegistry />
         <GeneralSettings />
+        <AgentRules />
         <TierModelMapping />
         <AutomationSettings />
       </div>

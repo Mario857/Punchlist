@@ -51,7 +51,7 @@ import { fetchPrComments } from '@main/github';
 import { inspectCandidatePatch } from '@main/guardrails';
 import { resolveTierModel } from '@main/router';
 import { resolveGitIdentity } from '@main/sandbox';
-import { deleteRun, getRunById, getRuns } from '@main/store';
+import { deleteRun, getRunById, getRuns, getSettings } from '@main/store';
 import {
   commitWorktree,
   createRunWorktree,
@@ -256,7 +256,7 @@ async function executeRun(
     const outcome = await executeAgentRun({
       runId: startedRun.id,
       worktreePath: startedRun.worktreePath,
-      message: buildResolutionPrompt(comment),
+      message: buildResolutionPrompt(comment, getSettings().agentRules),
       model,
       onTranscriptChunk: (chunk) => emitTranscriptChunk(startedRun.id, chunk),
       signal: controller.signal,
@@ -771,7 +771,7 @@ async function reviewRunPatch(runId: string): Promise<RunRecord> {
       const outcome = await executeAgentRun({
         runId,
         worktreePath: run.worktreePath,
-        message: buildSecondOpinionPrompt(comment, before),
+        message: buildSecondOpinionPrompt(comment, before, getSettings().agentRules),
         model,
         // Dropped rather than streamed. The run's transcript is the record of the agent
         // that wrote the patch, and appending a different agent's words to it would make

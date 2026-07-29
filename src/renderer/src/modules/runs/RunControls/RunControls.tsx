@@ -15,8 +15,6 @@ import { useRunControls } from '@renderer/modules/runs/RunControls/useRunControl
 export interface RunControlsProps {
   /** Null before a PR is chosen: a run needs a local clone to build its worktree from. */
   prRef: PrRef | null;
-  /** The button hides while the landing view is already the one on screen. */
-  isLandingOpen: boolean;
   onOpenLanding: () => void;
 }
 
@@ -54,7 +52,7 @@ const ACTIVE_RUN_LABEL_CLASS = 'text-ink min-w-0 flex-1 truncate text-xs';
 const BLOCK_HEADING_CLASS = 'text-ink text-xs font-medium';
 const BLOCK_COLUMN_CLASS = 'flex flex-col gap-1.5';
 
-export function RunControls({ prRef, isLandingOpen, onOpenLanding }: RunControlsProps) {
+export function RunControls({ prRef, onOpenLanding }: RunControlsProps) {
   const {
     startLabel,
     isStartDisabled,
@@ -166,10 +164,9 @@ export function RunControls({ prRef, isLandingOpen, onOpenLanding }: RunControls
   ) : null;
 
   // Beside the start button in spirit: the row is the workflow — start work on the
-  // left, land the reviewed result on the right. Hidden while the landing view is
-  // open, where the chevron is the way back.
+  // left, land the reviewed result on the right.
   const reviewLandingButton =
-    prRef === null || isLandingOpen ? null : (
+    prRef === null ? null : (
       <Button variant={BUTTON_VARIANT.SECONDARY} size={BUTTON_SIZE.SM} onClick={onOpenLanding}>
         {REVIEW_LANDING_LABEL}
       </Button>

@@ -4,6 +4,12 @@ import { prRefSchema } from './discovery';
 import { automationSettingsSchema } from './automation';
 import { tierModelMapSchema } from './models';
 
+/**
+ * A ceiling rather than a budget: house rules ride in every prompt, so a runaway
+ * paste would tax every run forever. Generous enough for real conventions.
+ */
+export const AGENT_RULES_MAX_LENGTH = 8000;
+
 /** The concurrency cap bounds how many worktrees and agents exist at once. */
 export const DEFAULT_CONCURRENCY_CAP = 4;
 export const MIN_CONCURRENCY_CAP = 1;
@@ -32,6 +38,13 @@ export const appSettingsSchema = z.object({
   tierModelMap: tierModelMapSchema.default(() => tierModelMapSchema.parse({})),
   /** Off by default; see automation.ts for why an empty allowlist triggers nothing. */
   automation: automationSettingsSchema.default(() => automationSettingsSchema.parse({})),
+  /**
+   * House rules handed to every agent, in addition to whatever `CLAUDE.md`,
+   * `AGENTS.md` and `.cursor/rules/` already say in the repository being worked on.
+   * Free prose: these are instructions for a model, and a schema over them would be
+   * a form to fill in rather than the rules someone actually has.
+   */
+  agentRules: z.string().max(AGENT_RULES_MAX_LENGTH).catch('').default(''),
 });
 
 export type AppSettings = z.infer<typeof appSettingsSchema>;

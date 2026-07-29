@@ -33,6 +33,8 @@ interface SessionStore extends SessionState {
   hydrate: (state: SessionState) => void;
   setLastPr: (ref: PrRef | null) => void;
   setSelectedCommentIds: (commentIds: readonly string[]) => void;
+  /** Drops ids from the selection without disturbing the rest of it. */
+  clearCommentSelection: (commentIds: readonly string[]) => void;
   toggleCommentSelection: (commentId: string) => void;
   setExpandedNodeIds: (ref: PrRef, nodeIds: readonly string[]) => void;
   setFilters: (filters: CommentFilters) => void;
@@ -66,6 +68,11 @@ export const useSessionStore = create<SessionStore>((set) => ({
   setLastPr: (ref) => set({ lastPr: ref, selectedCommentIds: [], tierOverrideByCommentId: {} }),
 
   setSelectedCommentIds: (commentIds) => set({ selectedCommentIds: [...commentIds] }),
+
+  clearCommentSelection: (commentIds) =>
+    set((state) => ({
+      selectedCommentIds: state.selectedCommentIds.filter((id) => !commentIds.includes(id)),
+    })),
 
   toggleCommentSelection: (commentId) =>
     set((state) => {

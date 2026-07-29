@@ -179,6 +179,7 @@ export function useWorkspace(): UseWorkspaceResult {
   const paneSizes = useSessionStore((state) => state.paneSizes);
   const setPaneSizes = useSessionStore((state) => state.setPaneSizes);
   const paneVisibility = useSessionStore((state) => state.paneVisibility);
+  const clearCommentSelection = useSessionStore((state) => state.clearCommentSelection);
   const setPaneVisibility = useSessionStore((state) => state.setPaneVisibility);
 
   const {
@@ -300,6 +301,17 @@ export function useWorkspace(): UseWorkspaceResult {
 
   useEffect(() => {
     return useRunStore.subscribe((state, previousState) => {
+      // A landed comment is a closed punch-list item, so it leaves the selection: a
+      // ticked checkbox that survives landing keeps offering to start the work again.
+      const landedCommentIds = Object.values(state.runsById)
+        .filter((run) => run.state === RUN_STATE.APPLIED)
+        .filter(
+          (run) =>
+            selectRunForComment(previousState.runsById, run.commentId)?.state !== RUN_STATE.APPLIED,
+        )
+        .map((run) => run.commentId);
+      if (landedCommentIds.length > 0) clearCommentSelection(landedCommentIds);
+
       const { selectedCommentId: commentId, comments: currentComments } = advanceContextRef.current;
       if (commentId === null) return;
 
@@ -315,7 +327,7 @@ export function useWorkspace(): UseWorkspaceResult {
       const nextCommentId = findNextAwaitingCommentId(currentComments, state.runsById, commentId);
       if (nextCommentId !== null) setSelectedCommentId(nextCommentId);
     });
-  }, []);
+  }, [clearCommentSelection]);
 
   // Stamped once the comments actually arrive, so the new-since-last-viewed marker
   // reflects what you could have seen rather than merely which PR was open.

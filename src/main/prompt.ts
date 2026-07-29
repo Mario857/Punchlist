@@ -133,6 +133,22 @@ const PROTECTED_PATHS_SECTION = `Paths you must not modify:
 
 If resolving the comment genuinely requires changing one of these, stop and use the halt-and-ask protocol rather than editing it.`;
 
+const HOUSE_RULES_HEADING = `House rules. These come from the person who will review your patch, and they hold for this repository in addition to whatever \`CLAUDE.md\`, \`AGENTS.md\` and \`.cursor/rules/\` say. Where a house rule and a repository rule genuinely conflict, follow the repository and say so in your final message.`;
+
+/**
+ * Empty when nothing is configured, so the prompt is byte-identical to what it was
+ * before this feature for anyone who never opens the Rules card.
+ */
+function formatHouseRules(rules: string): string {
+  const trimmed = rules.trim();
+  if (trimmed.length === 0) return '';
+  return `${HOUSE_RULES_HEADING}
+
+${BODY_FENCE}
+${trimmed}
+${BODY_FENCE}`;
+}
+
 const COMMON_PROTOCOL_SECTIONS = [
   HALT_AND_ASK_SECTION,
   SUMMARY_SECTION,
@@ -247,7 +263,7 @@ export function buildTargetedEditPrompt(
  * A pure builder: the anchor's presence, not the run's configuration, is what changes
  * the prompt, so there is nothing here to read from disk or from the SDK.
  */
-export function buildResolutionPrompt(comment: PrComment): string {
+export function buildResolutionPrompt(comment: PrComment, houseRules: string): string {
   // The anchored branch carries a second section because the anchor is context the
   // unanchored branch has to go and find for itself.
   const strategySections = isInlineThread(comment)
@@ -259,6 +275,9 @@ export function buildResolutionPrompt(comment: PrComment): string {
     ...strategySections,
     formatCommentBody(comment),
     formatReplies(comment.replies),
+    // After the comment and before the protocol: the rules qualify how to resolve it,
+    // and the protocol's refusals still outrank anything written here.
+    formatHouseRules(houseRules),
     ...COMMON_PROTOCOL_SECTIONS,
   ];
 
@@ -366,7 +385,11 @@ function formatCandidatePatch(patch: CandidatePatch): string {
  * The second-opinion prompt: the comment, the patch, and no trace of how the patch was
  * arrived at. See `REVIEWER_ROLE_SECTION` for why that omission is load-bearing.
  */
-export function buildSecondOpinionPrompt(comment: PrComment, patch: CandidatePatch): string {
+export function buildSecondOpinionPrompt(
+  comment: PrComment,
+  patch: CandidatePatch,
+  houseRules: string,
+): string {
   // The anchor belongs to the comment, not to the first agent's reasoning, so the reviewer
   // gets it for the same reason the resolving agent did: without it an inline comment is
   // prose about code nobody named, and the reviewer would be judging a target it guessed at.
@@ -379,6 +402,9 @@ export function buildSecondOpinionPrompt(comment: PrComment, patch: CandidatePat
     ...anchorSections,
     formatReplies(comment.replies),
     formatCandidatePatch(patch),
+    // The reviewer judges against the same rules the author was given: a verdict that
+    // ignored them would flag the house style as a defect.
+    formatHouseRules(houseRules),
     REVIEWER_VERDICT_SECTION,
     REVIEWER_CONCERNS_SECTION,
     REVIEWER_READ_ONLY_SECTION,

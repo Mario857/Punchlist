@@ -22,12 +22,14 @@ export function useQuerySettings(): UseQuerySettingsResult {
 interface UseExecuteUpdateSettingsResult {
   updateSettings: (patch: Partial<AppSettings>) => void;
   isUpdateSettingsPending: boolean;
+  /** Surfaced so a card can report a refused write rather than looking saved. */
+  updateSettingsError: unknown;
 }
 
 export function useExecuteUpdateSettings(): UseExecuteUpdateSettingsResult {
   const queryClient = useQueryClient();
 
-  const { mutate, isPending } = useMutation({
+  const { mutate, isPending, error } = useMutation({
     mutationFn: async (patch: Partial<AppSettings>) =>
       unwrapIpcResult(await requireBridge().settings.update(patch)),
     onSuccess: (updated) => {
@@ -35,10 +37,10 @@ export function useExecuteUpdateSettings(): UseExecuteUpdateSettingsResult {
       // refetch and cannot drift from what is on disk.
       queryClient.setQueryData(queryKeys.settings(), updated);
     },
-    onError: (error) => {
-      logError(error, 'useExecuteUpdateSettings');
+    onError: (mutationError) => {
+      logError(mutationError, 'useExecuteUpdateSettings');
     },
   });
 
-  return { updateSettings: mutate, isUpdateSettingsPending: isPending };
+  return { updateSettings: mutate, isUpdateSettingsPending: isPending, updateSettingsError: error };
 }

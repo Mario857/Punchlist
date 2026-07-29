@@ -108,6 +108,13 @@ export function Workspace() {
     );
   })();
 
+  // Absent in the landing view: nothing there is a comment, so starting one, picking a
+  // tier for it or reviewing it in bulk are all controls for a screen that is not up.
+  const runControls =
+    selectedPr === null || isLandingOpen ? null : (
+      <RunControls prRef={selectedPr} onOpenLanding={onOpenLanding} />
+    );
+
   const body = (() => {
     // The gate takes the whole area: deciding to land is not something to do out of
     // the corner of an eye while the tree is still competing for attention.
@@ -183,7 +190,7 @@ export function Workspace() {
         onShowShortcutHelp={onShowShortcutHelp}
         paneToggleItems={paneToggleItems}
       />
-      <RunControls prRef={selectedPr} isLandingOpen={isLandingOpen} onOpenLanding={onOpenLanding} />
+      {runControls}
       {body}
       <StatusBar prRef={selectedPr} comments={comments} />
       <ShortcutHelp isOpen={isShortcutHelpOpen} onClose={onCloseShortcutHelp} />
