@@ -1,27 +1,26 @@
 import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button';
-import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { useReviewDecision } from '@renderer/modules/review/ReviewDecision/useReviewDecision';
 
 export interface ReviewDecisionProps {
   runId: string;
 }
 
-const CARD_COLUMN_CLASS = 'flex flex-col gap-2';
-const HEADING_CLASS = 'text-ink text-xs font-semibold tracking-wide uppercase';
-const STATUS_CLASS = 'text-ink text-xs leading-relaxed';
+const SECTION_LABEL = 'Review decision';
+const ROW_CLASS = 'flex flex-wrap items-center gap-2';
+const STATUS_CLASS = 'text-muted text-xs leading-relaxed';
 const EXPLANATION_CLASS = 'text-muted text-xs leading-relaxed';
 const HINT_CLASS = 'text-muted text-xs leading-relaxed';
 const ERROR_CLASS = 'text-danger text-xs leading-relaxed';
-const ACTION_ROW_CLASS = 'flex flex-wrap items-center gap-2';
 
 /**
- * The review gate for one run. Rejecting is not a danger action: it keeps the record
- * and the worktree and can be reopened, so it is the secondary button rather than the
- * red one — the destructive control in this app is Dismiss.
+ * The review gate for one run, as one slim row rather than a card: the decision
+ * repeats on every run a review walks through, so its chrome is paid dozens of times
+ * per PR and the buttons already say everything the heading said. Rejecting is not a
+ * danger action — the record survives and the comment can be run again — so it is the
+ * secondary button rather than the red one; the destructive control here is Dismiss.
  */
 export function ReviewDecision({ runId }: ReviewDecisionProps) {
   const {
-    heading,
     statusLabel,
     explanation,
     approveLabel,
@@ -59,9 +58,23 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
       </Button>
     );
 
-  // Beside the buttons rather than as a tooltip: a disabled button cannot be focused,
-  // so a hover-only explanation would be unreachable from the keyboard. The flag card
-  // above already announces the outstanding count, so this one is not a live region too.
+  // The status only earns a line when there is no button carrying the same words —
+  // approved and landed states, where what happened is the whole message.
+  const status =
+    approveButton === null && rejectButton === null ? (
+      <p role="status" className={STATUS_CLASS}>
+        {statusLabel}
+      </p>
+    ) : null;
+
+  const statusBesideActions =
+    approveButton !== null || rejectButton !== null ? (
+      <span className={STATUS_CLASS}>{statusLabel}</span>
+    ) : null;
+
+  const explanationLine =
+    explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
+
   const reopen = reopenHint === null ? null : <p className={HINT_CLASS}>{reopenHint}</p>;
 
   const error =
@@ -71,22 +84,17 @@ export function ReviewDecision({ runId }: ReviewDecisionProps) {
       </p>
     );
 
-  const explanationLine =
-    explanation === null ? null : <p className={EXPLANATION_CLASS}>{explanation}</p>;
-
   return (
-    <Card tone={CARD_TONE.RAISED} padding={CARD_PADDING.SM} className={CARD_COLUMN_CLASS}>
-      <h3 className={HEADING_CLASS}>{heading}</h3>
-      <p role="status" className={STATUS_CLASS}>
-        {statusLabel}
-      </p>
-      {explanationLine}
-      <div className={ACTION_ROW_CLASS}>
+    <section aria-label={SECTION_LABEL} className="flex flex-col gap-1.5">
+      <div className={ROW_CLASS}>
         {approveButton}
         {rejectButton}
+        {statusBesideActions}
       </div>
+      {status}
+      {explanationLine}
       {reopen}
       {error}
-    </Card>
+    </section>
   );
 }

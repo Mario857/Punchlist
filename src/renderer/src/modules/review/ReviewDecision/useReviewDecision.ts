@@ -17,7 +17,6 @@ export interface UseReviewDecisionOptions {
 }
 
 interface UseReviewDecisionResult {
-  heading: string;
   /** What this run's review state actually is, in a sentence rather than a colour. */
   statusLabel: string;
   /**
@@ -43,26 +42,19 @@ interface UseReviewDecisionResult {
   onRejectClick: (() => void) | null;
 }
 
-const DECIDE_HEADING = 'Approve or reject this resolution';
-const DECIDE_STATUS =
-  'The patch above is a candidate. Nothing about it has left its sandbox worktree.';
+const DECIDE_STATUS = 'Nothing leaves the sandbox either way.';
 
-const APPROVED_HEADING = 'Approved, and nothing has landed';
 const APPROVED_STATUS =
   'This resolution is marked ready to land. No branch was created, nothing was pushed and no review thread was resolved.';
 
-const REJECTED_HEADING = 'Rejected';
 const REJECTED_STATUS =
   'This resolution was turned down and its sandbox cleaned up. Start the comment again for a fresh attempt.';
 
-const IN_FLIGHT_HEADING = 'Nothing to decide yet';
 const IN_FLIGHT_STATUS = 'The agent still holds this run, so there is no candidate to decide on.';
 
-const NO_PATCH_HEADING = 'Nothing to decide';
 const NO_PATCH_STATUS =
   'This run produced no candidate patch, so there is nothing to approve or reject.';
 
-const APPLIED_HEADING = 'Landed';
 const APPLIED_STATUS =
   'This one went through the outer door after an explicit confirmation. Approving it is history now.';
 
@@ -88,7 +80,6 @@ const APPROVE_ERROR_FALLBACK = 'Could not approve this resolution.';
 const REJECT_ERROR_FALLBACK = 'Could not reject this resolution.';
 
 interface ReviewDecisionCopy {
-  heading: string;
   statusLabel: string;
   explanation: string;
   approveLabel: string | null;
@@ -101,7 +92,6 @@ interface ReviewDecisionCopy {
  * missing record reads as nothing to decide rather than as a crash.
  */
 const NO_RUN_COPY: ReviewDecisionCopy = {
-  heading: NO_PATCH_HEADING,
   statusLabel: NO_PATCH_STATUS,
   explanation: APPROVAL_EXPLANATION,
   approveLabel: null,
@@ -118,7 +108,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
   switch (run.state) {
     case RUN_STATE.READY:
       return {
-        heading: DECIDE_HEADING,
         statusLabel: DECIDE_STATUS,
         explanation: APPROVAL_EXPLANATION,
         approveLabel: APPROVE_LABEL,
@@ -127,7 +116,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
       };
     case RUN_STATE.APPROVED:
       return {
-        heading: APPROVED_HEADING,
         statusLabel: APPROVED_STATUS,
         explanation: APPROVAL_EXPLANATION,
         // Offering the same button again would read as "did that not work?", so the
@@ -138,7 +126,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
       };
     case RUN_STATE.REJECTED:
       return {
-        heading: REJECTED_HEADING,
         statusLabel: REJECTED_STATUS,
         explanation: REJECTION_EXPLANATION,
         approveLabel: null,
@@ -150,7 +137,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
     case RUN_STATE.NEEDS_DECISION:
     case RUN_STATE.REVISING:
       return {
-        heading: IN_FLIGHT_HEADING,
         statusLabel: IN_FLIGHT_STATUS,
         explanation: APPROVAL_EXPLANATION,
         approveLabel: null,
@@ -160,7 +146,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
     case RUN_STATE.NO_ACTION_NEEDED:
     case RUN_STATE.FAILED:
       return {
-        heading: NO_PATCH_HEADING,
         statusLabel: NO_PATCH_STATUS,
         explanation: APPROVAL_EXPLANATION,
         approveLabel: null,
@@ -169,7 +154,6 @@ function toDecisionCopy(run: RunRecord): ReviewDecisionCopy {
       };
     case RUN_STATE.APPLIED:
       return {
-        heading: APPLIED_HEADING,
         statusLabel: APPLIED_STATUS,
         explanation: APPLIED_EXPLANATION,
         approveLabel: null,
@@ -216,7 +200,6 @@ export function useReviewDecision({ runId }: UseReviewDecisionOptions): UseRevie
   })();
 
   return {
-    heading: copy.heading,
     statusLabel: copy.statusLabel,
     explanation: isVerbose ? copy.explanation : null,
     approveLabel: copy.approveLabel,
