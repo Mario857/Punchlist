@@ -2,6 +2,7 @@ import { Button, BUTTON_SIZE, BUTTON_VARIANT } from '@renderer/components/Button
 import { Card, CARD_PADDING, CARD_TONE } from '@renderer/components/Card';
 import { StateBadge } from '@renderer/components/StateBadge';
 import { assertNever } from '@renderer/lib/assertNever';
+import { AgentActivity } from '@renderer/modules/review/AgentActivity/AgentActivity';
 import { AgentTranscript } from '@renderer/modules/review/AgentTranscript/AgentTranscript';
 import { DecisionPrompt } from '@renderer/modules/review/DecisionPrompt/DecisionPrompt';
 import { DiffReview } from '@renderer/modules/review/DiffReview/DiffReview';
@@ -51,13 +52,20 @@ export function RunPane({ commentId }: RunPaneProps) {
     switch (view.kind) {
       case RUN_PANE_VIEW_KIND.NO_RUN:
         return <p className={EMPTY_STATE_CLASS}>{view.emptyStateLabel}</p>;
-      case RUN_PANE_VIEW_KIND.TRANSCRIPT:
+      case RUN_PANE_VIEW_KIND.TRANSCRIPT: {
+        // Streaming shows the lean activity pulse; a halted run with a malformed
+        // decision file still shows the whole transcript, because there the log *is*
+        // the only record of what the agent wanted.
+        if (view.isStreaming) {
+          return <AgentActivity transcript={view.transcript} headline={view.headline} />;
+        }
         return (
           <div className={COLUMN_CLASS}>
             <p className={HEADLINE_CLASS}>{view.headline}</p>
             <AgentTranscript transcript={view.transcript} isStreaming={view.isStreaming} />
           </div>
         );
+      }
       case RUN_PANE_VIEW_KIND.DECISION:
         return <DecisionPrompt key={view.runId} runId={view.runId} decision={view.decision} />;
       case RUN_PANE_VIEW_KIND.DIFF: {
