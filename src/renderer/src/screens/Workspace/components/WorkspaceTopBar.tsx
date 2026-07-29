@@ -66,16 +66,16 @@ export function WorkspaceTopBar({
   // you change it, the way an editor's window title works — no standing back button
   // for a screen there is no reason to leave. The picker keeps a way back out.
   const leadingControl = (() => {
+    // A bare chevron: "back" needs no sentence, and the accessible name still says it.
     if (isPickerOpen && selectedPr !== null) {
       return (
-        <Button
+        <IconButton
+          label={BACK_TO_COMMENTS_LABEL}
+          icon={<ChevronLeftIcon />}
           variant={BUTTON_VARIANT.GHOST}
-          size={BUTTON_SIZE.SM}
-          icon={<ChevronLeftIcon size={CHEVRON_ICON_SIZE} />}
+          size={ICON_BUTTON_SIZE.SM}
           onClick={onTogglePicker}
-        >
-          {BACK_TO_COMMENTS_LABEL}
-        </Button>
+        />
       );
     }
     return (
