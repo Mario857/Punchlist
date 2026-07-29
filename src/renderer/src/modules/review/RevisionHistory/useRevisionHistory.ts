@@ -129,6 +129,17 @@ function toRevertLabel(revision: RunRevision, laterCount: number): string {
  */
 export function useRevisionHistory({ runId }: UseRevisionHistoryOptions): UseRevisionHistoryResult {
   const [pendingRevision, setPendingRevision] = useState<string | null>(null);
+
+  // The pane is deliberately never remounted between runs — a keyed remount made
+  // React delete these subtrees one sibling at a time, and a cleanup that throws
+  // mid-deletion strands the rest in the DOM, which is how the decision row came to
+  // appear once per comment visited. Per-run state resets here instead.
+  const [previousRunId, setPreviousRunId] = useState(runId);
+  if (previousRunId !== runId) {
+    setPreviousRunId(runId);
+    setPendingRevision(null);
+  }
+
   // The clock the relative labels are measured against is state, not a read during
   // render: `Date.now()` in render makes every re-render produce a different label.
   // It is re-read exactly when a revert is triggered, which is when the trail changes.

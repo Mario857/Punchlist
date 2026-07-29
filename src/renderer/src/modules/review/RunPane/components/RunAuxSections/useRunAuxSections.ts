@@ -19,6 +19,7 @@ export interface AuxSectionItem {
 }
 
 export interface UseRunAuxSectionsParams {
+  runId: string;
   availableSections: readonly AuxSection[];
 }
 
@@ -41,9 +42,20 @@ const AUX_SECTION_LABEL: Record<AuxSection, string> = {
  * detour is open is not worth remembering across selections, let alone restarts.
  */
 export function useRunAuxSections({
+  runId,
   availableSections,
 }: UseRunAuxSectionsParams): UseRunAuxSectionsResult {
   const [openSection, setOpenSection] = useState<AuxSection | null>(null);
+
+  // The pane is deliberately never remounted between runs — a keyed remount made
+  // React delete these subtrees one sibling at a time, and a cleanup that throws
+  // mid-deletion strands the rest in the DOM, which is how the decision row came to
+  // appear once per comment visited. Per-run state resets here instead.
+  const [previousRunId, setPreviousRunId] = useState(runId);
+  if (previousRunId !== runId) {
+    setPreviousRunId(runId);
+    setOpenSection(null);
+  }
 
   const onSectionClick = useCallback(
     (section: AuxSection) => setOpenSection((current) => (current === section ? null : section)),

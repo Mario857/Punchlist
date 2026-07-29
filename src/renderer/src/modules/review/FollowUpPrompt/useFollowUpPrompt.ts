@@ -50,6 +50,16 @@ const EMPTY_DRAFT = '';
  */
 export function useFollowUpPrompt({ runId }: UseFollowUpPromptOptions): UseFollowUpPromptResult {
   const [promptDraft, setPromptDraft] = useState(EMPTY_DRAFT);
+
+  // The pane is deliberately never remounted between runs — a keyed remount made
+  // React delete these subtrees one sibling at a time, and a cleanup that throws
+  // mid-deletion strands the rest in the DOM, which is how the decision row came to
+  // appear once per comment visited. Per-run state resets here instead.
+  const [previousRunId, setPreviousRunId] = useState(runId);
+  if (previousRunId !== runId) {
+    setPreviousRunId(runId);
+    setPromptDraft(EMPTY_DRAFT);
+  }
   const { continueRun, isContinueRunPending, continueRunError } = useExecuteContinueRun();
 
   const onPromptChange = useCallback((event: ChangeEvent<HTMLTextAreaElement>) => {

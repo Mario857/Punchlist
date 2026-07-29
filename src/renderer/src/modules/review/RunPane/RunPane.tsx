@@ -67,35 +67,34 @@ export function RunPane({ commentId }: RunPaneProps) {
         );
       }
       case RUN_PANE_VIEW_KIND.DECISION:
-        return <DecisionPrompt key={view.runId} runId={view.runId} decision={view.decision} />;
+        return <DecisionPrompt runId={view.runId} decision={view.decision} />;
       case RUN_PANE_VIEW_KIND.DIFF: {
         // The spine is comment → summary → diff → decision. A dissenting second
         // reading is the one voice that must not need a click to hear; every other
         // surface — flags included — waits behind the aux row.
         const pinnedSecondOpinion = view.isSecondOpinionPinned ? (
-          <SecondOpinion key={view.runId} runId={view.runId} />
+          <SecondOpinion runId={view.runId} />
         ) : null;
 
         const reviewDecision = view.isReviewDecisionAvailable ? (
-          <ReviewDecision key={view.runId} runId={view.runId} />
+          <ReviewDecision runId={view.runId} />
         ) : null;
 
         const auxSections =
           view.auxSections.length === NO_AUX_SECTIONS ? null : (
-            <RunAuxSections
-              key={view.runId}
-              runId={view.runId}
-              availableSections={view.auxSections}
-            />
+            <RunAuxSections runId={view.runId} availableSections={view.auxSections} />
           );
 
         return (
           <div className={COLUMN_CLASS}>
-            <RunSummary key={view.runId} runId={view.runId} />
+            <RunSummary runId={view.runId} />
             {pinnedSecondOpinion}
-            {/* Deliberately unkeyed: remounting Monaco per comment raced dispose
-                against init and sometimes left a for-ever-loading zombie editor in
-                the DOM. One instance lives on and swaps its models instead. */}
+            {/* Nothing in this column is keyed by run. A keyed child unmounts when the
+                selection moves, and React deletes such subtrees sibling by sibling —
+                one cleanup that throws mid-deletion strands the rest in the DOM, which
+                is how the decision row came to appear once per comment visited. With
+                no keys nothing unmounts: props change, the hooks re-read the store,
+                and each hook resets its own per-run state. */}
             <DiffReview
               runId={view.runId}
               revisionProgressLabel={view.revisionProgressLabel}
@@ -131,7 +130,7 @@ export function RunPane({ commentId }: RunPaneProps) {
               {settingsHint}
               {errorMessage}
             </Card>
-            <RunEscalation key={view.runId} runId={view.runId} />
+            <RunEscalation runId={view.runId} />
             <AgentTranscript
               transcript={view.transcript}
               isStreaming={false}

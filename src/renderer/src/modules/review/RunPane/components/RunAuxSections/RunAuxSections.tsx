@@ -25,7 +25,7 @@ const ROW_CLASS = 'flex flex-wrap items-center gap-1';
  * detours at once is a scroll problem wearing a different hat.
  */
 export function RunAuxSections({ runId, availableSections }: RunAuxSectionsProps) {
-  const { items, openSection } = useRunAuxSections({ availableSections });
+  const { items, openSection } = useRunAuxSections({ runId, availableSections });
 
   const buttons = items.map((item) => (
     <Button
@@ -43,15 +43,15 @@ export function RunAuxSections({ runId, availableSections }: RunAuxSectionsProps
     if (openSection === null) return null;
     switch (openSection) {
       case AUX_SECTION.FOLLOW_UP:
-        return <FollowUpPrompt key={runId} runId={runId} />;
+        return <FollowUpPrompt runId={runId} />;
       case AUX_SECTION.SECOND_OPINION:
-        return <SecondOpinion key={runId} runId={runId} />;
+        return <SecondOpinion runId={runId} />;
       case AUX_SECTION.REVISION_HISTORY:
-        return <RevisionHistory key={runId} runId={runId} />;
+        return <RevisionHistory runId={runId} />;
       case AUX_SECTION.FLAGS:
-        return <GuardrailFlags key={runId} runId={runId} />;
+        return <GuardrailFlags runId={runId} />;
       case AUX_SECTION.AUTO_DECISIONS:
-        return <AutoDecisions key={runId} runId={runId} />;
+        return <AutoDecisions runId={runId} />;
       default:
         return assertNever(openSection);
     }
