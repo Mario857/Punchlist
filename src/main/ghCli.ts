@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { access, constants } from 'node:fs/promises';
 import { promisify } from 'node:util';
+import { recordSubprocessCall } from '@main/telemetry';
 import { z } from 'zod';
 // GhAuthStatus crosses IPC to the settings screen, so it lives in src/shared/
 // rather than here — one authoritative definition for both processes.
@@ -247,11 +248,16 @@ export async function resolveGhBinary(): Promise<string> {
 
 export async function runGh(args: readonly string[]): Promise<string> {
   const binary = await resolveGhBinary();
+  const startedAtMs = Date.now();
   try {
     const { stdout } = await execFileAsync(binary, args, ghExecOptions());
     return stdout;
   } catch (error: unknown) {
     throw toGhAppError(error, args);
+  } finally {
+    // Counted whether it succeeded or failed — a failing call still spent the time
+    // and the rate limit, which is exactly what the Debug screen exists to show.
+    recordSubprocessCall(describeGhCommand(args), Date.now() - startedAtMs);
   }
 }
 

@@ -7,6 +7,7 @@ export const SCREEN = {
   CONVENTIONS: 'conventions',
   AUDIT: 'audit',
   SETTINGS: 'settings',
+  DEBUG: 'debug',
 } as const;
 
 export type Screen = (typeof SCREEN)[keyof typeof SCREEN];
@@ -18,6 +19,7 @@ interface UseAppResult {
   onOpenConventions: () => void;
   onOpenAudit: () => void;
   onOpenSettings: () => void;
+  onOpenDebug: () => void;
 }
 
 /**
@@ -39,5 +41,6 @@ export function useApp(): UseAppResult {
     onOpenConventions: () => setScreen(SCREEN.CONVENTIONS),
     onOpenAudit: () => setScreen(SCREEN.AUDIT),
     onOpenSettings: () => setScreen(SCREEN.SETTINGS),
+    onOpenDebug: () => setScreen(SCREEN.DEBUG),
   };
 }

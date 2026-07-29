@@ -1,3 +1,4 @@
+import type { DebugTelemetry } from './debug';
 import type { PrComment } from './comments';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from './discovery';
 import type { AppErrorPayload, IpcResult } from './errors';
@@ -80,6 +81,7 @@ export const IPC_CHANNEL = {
   LANDING_ASSEMBLE: 'landing:assemble',
   LANDING_EXECUTE: 'landing:execute',
   LANDING_BRANCHES: 'landing:branches',
+  DEBUG_TELEMETRY: 'debug:telemetry',
   LANDING_PUSH_BRANCH: 'landing:pushBranch',
   LANDING_RESOLVE_THREADS: 'landing:resolveThreads',
   RUNS_RERUN_CONFLICTED: 'runs:rerunConflicted',
@@ -270,6 +272,11 @@ export interface LandingApi {
   ): Promise<IpcResult<ResolveLandedThreadsResult>>;
 }
 
+export interface DebugApi {
+  /** A snapshot of this session's counters; reading it changes nothing. */
+  telemetry(): Promise<IpcResult<DebugTelemetry>>;
+}
+
 export interface ConventionsApi {
   list(): Promise<IpcResult<ConventionRule[]>>;
   /**
@@ -325,6 +332,7 @@ export interface PunchlistApi {
   autoMode: AutoModeApi;
   models: ModelsApi;
   sandbox: SandboxApi;
+  debug: DebugApi;
 }
 
 export type { AppErrorPayload, IpcResult };

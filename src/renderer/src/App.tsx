@@ -3,6 +3,7 @@ import { ErrorBoundary } from '@renderer/components/ErrorBoundary/ErrorBoundary'
 import { Spinner, SPINNER_SIZE } from '@renderer/components/Spinner';
 import { assertNever } from '@renderer/lib/assertNever';
 import { Audit } from '@renderer/screens/Audit/Audit';
+import { Debug } from '@renderer/screens/Debug/Debug';
 import { Conventions } from '@renderer/screens/Conventions/Conventions';
 import { Settings } from '@renderer/screens/Settings/Settings';
 import { Workspace } from '@renderer/screens/Workspace/Workspace';
@@ -28,6 +29,7 @@ export default function App() {
     onOpenConventions,
     onOpenAudit,
     onOpenSettings,
+    onOpenDebug,
   } = useApp();
 
   const content = (() => {
@@ -49,6 +51,8 @@ export default function App() {
         return <Audit />;
       case SCREEN.SETTINGS:
         return <Settings />;
+      case SCREEN.DEBUG:
+        return <Debug />;
       default:
         return assertNever(screen);
     }
@@ -66,6 +70,7 @@ export default function App() {
             onOpenConventions={onOpenConventions}
             onOpenAudit={onOpenAudit}
             onOpenSettings={onOpenSettings}
+            onOpenDebug={onOpenDebug}
           />
           {content}
         </div>

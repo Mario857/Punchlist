@@ -14,6 +14,7 @@ import type {
 } from '@cursor/sdk';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import { isPoolSpending, type ResolvedModel } from '@shared/models';
+import type { RunTokenUsage } from '@shared/runs';
 import { FAILURE_REASON, type FailureReason } from '@shared/runState';
 import { toModelSelection } from './router';
 import { getCursorApiKey, getRunById, upsertRun } from './store';
@@ -55,6 +56,7 @@ const SDK_MESSAGE_TYPE = {
   THINKING: 'thinking',
   TOOL_CALL: 'tool_call',
   TASK: 'task',
+  USAGE: 'usage',
 } as const;
 
 const SDK_BLOCK_TYPE = {
@@ -86,6 +88,8 @@ export type AgentOutcomeKind = (typeof AGENT_OUTCOME_KIND)[keyof typeof AGENT_OU
 interface AgentOutcomeBase {
   /** null only when the agent was never created, which is the `startFailed` case. */
   agentId: string | null;
+  /** Null when the turn never ran far enough for the SDK to report usage. */
+  tokenUsage: RunTokenUsage | null;
   model: string | null;
   isPoolSpending: boolean;
   /**
@@ -159,6 +163,8 @@ interface DrivenRun {
   resultText: string | null;
   errorMessage: string | null;
   isTimedOut: boolean;
+  /** The turn's token bill. The SDK reports cumulative turn usage, so last wins. */
+  tokenUsage: RunTokenUsage | null;
 }
 
 /**
@@ -392,9 +398,20 @@ async function driveRun(
   try {
     // A run shape without streaming still produces a result, so the transcript is
     // optional where the result is not.
+    let tokenUsage: RunTokenUsage | null = null;
     if (run.supports(RUN_OPERATION.STREAM)) {
       const formatter = createTranscriptFormatter();
       for await (const message of run.stream()) {
+        // Usage is telemetry, not transcript: captured here, never rendered as text.
+        if (message.type === SDK_MESSAGE_TYPE.USAGE) {
+          tokenUsage = {
+            inputTokens: message.usage.inputTokens,
+            outputTokens: message.usage.outputTokens,
+            cacheReadTokens: message.usage.cacheReadTokens,
+            cacheWriteTokens: message.usage.cacheWriteTokens,
+            totalTokens: message.usage.totalTokens,
+          };
+        }
         const chunk = formatter.format(message);
         if (chunk !== null) appendTranscript(chunk);
       }
@@ -408,6 +425,7 @@ async function driveRun(
       resultText: result.result ?? null,
       errorMessage: result.error === undefined ? null : redactApiKey(result.error.message, apiKey),
       isTimedOut,
+      tokenUsage,
     };
   } finally {
     clearTimeout(timeoutTimer);
@@ -428,6 +446,7 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     return {
       kind: AGENT_OUTCOME_KIND.FAILED,
       agentId: null,
+      tokenUsage: null,
       model: turn.model.modelId,
       isPoolSpending: isPoolSpending(turn.model.lane),
       transcript,
@@ -448,6 +467,7 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     return {
       kind: AGENT_OUTCOME_KIND.FAILED,
       agentId: null,
+      tokenUsage: null,
       model: turn.model.modelId,
       isPoolSpending: isPoolSpending(turn.model.lane),
       transcript,
@@ -485,6 +505,7 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
       return {
         kind: AGENT_OUTCOME_KIND.FAILED,
         ...identity,
+        tokenUsage: driven.tokenUsage,
         transcript,
         durationMs: elapsedMs(startedAtMs),
         ...failure,
@@ -494,6 +515,7 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     return {
       kind: AGENT_OUTCOME_KIND.COMPLETED,
       ...identity,
+      tokenUsage: driven.tokenUsage,
       transcript,
       durationMs: elapsedMs(startedAtMs),
       resultText: driven.resultText,
@@ -505,6 +527,7 @@ async function runAgentTurn(turn: AgentTurnBase, start: AgentStart): Promise<Age
     return {
       kind: AGENT_OUTCOME_KIND.FAILED,
       ...identity,
+      tokenUsage: null,
       transcript,
       durationMs: elapsedMs(startedAtMs),
       reason: FAILURE_REASON.AGENT_ERROR,

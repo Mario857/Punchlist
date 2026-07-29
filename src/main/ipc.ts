@@ -25,6 +25,7 @@ import {
   resolveLandedThreads,
 } from './landing';
 import { confirmSandboxExit, SANDBOX_EXIT_ACTION } from './sandbox';
+import { snapshotTelemetry } from './telemetry';
 import { isAutoModeEnabled, setAutoModeEnabled } from './autoMode';
 import { enqueueRuns, escalateRun, rerunConflictedRun, stopAllRuns } from './queue';
 import {
@@ -355,6 +356,7 @@ export function registerIpcHandlers(): void {
   );
 
   registerHandler(IPC_CHANNEL.LANDING_BRANCHES, prRefSchema, (ref) => listLocalBranches(ref));
+  registerHandler(IPC_CHANNEL.DEBUG_TELEMETRY, noPayloadSchema, () => snapshotTelemetry());
   registerHandler(IPC_CHANNEL.LANDING_PUSH_BRANCH, pushBranchPayloadSchema, (request) =>
     pushTargetBranch(
       { prRef: request.prRef, targetBranch: request.targetBranch },

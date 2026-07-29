@@ -4,7 +4,13 @@ import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND, AppError } from '@shared/errors';
 import type { GuardrailFlag } from '@shared/guardrails';
 import type { SecondOpinion } from '@shared/opinion';
-import type { AgentDecision, AgentSummary, AutoDecision, RunRecord } from '@shared/runs';
+import type {
+  AgentDecision,
+  AgentSummary,
+  AutoDecision,
+  RunRecord,
+  RunTokenUsage,
+} from '@shared/runs';
 import {
   isRunActive,
   isTerminalRunState,
@@ -102,6 +108,8 @@ export interface RunTransitionPatch {
   agentId?: string | null;
   decision?: AgentDecision | null;
   summary?: AgentSummary | null;
+  /** Summed across turns by the caller; the machine only stores what it is handed. */
+  tokenUsage?: RunTokenUsage | null;
   errorMessage?: string | null;
   /**
    * A transcript can quote repository contents, so it is persisted and rendered but
@@ -142,6 +150,7 @@ function applyPatch(run: RunRecord, patch: RunTransitionPatch): RunRecord {
     agentId: resolveField(patch.agentId, run.agentId),
     decision: resolveField(patch.decision, run.decision),
     summary: resolveField(patch.summary, run.summary),
+    tokenUsage: resolveField(patch.tokenUsage, run.tokenUsage),
     errorMessage: resolveField(patch.errorMessage, run.errorMessage),
     transcript: resolveField(patch.transcript, run.transcript),
     isStale: resolveField(patch.isStale, run.isStale),
@@ -268,6 +277,7 @@ export function createRunRecord(input: CreateRunRecordInput): RunRecord {
     errorMessage: null,
     decision: null,
     summary: null,
+    tokenUsage: null,
     transcript: '',
     createdAt: now,
     updatedAt: now,

@@ -9,6 +9,7 @@ interface Props {
   onOpenConventions: () => void;
   onOpenAudit: () => void;
   onOpenSettings: () => void;
+  onOpenDebug: () => void;
 }
 
 export function AppNav({
@@ -17,6 +18,7 @@ export function AppNav({
   onOpenConventions,
   onOpenAudit,
   onOpenSettings,
+  onOpenDebug,
 }: Props) {
   const toVariant = (target: Screen) =>
     screen === target ? BUTTON_VARIANT.SECONDARY : BUTTON_VARIANT.GHOST;
@@ -43,6 +45,9 @@ export function AppNav({
       </Button>
       <Button variant={toVariant(SCREEN.AUDIT)} size={BUTTON_SIZE.SM} onClick={onOpenAudit}>
         Audit
+      </Button>
+      <Button variant={toVariant(SCREEN.DEBUG)} size={BUTTON_SIZE.SM} onClick={onOpenDebug}>
+        Debug
       </Button>
       <Button
         variant={toVariant(SCREEN.SETTINGS)}

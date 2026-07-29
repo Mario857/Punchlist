@@ -1,4 +1,5 @@
 import { fetchPrComments, fetchPrStatus } from '@main/github';
+import { recordBackgroundEvent } from '@main/telemetry';
 import { patchRun } from '@main/runState';
 import { getRuns, getSession, getSettings, getWatcherState, updateWatcherState } from '@main/store';
 import type { PrComment } from '@shared/comments';
@@ -6,6 +7,7 @@ import { prRefKey, type PrRef } from '@shared/discovery';
 import { toErrorPayload, type AppErrorPayload } from '@shared/errors';
 import { isTerminalRunState } from '@shared/runState';
 
+const WATCHER_POLL_EVENT = 'Watcher status poll';
 const WATCHER_LOG_SCOPE = '[watcher]';
 
 const NO_NEW_COMMENTS = 0;
@@ -140,6 +142,7 @@ async function detectNewComments(
 }
 
 async function pollPr(ref: PrRef, observer: WatcherObserver): Promise<void> {
+  recordBackgroundEvent(WATCHER_POLL_EVENT);
   const key = prRefKey(ref);
   const status = await fetchPrStatus(ref);
 

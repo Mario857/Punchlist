@@ -28,6 +28,21 @@ export const agentDecisionSchema = z.object({
   context: z.string().nullable().default(null),
 });
 
+/**
+ * What a run's agent turns cost, summed across the first turn, revisions, replies and
+ * escalations. Reported by the SDK's usage stream; null for runs from builds that did
+ * not capture it.
+ */
+export const tokenUsageSchema = z.object({
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  cacheWriteTokens: z.number(),
+  totalTokens: z.number(),
+});
+
+export type RunTokenUsage = z.infer<typeof tokenUsageSchema>;
+
 /** `.punchlist/summary.json`: the agent's draft commit message. */
 export const agentSummarySchema = z.object({
   subject: z.string(),
@@ -68,6 +83,7 @@ export const runRecordSchema = z.object({
   errorMessage: z.string().nullable().default(null),
   decision: agentDecisionSchema.nullable().default(null),
   summary: agentSummarySchema.nullable().default(null),
+  tokenUsage: tokenUsageSchema.nullable().default(null),
   /**
    * A transcript can quote repository contents, so it is treated as potentially
    * sensitive: rendered in the UI, never written to a log file.

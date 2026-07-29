@@ -15,7 +15,9 @@ import {
 } from '@shared/models';
 import { MODEL_TIER, type ModelTier } from '@shared/runState';
 import { getCursorApiKey, getSettings } from './store';
+import { recordBackgroundEvent } from './telemetry';
 
+const MODEL_CATALOG_FETCH_EVENT = 'Model catalog fetch (Cursor API)';
 const ROUTER_LOG_SCOPE = '[router]';
 
 const MISSING_API_KEY_MESSAGE =
@@ -158,6 +160,7 @@ function toCatalogEntry(item: SDKModel): ModelCatalogEntry | null {
 }
 
 async function fetchModelCatalog(): Promise<ModelCatalogEntry[]> {
+  recordBackgroundEvent(MODEL_CATALOG_FETCH_EVENT);
   const apiKey = getCursorApiKey();
   if (apiKey === null) {
     throw new AppError(

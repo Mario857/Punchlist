@@ -4,6 +4,25 @@ import { AGENT_OUTCOME_KIND, executeAgentRun, resumeAgentRun } from '@main/agent
 import { canAutoAnswer, toAutoDecision } from '@main/autoMode';
 import { REVISION_COMMIT_SUBJECT } from '@main/commitMessage';
 
+/**
+ * Turns accumulate: the first run, every revision, every reply and the second
+ * opinion each bill their own turn, and the record carries the sum.
+ */
+function sumTokenUsage(
+  previous: RunTokenUsage | null,
+  turn: RunTokenUsage | null,
+): RunTokenUsage | null {
+  if (turn === null) return previous;
+  if (previous === null) return turn;
+  return {
+    inputTokens: previous.inputTokens + turn.inputTokens,
+    outputTokens: previous.outputTokens + turn.outputTokens,
+    cacheReadTokens: previous.cacheReadTokens + turn.cacheReadTokens,
+    cacheWriteTokens: previous.cacheWriteTokens + turn.cacheWriteTokens,
+    totalTokens: previous.totalTokens + turn.totalTokens,
+  };
+}
+
 /** Sweeps stray hand-edits into history so the teardown never needs `--force`. */
 const REJECT_SWEEP_COMMIT_SUBJECT = 'Rejected: sweep of uncommitted edits';
 import {
@@ -68,6 +87,7 @@ import {
   type RevertRunRequest,
   type RunRecord,
   type RunRevision,
+  type RunTokenUsage,
   type SandboxUsage,
   type WriteRunFileRequest,
 } from '@shared/runs';
@@ -243,7 +263,10 @@ async function executeRun(
     });
 
     const afterAgent = requireRun(startedRun.id);
-    const withTranscript = patchRun(afterAgent, { transcript: outcome.transcript });
+    const withTranscript = patchRun(afterAgent, {
+      transcript: outcome.transcript,
+      tokenUsage: sumTokenUsage(afterAgent.tokenUsage, outcome.tokenUsage),
+    });
 
     if (outcome.kind === AGENT_OUTCOME_KIND.FAILED) {
       const failed = recordRunFailure(withTranscript, outcome.reason, outcome.errorMessage);
@@ -496,7 +519,11 @@ export async function continueRun(request: ContinueRunRequest): Promise<RunRecor
         signal: controller.signal,
       });
 
-      const afterAgent = patchRun(requireRun(runId), { transcript: outcome.transcript });
+      const beforePatch = requireRun(runId);
+      const afterAgent = patchRun(beforePatch, {
+        transcript: outcome.transcript,
+        tokenUsage: sumTokenUsage(beforePatch.tokenUsage, outcome.tokenUsage),
+      });
       if (outcome.kind === AGENT_OUTCOME_KIND.FAILED) {
         const failed = recordRunFailure(afterAgent, outcome.reason, outcome.errorMessage);
         emitStateChanged(failed);
@@ -775,8 +802,10 @@ async function reviewRunPatch(runId: string): Promise<RunRecord> {
         return patchRun(requireRun(runId), identityPatch);
       }
 
-      const reviewed = patchRun(requireRun(runId), {
+      const beforeReview = requireRun(runId);
+      const reviewed = patchRun(beforeReview, {
         ...identityPatch,
+        tokenUsage: sumTokenUsage(beforeReview.tokenUsage, outcome.tokenUsage),
         secondOpinion: {
           verdict: opinion.verdict,
           concerns: opinion.concerns,

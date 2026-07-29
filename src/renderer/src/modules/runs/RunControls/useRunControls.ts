@@ -3,7 +3,13 @@ import { isRecommendedForRun, type PrComment } from '@shared/comments';
 import type { PrRef } from '@shared/discovery';
 import { APP_ERROR_KIND } from '@shared/errors';
 import type { RunRecord, StartRunRequest } from '@shared/runs';
-import { RUN_STATE, RUN_TRIGGER, type ModelTier, type RunState } from '@shared/runState';
+import {
+  RUN_STATE,
+  RUN_TRIGGER,
+  isTerminalRunState,
+  type ModelTier,
+  type RunState,
+} from '@shared/runState';
 import { classifyCommentTier } from '@shared/tier';
 import { keyBy } from '@renderer/lib/collections';
 import { formatBytes } from '@renderer/lib/format';
@@ -32,6 +38,7 @@ import { useQueryModelCatalog } from '@renderer/hooks/useQueryModelCatalog';
 import { useQuerySettings } from '@renderer/modules/settings/useQuerySettings';
 import { useActiveRunsForPr, useRunsForPr } from '@renderer/stores/runStore';
 import { useSessionStore } from '@renderer/stores/sessionStore';
+import { useRunStateByCommentId } from '@renderer/stores/runStore';
 
 export interface UseRunControlsOptions {
   prRef: PrRef | null;
@@ -306,6 +313,7 @@ function buildSecondOpinionReviewedMessage(alreadyReviewedCount: number): string
 
 export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControlsResult {
   const selectedCommentIds = useSessionStore((state) => state.selectedCommentIds);
+  const runStateByCommentId = useRunStateByCommentId();
   const setSelectedCommentIds = useSessionStore((state) => state.setSelectedCommentIds);
   const tierOverrideByCommentId = useSessionStore((state) => state.tierOverrideByCommentId);
   const isExpanded = useSessionStore((state) => state.isRunControlsExpanded);
@@ -328,17 +336,30 @@ export function useRunControls({ prRef }: UseRunControlsOptions): UseRunControls
   const { cleanupSandbox, isSandboxCleanupPending, sandboxCleanupError, cleanedSandboxUsage } =
     useExecuteSandboxCleanup();
 
-  const selectedCount = selectedCommentIds.length;
-
   const commentsById = useMemo(
     () => keyBy(prComments ?? [], (comment) => comment.id),
     [prComments],
   );
 
-  const startRequests = useMemo(
-    () => buildStartRequests(selectedCommentIds, commentsById, tierOverrideByCommentId),
-    [commentsById, selectedCommentIds, tierOverrideByCommentId],
+  // A comment whose run is still live — queued through approved — cannot be started
+  // again: its worktree exists and holds work. Filtering here keeps the button's count
+  // honest and the click from failing on a branch that already exists. Terminal runs
+  // are startable: the start path reclaims their leftovers for a fresh attempt.
+  const startableCommentIds = useMemo(
+    () =>
+      selectedCommentIds.filter((commentId) => {
+        const state = runStateByCommentId[commentId];
+        return state === undefined || isTerminalRunState(state);
+      }),
+    [runStateByCommentId, selectedCommentIds],
   );
+
+  const startRequests = useMemo(
+    () => buildStartRequests(startableCommentIds, commentsById, tierOverrideByCommentId),
+    [commentsById, startableCommentIds, tierOverrideByCommentId],
+  );
+
+  const selectedCount = startableCommentIds.length;
 
   const laneResolutions = useMemo(() => {
     const tiers = startRequests.map((request) => request.tier).filter(isDefined);

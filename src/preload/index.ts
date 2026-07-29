@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { PrComment } from '@shared/comments';
+import type { DebugTelemetry } from '@shared/debug';
 import type { GhAuthStatus, LocalRepo, PrListItem, PrRef } from '@shared/discovery';
 import type { IpcResult } from '@shared/errors';
 import { IPC_CHANNEL, IPC_EVENT_CHANNEL, type PunchlistApi } from '@shared/ipcContract';
@@ -128,6 +129,10 @@ const api: PunchlistApi = {
       ipcRenderer.on(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
       return () => ipcRenderer.removeListener(IPC_EVENT_CHANNEL.RUN_EVENT, handler);
     },
+  },
+  debug: {
+    telemetry: (): Promise<IpcResult<DebugTelemetry>> =>
+      ipcRenderer.invoke(IPC_CHANNEL.DEBUG_TELEMETRY),
   },
   landing: {
     assemble: (request: AssembleLandingRequest): Promise<IpcResult<LandingPreview>> =>
